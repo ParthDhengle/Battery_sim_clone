@@ -50,7 +50,7 @@ export default function Simulations() {
   }, [])
 
   const handleViewResults = (simId: string) => {
-    router.push(`/simulations/${simId}/results`)
+    router.push(`/simulation/${simId}/results`)
   }
 
   const getStatusBadgeColor = (status: string) => {

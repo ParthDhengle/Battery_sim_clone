@@ -7,8 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SimulationDataChart } from "./simulation-data-chart"
 
-
-
 interface SimulationDataPoint {
   time: number
   voltage?: number
@@ -18,6 +16,7 @@ interface SimulationDataPoint {
   qgen?: number
   [key: string]: any
 }
+
 interface SimulationDataResponse {
   time_range: string
   total_points: number
@@ -25,6 +24,7 @@ interface SimulationDataResponse {
   sampling_ratio: number
   data: SimulationDataPoint[]
 }
+
 interface ResultsDashboardProps {
   results: {
     summary?: {
@@ -36,6 +36,7 @@ interface ResultsDashboardProps {
   }
   onPrevious?: () => void
 }
+
 export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps) {
   const [simulationData, setSimulationData] = useState<SimulationDataResponse | null>(null)
   const [maxPoints, setMaxPoints] = useState("5000")
@@ -43,8 +44,9 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(["voltage", "current", "soc", "qgen"])
+
   const simulationId = results.simulation_id
- 
+
   // Calculate summary from simulation data if not provided (use useMemo to avoid setState during render)
   const summary = React.useMemo(() => {
     if (results.summary) {
@@ -68,6 +70,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       capacity_fade: 0
     }
   }, [results.summary, simulationData])
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
@@ -154,6 +157,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
     }, 300)
     return () => clearTimeout(timer)
   }, [simulationId, maxPoints, timeRange])
+
   const handleExport = async () => {
     try {
       const response = await fetch(`/api/simulations/${simulationId}/export`, {
@@ -176,9 +180,11 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       setError("Failed to export data")
     }
   }
+
   const toggleMetric = useCallback((metric: string) => {
     setSelectedMetrics((prev) => (prev.includes(metric) ? prev.filter((m) => m !== metric) : [...prev, metric]))
   }, [])
+
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
@@ -266,12 +272,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         </div>
       ) : simulationData && simulationData.data.length > 0 ? (
         <div className="space-y-6">
-          {!isLoading && simulationData && simulationData.data.length > 0 && (
-              <SimulationDataChart
-                data={simulationData.data}
-                selectedMetrics={selectedMetrics}
-              />
-            )}
+          <SimulationDataChart data={simulationData.data} />
         </div>
       ) : (
         <Card>
