@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+motor
+python-dotenv
+pydantic
+apscheduler
+h5py
+pandas
+numpy
+scipy
+matplotlib

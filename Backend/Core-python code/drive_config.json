@@ -1,0 +1,355 @@
+{
+    "subCycles": [
+        {
+            "id": "SC-001",
+            "name": "Morning Commute Discharge",
+            "steps": [
+                {
+                    "value": 20,
+                    "isDynamic": true,
+                    "unit": "A",
+                    "duration": 1800,
+                    "repetitions": 1
+                },
+                {
+                    "value": 15,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 600,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-002",
+            "name": "Afternoon Errands Discharge",
+            "steps": [
+                {
+                    "value": 25,
+                    "isDynamic": true,
+                    "unit": "A",
+                    "duration": 1200,
+                    "repetitions": 1
+                },
+                {
+                    "value": 10,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 900,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-003",
+            "name": "Evening Commute Discharge",
+            "steps": [
+                {
+                    "value": 30,
+                    "isDynamic": true,
+                    "unit": "A",
+                    "duration": 1800,
+                    "repetitions": 1
+                },
+                {
+                    "value": 20,
+                    "isDynamic": false,
+                    "unit": "W",
+                    "duration": 600,
+                    "repetitions": 1
+                },
+                {
+                    "value": 0.5,
+                    "isDynamic": false,
+                    "unit": "C",
+                    "duration": 1200,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-004",
+            "name": "Night Charging",
+            "steps": [
+                {
+                    "value": -15,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 3600,
+                    "repetitions": 1
+                },
+                {
+                    "value": -0.2,
+                    "isDynamic": false,
+                    "unit": "C",
+                    "duration": 7200,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-005",
+            "name": "Weekend Short Trip Discharge",
+            "steps": [
+                {
+                    "value": 18,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 900,
+                    "repetitions": 1
+                },
+                {
+                    "value": 25,
+                    "isDynamic": false,
+                    "unit": "W",
+                    "duration": 1200,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-006",
+            "name": "Weekend Charging",
+            "steps": [
+                {
+                    "value": -20,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 5400,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-007",
+            "name": "Vacation Minimal Use Discharge",
+            "steps": [
+                {
+                    "value": 10,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 1800,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-008",
+            "name": "Vacation Slow Charging",
+            "steps": [
+                {
+                    "value": -10,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 10800,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-009",
+            "name": "Summer Extra Discharge (AC Use)",
+            "steps": [
+                {
+                    "value": 5,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 3600,
+                    "repetitions": 1
+                }
+            ]
+        },
+        {
+            "id": "SC-010",
+            "name": "Winter Extra Discharge (Heating)",
+            "steps": [
+                {
+                    "value": 8,
+                    "isDynamic": false,
+                    "unit": "A",
+                    "duration": 3600,
+                    "repetitions": 1
+                }
+            ]
+        }
+    ],
+    "driveCycles": [
+        {
+            "id": "DC-001",
+            "name": "Working Days (Standard)",
+            "segments": [
+                {
+                    "subCycleId": "SC-001",
+                    "repetitions": 1,
+                    "ambientTemp": 25
+                },
+                {
+                    "subCycleId": "SC-002",
+                    "repetitions": 1,
+                    "ambientTemp": 30
+                },
+                {
+                    "subCycleId": "SC-003",
+                    "repetitions": 1,
+                    "ambientTemp": 25
+                },
+                {
+                    "subCycleId": "SC-004",
+                    "repetitions": 1,
+                    "ambientTemp": 20
+                }
+            ]
+        },
+        {
+            "id": "DC-002",
+            "name": "Weekends",
+            "segments": [
+                {
+                    "subCycleId": "SC-005",
+                    "repetitions": 2,
+                    "ambientTemp": 28
+                },
+                {
+                    "subCycleId": "SC-006",
+                    "repetitions": 1,
+                    "ambientTemp": 22
+                }
+            ]
+        },
+        {
+            "id": "DC-003",
+            "name": "Vacation Days",
+            "segments": [
+                {
+                    "subCycleId": "SC-007",
+                    "repetitions": 1,
+                    "ambientTemp": 35
+                },
+                {
+                    "subCycleId": "SC-008",
+                    "repetitions": 1,
+                    "ambientTemp": 30
+                }
+            ]
+        },
+        {
+            "id": "DC-004",
+            "name": "Summer Working Days",
+            "segments": [
+                {
+                    "subCycleId": "SC-001",
+                    "repetitions": 1,
+                    "ambientTemp": 35
+                },
+                {
+                    "subCycleId": "SC-002",
+                    "repetitions": 1,
+                    "ambientTemp": 40
+                },
+                {
+                    "subCycleId": "SC-003",
+                    "repetitions": 1,
+                    "ambientTemp": 35
+                },
+                {
+                    "subCycleId": "SC-009",
+                    "repetitions": 1,
+                    "ambientTemp": 38
+                },
+                {
+                    "subCycleId": "SC-004",
+                    "repetitions": 1,
+                    "ambientTemp": 30
+                }
+            ]
+        },
+        {
+            "id": "DC-005",
+            "name": "Winter Working Days",
+            "segments": [
+                {
+                    "subCycleId": "SC-001",
+                    "repetitions": 1,
+                    "ambientTemp": 10
+                },
+                {
+                    "subCycleId": "SC-002",
+                    "repetitions": 1,
+                    "ambientTemp": 15
+                },
+                {
+                    "subCycleId": "SC-003",
+                    "repetitions": 1,
+                    "ambientTemp": 10
+                },
+                {
+                    "subCycleId": "SC-010",
+                    "repetitions": 1,
+                    "ambientTemp": 12
+                },
+                {
+                    "subCycleId": "SC-004",
+                    "repetitions": 1,
+                    "ambientTemp": 8
+                }
+            ]
+        }
+    ],
+    "calendarRules": [
+        {
+            "months": "1,2,12",
+            "filterType": "weekday",
+            "daysOrDates": "Mon,Tue,Wed,Thu,Fri",
+            "driveCycleId": "DC-005"
+        },
+        {
+            "months": "3,4,5,9,10,11",
+            "filterType": "weekday",
+            "daysOrDates": "Mon,Tue,Wed,Thu,Fri",
+            "driveCycleId": "DC-001"
+        },
+        {
+            "months": "6,7,8",
+            "filterType": "weekday",
+            "daysOrDates": "Mon,Tue,Wed,Thu,Fri",
+            "driveCycleId": "DC-004"
+        },
+        {
+            "months": "1,2,3,4,5,6,7,8,9,10,11,12",
+            "filterType": "weekday",
+            "daysOrDates": "Sat,Sun",
+            "driveCycleId": "DC-002"
+        },
+        {
+            "months": "4",
+            "filterType": "date",
+            "daysOrDates": "1,2,13,14",
+            "driveCycleId": "DC-003"
+        },
+        {
+            "months": "7",
+            "filterType": "date",
+            "daysOrDates": "3,4,5,29,30",
+            "driveCycleId": "DC-003"
+        },
+        {
+            "months": "8,12",
+            "filterType": "date",
+            "daysOrDates": "1,2,3,30",
+            "driveCycleId": "DC-003"
+        },
+        {
+            "months": "12",
+            "filterType": "date",
+            "daysOrDates": "24,25,31",
+            "driveCycleId": "DC-003"
+        }
+    ],
+    "defaultDriveCycleId": "DC-001",
+    "simulationDuration": {
+        "years": 1,
+        "months": 0,
+        "days": 0
+    },
+    "startingSoc": 80
+}

@@ -1,0 +1,58 @@
+{
+    "cell": {
+        "formFactor": "cylindrical",
+        "dims": {
+            "radius": 10.5,
+            "height": 70
+        },
+        "capacity": 5,
+        "columbic_efficiency": 1.0,
+        "m_cell": 0.06725,
+        "m_jellyroll": 0.05708,
+        "cell_voltage_upper_limit": 4.5,
+        "cell_voltage_lower_limit": 0
+    },
+    "connection_type": "row_series_column_parallel",
+    "R_p": 0.001,
+    "R_s": 0.001,
+    "voltage_limits": {
+        "module_upper": 60,
+        "module_lower": 0
+    },
+    "options": {
+        "allow_overlap": false,
+        "compute_neighbors": true,
+        "label_schema": "R{row}C{col}L{layer}"
+    },
+    "constraints": {
+        "max_weight": 10,
+        "max_volume": 0.01
+    },
+    "z_pitch": null,
+    "layers": [
+        {
+            "grid_type": "rectangular",
+            "n_rows": 3,
+            "n_cols": 3,
+            "pitch_x": 23,
+            "pitch_y": 23,
+            "z_mode": "explicit",
+            "z_center": "0"
+        }
+    ],
+    "initial_conditions": {
+        "temperature": 300,
+        "soc": 1.0,
+        "soh": 1.0,
+        "dcir_aging_factor": 1.0,
+        "varying_cells": [
+            {
+                "cell_index": 0,
+                "temperature": 300.0,
+                "soc": 1.0,
+                "soh": 0.95,
+                "dcir_aging_factor": 1.04
+            }
+        ]
+    }
+}

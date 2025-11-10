@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+Simulation_results/
+drive_cycles/
+individual_plots/
+Testing_backend/
+simulation_results.csv
+simulation_plot.png
+simulation_results.h5
+BatteryData_SOH1.json
+.env
+simulations/
