@@ -1,5 +1,4 @@
 "use client"
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -31,7 +30,7 @@ export function PackBasicInfo({
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
-          <Label>Pack Name</Label>
+          <Label>Pack Name<span className="text-red-500">*</span></Label>
           <Input value={packName} onChange={(e) => setPackName(e.target.value)} placeholder="Enter pack name" />
         </div>
         <div className="space-y-3">
@@ -43,7 +42,7 @@ export function PackBasicInfo({
           />
         </div>
         <div className="space-y-3">
-          <Label>Select Cell from Database</Label>
+          <Label>Select Cell from Database<span className="text-red-500">*</span></Label>
           <Select value={selectedCellName} onValueChange={onSelectCell}>
             <SelectTrigger>
               <SelectValue />

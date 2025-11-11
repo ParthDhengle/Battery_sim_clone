@@ -22,7 +22,7 @@ export function PackBuilder() {
   const {
     packId,
     cells,
-    selectedCellName,
+    selectedCellId,
     formFactor,
     dims,
     capacity,
@@ -159,7 +159,7 @@ export function PackBuilder() {
       maxWeight,
       maxVolume,
       varyingCells,
-      selectedCellName,
+      selectedCellId,
       initialTemperature, 
       initialSOC,         
       initialSOH,         
@@ -202,7 +202,7 @@ export function PackBuilder() {
         packDescription={packDescription}
         setPackDescription={setPackDescription}
         cells={cells}
-        selectedCellName={selectedCellName}
+        selectedCellId={selectedCellId}
         onSelectCell={handleSelectCell}
       />
 

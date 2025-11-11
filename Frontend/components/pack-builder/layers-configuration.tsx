@@ -49,25 +49,21 @@ export function LayersConfiguration({
     if (formFactor === "prismatic") return dims.length ?? 0
     return 0
   }
-
   const getMinPitchY = () => {
     if (formFactor === "cylindrical") return 2 * (dims.radius ?? 0)
     if (formFactor === "prismatic") return dims.width ?? 0
     return 0
   }
-
   const getPitchXCondition = () => {
     if (formFactor === "cylindrical") return "greater than diameter"
     if (formFactor === "prismatic") return "greater than length"
     return ""
   }
-
   const getPitchYCondition = () => {
     if (formFactor === "cylindrical") return "greater than diameter"
     if (formFactor === "prismatic") return "greater than width"
     return ""
   }
-
   const gridTypes =
     formFactor === "cylindrical"
       ? [
@@ -79,13 +75,11 @@ export function LayersConfiguration({
           "diagonal",
         ]
       : ["rectangular", "brick_row_stagger", "brick_col_stagger", "diagonal"]
-
   return (
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle>Layers</CardTitle>
-          {/* Add Layer button disabled – only one layer allowed */}
           <Button
             onClick={() =>
               onAddLayer(getMinPitchX(), getMinPitchY(), dims.height, zPitch)
@@ -95,7 +89,6 @@ export function LayersConfiguration({
           </Button>
         </div>
       </CardHeader>
-      
       <CardContent className="space-y-8">
         {layers.map((layer, idx) => (
           <div
@@ -114,11 +107,10 @@ export function LayersConfiguration({
                 </Button>
               )}
             </div>
-
             {/* ---------- INPUT GRID ---------- */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
-                <Label>Grid Type</Label>
+                <Label>Grid Type<span className="text-red-500">*</span></Label>
                 <Select
                   value={layer.gridType}
                   onValueChange={(v) =>
@@ -137,9 +129,8 @@ export function LayersConfiguration({
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-3">
-                <Label>Number of Rows</Label>
+                <Label>Number of Rows<span className="text-red-500">*</span></Label>
                 <Input
                   type="number"
                   value={layer.nRows}
@@ -153,9 +144,8 @@ export function LayersConfiguration({
                   }
                 />
               </div>
-
               <div className="space-y-3">
-                <Label>Number of Columns</Label>
+                <Label>Number of Columns<span className="text-red-500">*</span></Label>
                 <Input
                   type="number"
                   value={layer.nCols}
@@ -169,9 +159,8 @@ export function LayersConfiguration({
                   }
                 />
               </div>
-
               <div className="space-y-3">
-                <Label>Pitch X (mm) [{getPitchXCondition()}]</Label>
+                <Label>Pitch X (mm) [{getPitchXCondition()}]<span className="text-red-500">*</span></Label>
                 <Input
                   type="number"
                   value={layer.pitchX}
@@ -185,9 +174,8 @@ export function LayersConfiguration({
                   }
                 />
               </div>
-
               <div className="space-y-3">
-                <Label>Pitch Y (mm) [{getPitchYCondition()}]</Label>
+                <Label>Pitch Y (mm) [{getPitchYCondition()}]<span className="text-red-500">*</span></Label>
                 <Input
                   type="number"
                   value={layer.pitchY}
@@ -201,9 +189,8 @@ export function LayersConfiguration({
                   }
                 />
               </div>
-
               <div className="space-y-3">
-                <Label>Z Mode</Label>
+                <Label>Z Mode<span className="text-red-500">*</span></Label>
                 <Select
                   value={layer.zMode}
                   onValueChange={(v) =>
@@ -224,10 +211,9 @@ export function LayersConfiguration({
                   </SelectContent>
                 </Select>
               </div>
-
               {layer.zMode === "explicit" && (
                 <div className="space-y-3">
-                  <Label>Z Center (mm)</Label>
+                  <Label>Z Center (mm)<span className="text-red-500">*</span></Label>
                   <Input
                     type="number"
                     value={layer.zCenter}
@@ -243,15 +229,10 @@ export function LayersConfiguration({
                 </div>
               )}
             </div>
-
             {/* ---------- PLOT SECTION ---------- */}
-
-
             <CellPlot layer={layer} formFactor={formFactor} dims={dims} labelSchema={labelSchema} />
-
           </div>
         ))}
-
         {layers.length === 0 && (
           <p className="text-center text-muted-foreground">
             No layers added yet

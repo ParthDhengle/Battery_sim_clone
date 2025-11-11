@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 
 interface AdvancedOptionsProps {
-  computeNeighbors: boolean
-  setComputeNeighbors: (value: boolean) => void
-  labelSchema: string
-  setLabelSchema: (value: string) => void
+  computeNeighbors: boolean;
+  setComputeNeighbors: (value: boolean) => void;
+  labelSchema: string;
+  setLabelSchema: (value: string) => void;
 }
 
 export function AdvancedOptions({
@@ -32,7 +32,6 @@ export function AdvancedOptions({
           />
           <Label htmlFor="compute-neighbors">Compute Neighbors</Label>
         </div>
-
         <div className="space-y-3">
           <Label>Label Schema</Label>
           <Input
@@ -43,5 +42,5 @@ export function AdvancedOptions({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

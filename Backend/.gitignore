@@ -10,3 +10,4 @@ simulation_results.h5
 BatteryData_SOH1.json
 .env
 simulations/
+*.pyc

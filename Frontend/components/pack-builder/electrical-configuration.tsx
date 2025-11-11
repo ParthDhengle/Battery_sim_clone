@@ -1,5 +1,4 @@
 "use client"
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -51,7 +50,7 @@ export function ElectricalConfiguration({
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
-          <Label>Connection Type</Label>
+          <Label>Connection Type<span className="text-red-500">*</span></Label>
           <Select value={connectionType} onValueChange={(value) => setConnectionType(value as any)}>
             <SelectTrigger>
               <SelectValue />
@@ -63,7 +62,6 @@ export function ElectricalConfiguration({
             </SelectContent>
           </Select>
         </div>
-
         {connectionType === "custom" && (
           <div className="space-y-4 border-t pt-4">
             <div className="flex justify-between items-center">
@@ -73,18 +71,16 @@ export function ElectricalConfiguration({
                 Add Group
               </Button>
             </div>
-
             {customConnectionError && (
               <Alert className="border-destructive bg-destructive/10">
                 <AlertCircle className="h-4 w-4 text-destructive" />
                 <AlertDescription className="text-destructive">{customConnectionError}</AlertDescription>
               </Alert>
             )}
-
             {customParallelGroups.map((group, idx) => (
               <div key={group.id} className="space-y-2 p-3 border rounded">
                 <div className="flex justify-between items-center">
-                  <Label>Parallel Group {idx + 1}</Label>
+                  <Label>Parallel Group {idx + 1}<span className="text-red-500">*</span></Label>
                   <Button
                     onClick={() => onRemoveGroup(group.id)}
                     size="sm"
@@ -104,25 +100,23 @@ export function ElectricalConfiguration({
             ))}
           </div>
         )}
-
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
-            <Label>R_p (Ohms) - Parallel Connection Resistance</Label>
+            <Label>R_p (Ohms) - Parallel Connection Resistance<span className="text-red-500">*</span></Label>
             <Input type="number" value={rP} onChange={(e) => setRP(Number.parseFloat(e.target.value) || 0)} />
           </div>
           <div className="space-y-3">
-            <Label>R_s (Ohms) - Series Connection Resistance</Label>
+            <Label>R_s (Ohms) - Series Connection Resistance<span className="text-red-500">*</span></Label>
             <Input type="number" value={rS} onChange={(e) => setRS(Number.parseFloat(e.target.value) || 0)} />
           </div>
         </div>
-
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
-            <Label>Module Voltage Upper Limit (V)</Label>
+            <Label>Module Voltage Upper Limit (V)<span className="text-red-500">*</span></Label>
             <Input type="number" value={moduleUpperVoltage} onChange={(e) => setModuleUpperVoltage(e.target.value)} />
           </div>
           <div className="space-y-3">
-            <Label>Module Voltage Lower Limit (V)</Label>
+            <Label>Module Voltage Lower Limit (V)<span className="text-red-500">*</span></Label>
             <Input type="number" value={moduleLowerVoltage} onChange={(e) => setModuleLowerVoltage(e.target.value)} />
           </div>
         </div>

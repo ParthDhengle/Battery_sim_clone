@@ -49,7 +49,7 @@ export function usePackBuilder() {
   const searchParams = useSearchParams()
   const packId = searchParams.get("id")
   const [cells, setCells] = useState<any[]>([])
-  const [selectedCellName, setSelectedCellName] = useState("")
+  const [selectedCellId, setSelectedCellId] = useState("")
   const [formFactor, setFormFactor] = useState<"cylindrical" | "prismatic">("cylindrical")
   const [dims, setDims] = useState<{ radius?: number; length?: number; width?: number; height: number }>({ height: 70 })
   const [capacity, setCapacity] = useState(5)
@@ -80,14 +80,13 @@ export function usePackBuilder() {
   const [packDescription, setPackDescription] = useState("")
   const [error, setError] = useState<string>("")
   const [packSummary, setPackSummary] = useState<PackSummary | null>(null)
-
   useEffect(() => {
     async function fetchCells() {
       try {
         const data = await getCells()
         setCells(data)
         if (data.length > 0) {
-          handleSelectCell(data[0].name)
+          handleSelectCell(data[0].id)
         }
       } catch (e: any) {
         const errMsg =
@@ -98,10 +97,9 @@ export function usePackBuilder() {
     }
     fetchCells()
   }, [])
-
-  const handleSelectCell = (name: string) => {
-    setSelectedCellName(name)
-    const cell = cells.find((c) => c.name === name)
+  const handleSelectCell = (id: string) => {
+    setSelectedCellId(id)
+    const cell = cells.find((c) => c.id === id)
     if (cell) {
       setFormFactor(cell.formFactor)
       setDims({
@@ -117,7 +115,6 @@ export function usePackBuilder() {
       setCellLowerVoltage(cell.cell_lower_voltage_cutoff)
     }
   }
-
   const loadPack = async () => {
     if (!packId || packId === "undefined") {
       return;
@@ -126,6 +123,7 @@ export function usePackBuilder() {
       const pack: any = await getPack(packId)
       setPackName(pack.name)
       setPackDescription(pack.description || "")
+      setSelectedCellId(pack.cell_id)
       setFormFactor(pack.cell.form_factor)
       setDims({
         radius: pack.cell.dims.radius ? pack.cell.dims.radius : undefined,
@@ -156,9 +154,6 @@ export function usePackBuilder() {
       setInitialSOH(pack.initial_conditions.soh.toString())
       setInitialDCIR(pack.initial_conditions.dcir_aging_factor.toString())
       setPackSummary(pack.summary)
-      if (pack.cell.name) {
-        setSelectedCellName(pack.cell.name)
-      }
     } catch (e: any) {
       const errMsg = e.message || "Failed to load pack. Check backend connection.";
       console.error("Failed to load pack", e);
@@ -166,13 +161,11 @@ export function usePackBuilder() {
       setTimeout(() => router.push("/library/packs"), 2000); // Redirect on load failure
     }
   }
-
   useEffect(() => {
     if (packId && packId !== "undefined") { // Only load if valid packId is present (skips for creation)
       loadPack();
     }
   }, [packId]);
-
   const handleSave = async (config: any) => {
     if (!packName) {
       setError("Please enter a pack name")
@@ -198,12 +191,11 @@ export function usePackBuilder() {
       setError(e.message || "Failed to save pack")
     }
   }
-
   return {
     packId,
     cells,
-    selectedCellName,
-    setSelectedCellName,
+    selectedCellId,
+    setSelectedCellId,
     formFactor,
     setFormFactor,
     dims,

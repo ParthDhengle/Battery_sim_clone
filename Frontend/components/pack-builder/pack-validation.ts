@@ -25,7 +25,7 @@ interface ValidateConfig {
   maxWeight: string
   maxVolume: string
   varyingCells: VaryingCell[]
-  selectedCellName?: string
+  selectedCellId?: string
   isPreview: boolean
   moduleUpperVoltage?: string
   moduleLowerVoltage?: string
@@ -58,7 +58,7 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
     maxWeight,
     maxVolume,
     varyingCells,
-    selectedCellName,
+    selectedCellId,
     isPreview,
     moduleUpperVoltage,
     moduleLowerVoltage,
@@ -67,11 +67,9 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
     initialSOH,
     initialDCIR,
   } = config
-
   const realDims: { radius?: number; length?: number; width?: number; height: number } = {
     height: dims.height || 0,
   }
-
   if (formFactor === "cylindrical") {
     if (!dims.radius || dims.radius <= 0 || !dims.height || dims.height <= 0) {
       if (!isPreview) alert("Invalid dimensions for cylindrical cells")
@@ -83,15 +81,13 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
       if (!isPreview) alert("Invalid dimensions for prismatic cells")
       return null
     }
-    realDims.length = dims.length 
-    realDims.width = dims.width 
+    realDims.length = dims.length
+    realDims.width = dims.width
   }
-
   if (layers.length === 0) {
     if (!isPreview) alert("Add at least one layer")
     return null
   }
-
   let realZPitch = 0
   const useIndexPitch = layers.some((l) => l.zMode === "index_pitch")
   if (useIndexPitch) {
@@ -101,13 +97,11 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
       return null
     }
   }
-
   const zCenters: number[] = []
   for (let li = 0; li < layers.length; li++) {
     const l = li + 1
     const layer = layers[li]
     let z: number
-
     if (layer.zMode === "index_pitch") {
       z = (l - 1) * realZPitch
     } else {
@@ -119,15 +113,12 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
     }
     zCenters.push(z)
   }
-
   const shift = zCenters[0]
   zCenters.forEach((_, i) => (zCenters[i] -= shift))
-
   const cells: any[] = []
   const indexMap = new Map<string, number>()
   let globalIndex = 1
   const layerConfigs: any[] = []
-
   try {
     for (let li = 0; li < layers.length; li++) {
       const l = li + 1
@@ -135,9 +126,8 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
       const grid_type = layer.gridType
       const n_rows = Number.parseInt(layer.nRows.toString())
       const n_cols = Number.parseInt(layer.nCols.toString())
-      const pitch_x = Number.parseFloat(layer.pitchX.toString()) 
-      const pitch_y = Number.parseFloat(layer.pitchY.toString()) 
-
+      const pitch_x = Number.parseFloat(layer.pitchX.toString())
+      const pitch_y = Number.parseFloat(layer.pitchY.toString())
       if (
         isNaN(n_rows) ||
         n_rows <= 0 ||
@@ -150,7 +140,6 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
       ) {
         throw new Error(`Invalid parameters for layer ${l}`)
       }
-
       if (!allowOverlap) {
         if (formFactor === "prismatic") {
           if (pitch_x < realDims.length! || pitch_y < realDims.width!) {
@@ -159,7 +148,6 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
         } else {
           const d = 2 * realDims.radius!
           let min_dist = Number.POSITIVE_INFINITY
-
           if (grid_type === "rectangular") {
             min_dist = Math.min(pitch_x, pitch_y)
           } else if (grid_type === "brick_row_stagger" || grid_type === "hex_flat") {
@@ -175,13 +163,11 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
             const diag = Math.sqrt((0.5 * pitch_x) ** 2 + (0.5 * pitch_y) ** 2)
             min_dist = Math.min(pitch_x, pitch_y, diag)
           }
-
           if (min_dist < d) {
             throw new Error(`Pitch settings would cause cell overlap in layer ${l}`)
           }
         }
       }
-
       const z = zCenters[li] / 1000
       layerConfigs.push({
         grid_type,
@@ -192,23 +178,20 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
         z_center: z,
         z_mode: layer.zMode,
       })
-
       for (let r = 1; r <= n_rows; r++) {
         for (let c = 1; c <= n_cols; c++) {
           let x = 0
           let y = 0
           const j = r - 1
           const i = c - 1
-          const internal_pitch_x = pitch_x / 1000  // meters
-          const internal_pitch_y = pitch_y / 1000  // meters
-
+          const internal_pitch_x = pitch_x / 1000 // meters
+          const internal_pitch_y = pitch_y / 1000 // meters
           if (grid_type === "rectangular") {
             x = i * internal_pitch_x
             y = j * internal_pitch_y
           } else if (grid_type === "brick_row_stagger") {
             x = i * internal_pitch_x + (j % 2) * (internal_pitch_x / 2)
             y = j * internal_pitch_y
-
           } else if (grid_type === "brick_col_stagger") {
             x = i * internal_pitch_x
             y = j * internal_pitch_y + (i % 2) * (internal_pitch_y / 2)
@@ -222,11 +205,9 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
             x = (i + j) * (internal_pitch_x / 2)
             y = (j - i) * (internal_pitch_y / 2)
           }
-
           const position = [x, y, z]
           let half_x = 0
           let half_y = 0
-
           if (formFactor === "cylindrical") {
             half_x = (realDims.radius! ) / 1000
             half_y = (realDims.radius!) / 1000
@@ -234,24 +215,20 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
             half_x = (realDims.length! / 2) / 1000
             half_y = (realDims.width! / 2) / 1000
           }
-
           const bbox_2d = {
             xmin: x - half_x,
             xmax: x + half_x,
             ymin: y - half_y,
             ymax: y + half_y,
           }
-
           const defaultLabel = `R${r}C${c}L${l}`
           let label = defaultLabel
-
           if (labelSchema) {
             label = labelSchema
               .replace("{row}", r.toString())
               .replace("{col}", c.toString())
               .replace("{layer}", l.toString())
           }
-
           const cell = {
             global_index: globalIndex,
             layer_index: l,
@@ -269,14 +246,12 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
             neighbors_same_layer: [],
             label,
           }
-
           cells.push(cell)
           indexMap.set(`${l}-${r}-${c}`, globalIndex)
           globalIndex++
         }
       }
     }
-
     if (computeNeighbors) {
       for (const cell of cells) {
         const l = cell.layer_index
@@ -286,19 +261,15 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
         const grid_type = layerConfig.grid_type
         const n_rows = layerConfig.n_rows
         const n_cols = layerConfig.n_cols
-
         let dirs: [number, number][] = []
         const is_hex = grid_type === "hex_flat" || grid_type === "hex_pointy"
-
         if (is_hex) {
           const is_pointy = grid_type === "hex_pointy"
           const odd = is_pointy ? c % 2 === 1 : r % 2 === 1
-
           dirs = [
             [0, -1],
             [0, 1],
           ]
-
           if (odd) {
             dirs = dirs.concat([
               [-1, 0],
@@ -322,13 +293,10 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
             [1, 0],
           ]
         }
-
         const neighbors: number[] = []
-
         for (const [dr, dc] of dirs) {
           const nr = r + dr
           const nc = c + dc
-
           if (nr >= 1 && nr <= n_rows && nc >= 1 && nc <= n_cols) {
             const nid = indexMap.get(`${l}-${nr}-${nc}`)
             if (nid) {
@@ -336,20 +304,16 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
             }
           }
         }
-
         cell.neighbors_same_layer = neighbors
       }
     }
-
     let xmin = Number.POSITIVE_INFINITY,
       xmax = Number.NEGATIVE_INFINITY,
       ymin = Number.POSITIVE_INFINITY,
       ymax = Number.NEGATIVE_INFINITY,
       zmin = Number.POSITIVE_INFINITY,
       zmax = Number.NEGATIVE_INFINITY
-
      const half_h = (realDims.height || 0) / 2000
-
     for (const cell of cells) {
       xmin = Math.min(xmin, cell.bbox_2d.xmin)
       xmax = Math.max(xmax, cell.bbox_2d.xmax)
@@ -359,35 +323,28 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
       zmin = Math.min(zmin, cz - half_h)
       zmax = Math.max(zmax, cz + half_h)
     }
-
     const volume = (xmax - xmin) * (ymax - ymin) * (zmax - zmin)
     const weight = cells.length * mCell
-
     const constraintWarnings: string[] = []
     const parsedMaxVolume = Number.parseFloat(maxVolume)
     const parsedMaxWeight = Number.parseFloat(maxWeight)
-
     if (!isNaN(parsedMaxVolume) && volume > parsedMaxVolume) {
       constraintWarnings.push(`Pack volume ${volume.toFixed(6)} m³ exceeds maximum ${maxVolume} m³`)
     }
-
     if (!isNaN(parsedMaxWeight) && weight > parsedMaxWeight) {
       constraintWarnings.push(`Pack weight ${weight.toFixed(3)} kg exceeds maximum ${maxWeight} kg`)
     }
-
     for (const vc of varyingCells) {
       if (!vc.cellIndex || Number.parseInt(vc.cellIndex) < 1 || Number.parseInt(vc.cellIndex) > cells.length) {
         if (!isPreview) alert(`Invalid cell index ${vc.cellIndex} in varying conditions`)
         return null
       }
     }
-
     let nSeries = 0
     let nParallel = 0
     const firstLayer = layers[0]
     const firstLayerNRows = Number.parseInt(firstLayer.nRows.toString())
     const firstLayerNCols = Number.parseInt(firstLayer.nCols.toString())
-
     if (connectionType === "row_series_column_parallel") {
       nParallel = firstLayerNRows
       nSeries = firstLayerNCols
@@ -403,7 +360,6 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
         .filter((id) => id)||[]
       nParallel = cellsPerGroup.length
     }
-
     const cellVolumeM3 = calculateCellVolume(formFactor, {
       ...realDims,
       height: realDims.height / 1000,
@@ -429,7 +385,6 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
     const costPerCellNum = Number.parseFloat(costPerCell) || 0
     const totalPackCost = totalCells * costPerCellNum
     const costPerKwh = packEnergyKwh > 0 ? totalPackCost / packEnergyKwh : 0
-
     const summary: PackSummary = {
       electrical: {
         nSeries,
@@ -458,32 +413,14 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
         costPerKwh,
       },
     }
-
     if (!isPreview && constraintWarnings.length > 0) {
       alert("Design Constraint Warnings:\n" + constraintWarnings.join("\n"))
     }
-
     if (isPreview) {
       return { cells, summary }
     } else {
-      const cellDims = {
-        radius: formFactor === "cylindrical" ? (dims.radius ?? 0) : undefined,
-        length: formFactor === "prismatic" ? (dims.length ?? 0) : undefined,
-        width: formFactor === "prismatic" ? (dims.width ?? 0) : undefined,
-        height: (dims.height ?? 0),
-      }
       const packConfig: any = {
-        cell: {
-          //name: selectedCellName,
-          form_factor: formFactor,
-          dims: cellDims,
-          capacity,
-          columbic_efficiency: columbicEfficiency,
-          m_cell: mCell,
-          m_jellyroll: mJellyroll,
-          cell_voltage_upper_limit: cellUpperVoltage,
-          cell_voltage_lower_limit: cellLowerVoltage,
-        },
+        cell_id: selectedCellId,
         connection_type: connectionType,
         r_p: rP,
         r_s: rS,
@@ -543,11 +480,11 @@ function calculateCellVolume(
   if (formFactor === "cylindrical") {
     const radius = dims.radius ?? 0
     const height = dims.height ?? 0
-    return Math.PI * radius * radius * height / 1e9  // mm^3 to m^3
+    return Math.PI * radius * radius * height / 1e9 // mm^3 to m^3
   } else {
     const length = dims.length ?? 0
     const width = dims.width ?? 0
     const height = dims.height ?? 0
-    return length * width * height / 1e9  // mm^3 to m^3
+    return length * width * height / 1e9 // mm^3 to m^3
   }
 }

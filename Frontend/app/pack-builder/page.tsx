@@ -1,9 +1,7 @@
-"use client"
-import { PackBuilder } from "@/components/pack-builder/pack-builder"
+"use client";
+
+import { PackBuilder } from "@/components/pack-builder/pack-builder";
+
 export default function PackBuilderPage() {
-  return (
-    <div>
-      <PackBuilder />
-    </div>
-  )
+  return <PackBuilder />;
 }

@@ -3,7 +3,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export interface PackCreateData {
   name: string;
   description?: string;
-  cell: any;
+  cell_id: string;
   connection_type: "row_series_column_parallel" | "row_parallel_column_series" | "custom";
   custom_parallel_groups?: Array<{ cell_ids: string }>;
   r_p: number;
@@ -30,11 +30,11 @@ export interface PackCreateData {
 export async function getPacks(includeDeleted = false) {
   const params = new URLSearchParams();
   if (includeDeleted) params.append("include_deleted", "true");
-  
+ 
   const res = await fetch(`${API_BASE}/packs/?${params.toString()}`, {
     cache: 'no-store'
   });
-  
+ 
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch packs: ${error}`);
@@ -49,7 +49,7 @@ export async function getPack(id: string) {
   const res = await fetch(`${API_BASE}/packs/${id}`, {
     cache: 'no-store'
   });
-  
+ 
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch pack: ${error}`);
@@ -63,7 +63,7 @@ export async function createPack(data: PackCreateData) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  
+ 
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.detail || "Failed to create pack");
@@ -77,7 +77,7 @@ export async function updatePack(id: string, data: Partial<PackCreateData>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  
+ 
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.detail || "Failed to update pack");
@@ -88,11 +88,11 @@ export async function updatePack(id: string, data: Partial<PackCreateData>) {
 export async function deletePack(id: string, hardDelete = false) {
   const params = new URLSearchParams();
   if (hardDelete) params.append("hard_delete", "true");
-  
+ 
   const res = await fetch(`${API_BASE}/packs/${id}?${params.toString()}`, {
     method: "DELETE"
   });
-  
+ 
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.detail || "Failed to delete pack");
@@ -103,7 +103,7 @@ export async function restorePack(id: string) {
   const res = await fetch(`${API_BASE}/packs/${id}/restore`, {
     method: "POST"
   });
-  
+ 
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.detail || "Failed to restore pack");

@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict
 
 class Log(BaseModel):
     item_type:str

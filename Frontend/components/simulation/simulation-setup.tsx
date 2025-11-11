@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import {InitialCellConditions} from "@/components/initial-cell-conditions"
 const electricalModels = [
   {
     id: "simple",
@@ -215,71 +216,20 @@ export function SimulationSetup({ onConfigChange }: SimulationSetupProps) {
       </Card>
 
       {/* Set Initial Conditions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Initial Cell Conditions</CardTitle>
-          <CardDescription>Define initial conditions for all cells and specific cells if needed</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <Label>Initial Temperature (K)</Label>
-              <Input type="number" value={initialTemperature} onChange={(e) => setInitialTemperature(e.target.value)} />
-            </div>
-            <div className="space-y-3">
-              <Label>Initial SOC (%)</Label>
-              <Input type="number" min="0" max="100" value={initialSOC} onChange={(e) => setInitialSOC(e.target.value)} />
-            </div>
-            <div className="space-y-3">
-              <Label>Initial SOH</Label>
-              <Input type="number" min="0" max="1" step="0.01" value={initialSOH} onChange={(e) => setInitialSOH(e.target.value)} />
-            </div>
-            <div className="space-y-3">
-              <Label>Initial DCIR Aging Factor</Label>
-              <Input type="number" min="0" value={initialDCIR} onChange={(e) => setInitialDCIR(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <Label>Varying Cell Conditions</Label>
-              <Button onClick={addVaryingCell}>Add Varying Cell</Button>
-            </div>
-            {varyingCells.length === 0 && <p className="text-center text-muted-foreground">No varying conditions added yet</p>}
-            {varyingCells.map((vc) => (
-              <div key={vc.id} className="space-y-4 border-b pb-4 last:border-0 last:pb-0">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-semibold">Cell {vc.id}</h3>
-                  <Button variant="destructive" size="sm" onClick={() => removeVaryingCell(vc.id)}>
-                    Remove
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <Label>Cell Index (1-based)</Label>
-                    <Input type="number" min="1" value={vc.cellIndex} onChange={(e) => updateVaryingCell(vc.id, 'cellIndex', e.target.value)} />
-                  </div>
-                  <div className="space-y-3">
-                    <Label>Temperature (K)</Label>
-                    <Input type="number" value={vc.temp} onChange={(e) => updateVaryingCell(vc.id, 'temp', e.target.value)} />
-                  </div>
-                  <div className="space-y-3">
-                    <Label>SOC (%)</Label>
-                    <Input type="number" min="0" max="100" value={vc.soc} onChange={(e) => updateVaryingCell(vc.id, 'soc', e.target.value)} />
-                  </div>
-                  <div className="space-y-3">
-                    <Label>SOH</Label>
-                    <Input type="number" min="0" max="1" step="0.01" value={vc.soh} onChange={(e) => updateVaryingCell(vc.id, 'soh', e.target.value)} />
-                  </div>
-                  <div className="space-y-3">
-                    <Label>DCIR Aging Factor</Label>
-                    <Input type="number" min="0" value={vc.dcir} onChange={(e) => updateVaryingCell(vc.id, 'dcir', e.target.value)} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <InitialCellConditions
+        initialTemperature={initialTemperature}
+        setInitialTemperature={setInitialTemperature}
+        initialSOC={initialSOC}
+        setInitialSOC={setInitialSOC}
+        initialSOH={initialSOH}
+        setInitialSOH={setInitialSOH}
+        initialDCIR={initialDCIR}
+        setInitialDCIR={setInitialDCIR}
+        varyingCells={varyingCells}
+        onAddVaryingCell={addVaryingCell}
+        onRemoveVaryingCell={removeVaryingCell}
+        onUpdateVaryingCell={updateVaryingCell}
+      />  
 
       {/* Electrical Model Configuration */}
       <Card>

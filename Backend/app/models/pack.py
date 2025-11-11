@@ -91,7 +91,7 @@ class PackSummary(BaseModel):
 class PackCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    cell: CellConfig
+    cell_id: str
     connection_type: Literal["row_series_column_parallel", "row_parallel_column_series", "custom"]
     custom_parallel_groups: Optional[List[CustomParallelGroup]] = None
     r_p: float = 0.001
@@ -107,7 +107,7 @@ class PackCreate(BaseModel):
 class PackUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    cell: Optional[CellConfig] = None
+    cell_id: Optional[str] = None
     connection_type: Optional[Literal["row_series_column_parallel", "row_parallel_column_series", "custom"]] = None
     custom_parallel_groups: Optional[List[CustomParallelGroup]] = None
     r_p: Optional[float] = None
@@ -124,6 +124,7 @@ class PackResponse(BaseModel):
     id: str = Field(alias="_id")
     name: str
     description: Optional[str]
+    cell_id: str
     cell: CellConfig
     connection_type: str
     custom_parallel_groups: Optional[List[CustomParallelGroup]]
