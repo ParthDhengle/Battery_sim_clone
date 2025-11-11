@@ -1,3 +1,4 @@
+// Frontend/app/simulation/page.tsx
 "use client"
 import { useAppStore } from '@/lib/store'
 import { Button } from "@/components/ui/button"
@@ -6,20 +7,17 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { SimulationStepper } from '@/components/simulation/SimulationStepper'
 import { useState } from 'react'
-
 export default function NewSimulation() {
   const addProject = useAppStore((state) => state.addProject)
   const [projectName, setProjectName] = useState('')
   const [projectType, setProjectType] = useState('')
   const [projectId, setProjectId] = useState<string | null>(null)
-
   const handleCreateProject = () => {
     if (projectName) {
       const id = addProject(projectName)
       setProjectId(id)
     }
   }
-
   if (!projectId) {
     return (
       <Card className="max-w-md mx-auto">
@@ -52,6 +50,5 @@ export default function NewSimulation() {
       </Card>
     )
   }
-
-  return <SimulationStepper projectId={projectId} />
+  return <SimulationStepper projectId={projectId} name={projectName} simType={projectType} />
 }

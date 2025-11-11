@@ -156,7 +156,7 @@ export default function Cells() {
                 </div>
 
                 <div className="flex gap-2 pt-2">
-                  <Link href={`/cell-builder/${cell.id}`}>
+                  <Link href={`/cell-builder?id=${cell.id}`}>
                     <Button variant="outline" size="sm" className="flex-1">
                       <Pencil className="w-3 h-3 mr-1" />
                       Edit

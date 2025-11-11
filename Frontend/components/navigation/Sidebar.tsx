@@ -10,7 +10,6 @@ const navItems = [
   { href: "/library/packs", label: "Pack Library", icon: Zap },
   { href: "/library/drive-cycles", label: "DriveCycle Library", icon: CalendarDays },
   { href: "/library/simulations", label: "Simulations", icon: Layers },
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/help", label: "Help", icon: HelpCircle },
 ]

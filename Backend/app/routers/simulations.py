@@ -1,4 +1,5 @@
 # Backend/app/routers/simulations.py
+# Backend/app/routers/simulations.py
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 import os, io, sys, shutil
 import pandas as pd
@@ -23,14 +24,14 @@ async def inject_cell_config(pack_config: dict) -> dict:
     cell_id = pack_config.get("cell_id")
     if not cell_id:
         raise ValueError("Missing cell_id in pack_config")
-   
+  
     if not ObjectId.is_valid(cell_id):
         raise ValueError("Invalid cell_id format")
-   
+  
     cell_doc = await db.cells.find_one({"_id": ObjectId(cell_id)})
     if not cell_doc:
-        raise ValueError("Cell not found")  # This will be caught and shown as "cell not configured for this pack"
-   
+        raise ValueError("Cell not found") # This will be caught and shown as "cell not configured for this pack"
+  
     pack_config["cell"] = {
         "formFactor": cell_doc.get("formFactor", "cylindrical"),
         "dims": cell_doc.get("dims", {}),
@@ -103,7 +104,7 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
     try:
         # Inject cell_config into pack_config
         pack_config = await inject_cell_config(pack_config)
-       
+      
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
         if test:
             # Test mode: copy static CSV
@@ -264,7 +265,7 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
         return {
             "simulation_id": sim_id,
             "cell_id": cell_id,
-            "time_range": f"{low} to {high}",
+            "time_range": f"{low:.2f} to {high:.2f}",
             "total_points": int(n),
             "sampled_points": len(data),
             "sampling_ratio": sampling_ratio,

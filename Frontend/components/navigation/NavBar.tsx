@@ -18,7 +18,7 @@ export function NavBar() {
               className="h-10 w-auto"
             />
           </div>
-          <span className="font-bold text-lg text-foreground">Battery Sim</span>
+          <span className="font-bold text-lg text-foreground">Battery Simulator</span>
         </Link>
 
         {/* Version Info */}

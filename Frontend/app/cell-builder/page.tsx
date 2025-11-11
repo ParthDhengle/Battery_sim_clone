@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,8 +42,8 @@ type SohFile = { name: string; data: string; type: string } | null
 
 export default function CellBuilder() {
   const router = useRouter()
-  const params = useParams()
-  const id = params.id as string | undefined
+  const searchParams = useSearchParams()
+  const id = searchParams.get('id') || undefined
 
   const [formData, setFormData] = useState<FormData>({
     name: "",
