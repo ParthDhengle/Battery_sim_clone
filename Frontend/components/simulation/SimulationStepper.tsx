@@ -119,12 +119,6 @@ export function SimulationStepper({ projectId }: SimulationStepperProps) {
   const canRunSimulation = !!(canProceedToConfig && simulationConfig)
 
   useEffect(() => {
-    console.log(`%cState update:`, "font-weight: bold; color: blue;")
-    console.log(`  packId: '${packId}'`)
-    console.log(`  cycleId: '${cycleId}'`)
-    console.log(`  simulationConfig:`, simulationConfig)
-    console.log(`  canProceedToConfig: ${canProceedToConfig}`)
-    console.log(`  canRunSimulation: ${canRunSimulation}`)
   }, [packId, cycleId, simulationConfig, canProceedToConfig, canRunSimulation])
 
   const handleRunSimulation = async () => {
@@ -143,7 +137,6 @@ export function SimulationStepper({ projectId }: SimulationStepperProps) {
     })
 
     if (result) {
-      console.log("[v0] Simulation completed successfully:", result)
       if (projectId) {
         addSimulation(projectId, JSON.stringify({ packId, cycleId, simulationConfig, results: result }))
       }

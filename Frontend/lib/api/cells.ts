@@ -11,6 +11,17 @@ export async function getCells() {
   return await res.json();
 }
 
+export async function getCell(id: string) {
+  const res = await fetch(`${API_BASE}/cells/${id}`, {
+    cache: 'no-store'
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch cell: ${error}`);
+  }
+  return await res.json();
+}
+
 export async function createCell(data: any) {
   const res = await fetch(`${API_BASE}/cells/`, {
     method: "POST",

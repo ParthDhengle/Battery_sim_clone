@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Battery, Download, Pencil, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { PackLayout3D } from "@/components/pack-builder/pack-layout-3d"
+// import { PackLayout3D } from "@/components/3D_preview/pack-layout-3d"
 import { deletePack, getPacks } from "@/lib/api/packs"
 
 export default function Packs() {

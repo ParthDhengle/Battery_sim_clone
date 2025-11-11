@@ -47,7 +47,6 @@ export default function DriveCycles() {
         setDriveCycles(loadedDriveCycles.filter(Boolean));
       }
     } catch (err) {
-      console.log('No saved drive cycles yet');
       setDriveCycles([]);
     }
   };

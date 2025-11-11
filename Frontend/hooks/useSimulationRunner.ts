@@ -174,7 +174,6 @@ export function useSimulationRunner() {
   const fetchSimulationData = useCallback(
     async (simulationId: string, timeRange?: { start: number; end: number }, maxPoints = 5000) => {
       try {
-        console.log("[v0] Fetching data for simulation:", simulationId, { timeRange, maxPoints })
 
         const data: SimulationDataResponse = await apiGetSimulationData(simulationId, {
           max_points: maxPoints,
@@ -276,7 +275,6 @@ export function useSimulationRunner() {
               const csvContent = sessionStorage.getItem(`csv:${request.cycleId}`)
               if (csvContent) {
                 driveCycleCsv = csvContent
-                console.log("[v0] Using uploaded CSV file:", request.cycleId)
               } else {
                 console.warn("[v0] CSV file not found in sessionStorage, using fallback")
               }
@@ -311,8 +309,15 @@ export function useSimulationRunner() {
           }
         }
 
-        const { simulation_id } = await apiRunSimulation({ packConfig, modelConfig, driveCycleCsv })
-        console.log("[v0] Simulation started with ID:", simulation_id)
+        // Ensure payload includes required fields 'name' and 'type' expected by RunSimulationPayload
+        const payload = {
+          name: `${request.packId}-${request.cycleId}`,
+          type: "simulation",
+          packConfig,
+          modelConfig,
+          driveCycleCsv,
+        }
+        const { simulation_id } = await apiRunSimulation(payload)
 
         // Poll every 2 seconds for completion
         let completed = false

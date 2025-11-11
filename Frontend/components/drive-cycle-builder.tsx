@@ -71,7 +71,6 @@ export function DriveCycleBuilder() {
     if (isValid()) {
       const config = configMethod === "manual" ? manualConfig : predefinedConfig
       const fullConfig = { ...config, startingSoc: Number.parseFloat(startingSoc) }
-      console.log("Final Drive Cycle Config:", fullConfig)
       
     } else {
       setError("Please complete the configuration")

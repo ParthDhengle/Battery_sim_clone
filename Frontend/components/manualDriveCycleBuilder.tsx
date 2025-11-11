@@ -563,7 +563,6 @@ export function ManualDriveCycleBuilder({ onConfigUpdate, startingSoc, loadedCon
         onSelect={(date: Date | undefined) => {
           if (date) {
             setStartDate(date)
-            console.log("Selected date:", date)
           }
         }}
         initialFocus

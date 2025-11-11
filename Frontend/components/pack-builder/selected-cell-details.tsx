@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { CellPreview3D } from "./cell-preview-3d"
+// import { CellPreview3D } from "@/components/3D_preview/cell_3d"
 
 interface SelectedCellDetailsProps {
   formFactor: "cylindrical" | "prismatic"
@@ -82,7 +82,7 @@ export function SelectedCellDetails({
           )}
         </div>
 
-        <CellPreview3D formFactor={formFactor} dims={dims} />
+        {/* <CellPreview3D formFactor={formFactor} dims={dims} /> */}
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">

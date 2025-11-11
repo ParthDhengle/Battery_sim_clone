@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Battery } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { PackLayout3D } from "./pack-layout-3d"
+// import { PackLayout3D } from "@/components/3D_preview/pack-layout-3d"
 import { usePackBuilder } from "./use-pack-builder"
 import { useLayers } from "./use-layers"
 import { useVaryingCells } from "./use-varying-cells"
@@ -266,14 +266,14 @@ export function PackBuilder() {
         onUpdateLayer={updateLayer}
       />
 
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Pack 3D Preview</CardTitle>
         </CardHeader>
         <CardContent>
           <PackLayout3D cells={previewCells} formFactor={formFactor} />
         </CardContent>
-      </Card>
+      </Card> */}
 
       {packSummary && <PackSummaryDisplay summary={packSummary} />}
 

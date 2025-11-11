@@ -72,8 +72,6 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
     const reader = new FileReader()
     reader.onload = (e) => {
       const content = e.target?.result as string
-      console.log(`--- CSV File Content (${file.name}) ---`)
-      console.log(content)
       
       // Store CSV content in sessionStorage with the filename as key
       if (typeof window !== "undefined") {
