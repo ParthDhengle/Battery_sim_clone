@@ -1,3 +1,4 @@
+// Frontend/components/pack-builder/pack-basic-info.tsx
 "use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -10,8 +11,8 @@ interface PackBasicInfoProps {
   packDescription: string
   setPackDescription: (value: string) => void
   cells: any[]
-  selectedCellName: string
-  onSelectCell: (name: string) => void
+  selectedCellId: string
+  onSelectCell: (id: string) => void
 }
 
 export function PackBasicInfo({
@@ -20,7 +21,7 @@ export function PackBasicInfo({
   packDescription,
   setPackDescription,
   cells,
-  selectedCellName,
+  selectedCellId,
   onSelectCell,
 }: PackBasicInfoProps) {
   return (
@@ -43,13 +44,13 @@ export function PackBasicInfo({
         </div>
         <div className="space-y-3">
           <Label>Select Cell from Database<span className="text-red-500">*</span></Label>
-          <Select value={selectedCellName} onValueChange={onSelectCell}>
+          <Select value={selectedCellId} onValueChange={onSelectCell}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {cells.map((cell) => (
-                <SelectItem key={cell.name} value={cell.name}>
+                <SelectItem key={cell.id} value={cell.id}>
                   {cell.name}
                 </SelectItem>
               ))}

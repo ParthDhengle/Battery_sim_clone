@@ -1,5 +1,5 @@
+// Frontend/components/pack-builder/selected-cell-details.tsx
 "use client"
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -51,7 +51,6 @@ export function SelectedCellDetails({
           <Label>Cell Form Factor</Label>
           <p className="text-sm font-medium">{formFactor}</p>
         </div>
-
         <div className="grid grid-cols-3 gap-4">
           {formFactor === "cylindrical" ? (
             <>
@@ -81,9 +80,7 @@ export function SelectedCellDetails({
             </>
           )}
         </div>
-
         {/* <CellPreview3D formFactor={formFactor} dims={dims} /> */}
-
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
             <Label>Capacity (Ah)</Label>
@@ -94,7 +91,6 @@ export function SelectedCellDetails({
             <p className="text-sm font-medium">{columbicEfficiency}</p>
           </div>
         </div>
-
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
             <Label>Cell Mass (kg)</Label>
@@ -105,7 +101,6 @@ export function SelectedCellDetails({
             <p className="text-sm font-medium">{mJellyroll}</p>
           </div>
         </div>
-
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
             <Label>Cell Voltage Upper Limit (V)</Label>
@@ -116,12 +111,10 @@ export function SelectedCellDetails({
             <p className="text-sm font-medium">{cellLowerVoltage}</p>
           </div>
         </div>
-
         <div className="space-y-3">
           <Label>Cost per Cell (USD)</Label>
           <Input type="number" value={costPerCell} onChange={(e) => setCostPerCell(e.target.value)} />
         </div>
-
         <div className="flex items-center space-x-2">
           <Checkbox
             id="allow-overlap"
@@ -130,7 +123,6 @@ export function SelectedCellDetails({
           />
           <Label htmlFor="allow-overlap">Allow cell overlap (for testing only)</Label>
         </div>
-
         {useIndexPitch && (
           <div className="space-y-3">
             <Label>Z Pitch (mm)</Label>

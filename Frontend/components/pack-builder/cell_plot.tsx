@@ -1,3 +1,4 @@
+// Frontend/components/pack-builder/cell_plot.tsx
 export function CellPlot({
   layer,
   formFactor,
@@ -13,19 +14,17 @@ export function CellPlot({
     gridType: string
   }
   formFactor: "cylindrical" | "prismatic"
-  dims: { radius?: number; length?: number; width?: number; height?: number }
+  dims: { radius?: number; length?: number; width?: number; height: number }
   labelSchema: string // <-- user-input pattern like "R{row}C{col}L{layer}"
 }) {
   return (
     <div className="mt-6 space-y-3 w-full">
       <p className="font-medium text-gray-800">Layer Plot</p>
-
       {(() => {
         const nRows = parseInt(String(layer.nRows), 10) || 0
         const nCols = parseInt(String(layer.nCols), 10) || 0
         const pitchX = parseFloat(String(layer.pitchX)) || 0
         const pitchY = parseFloat(String(layer.pitchY)) || 0
-
         if (nRows <= 0 || nCols <= 0 || pitchX <= 0 || pitchY <= 0) {
           return (
             <p className="text-muted-foreground">
@@ -33,7 +32,6 @@ export function CellPlot({
             </p>
           )
         }
-
         // --- Cell size calculation ---
         const cellSizeX =
           formFactor === "cylindrical"
@@ -43,18 +41,14 @@ export function CellPlot({
           formFactor === "cylindrical"
             ? 2 * (dims.radius ?? 0)
             : dims.width ?? 0
-
         const halfX = cellSizeX / 2
         const halfY = cellSizeY / 2
-
         // --- Generate cell positions ---
         const positions: { x: number; y: number; label: string }[] = []
-
         for (let row = 0; row < nRows; row++) {
           for (let col = 0; col < nCols; col++) {
             let x = col * pitchX
             let y = row * pitchY
-
             switch (layer.gridType) {
               case "brick_row_stagger":
                 if (row % 2 === 1) x += pitchX / 2
@@ -72,7 +66,6 @@ export function CellPlot({
                 x += row * (pitchX / 2)
                 break
             }
-
             // --- Apply user label schema ---
             const label =
               labelSchema && labelSchema.includes("{")
@@ -81,30 +74,24 @@ export function CellPlot({
                     .replace(/{col}/g, (col + 1).toString())
                     .replace(/{layer}/g, layer.id.toString())
                 : `${String.fromCharCode(65 + row)}${col + 1}`
-
             positions.push({ x, y, label })
           }
         }
-
         // --- Bounding box ---
         let minX = Infinity,
           minY = Infinity,
           maxX = -Infinity,
           maxY = -Infinity
-
         positions.forEach((pos) => {
           minX = Math.min(minX, pos.x - halfX)
           maxX = Math.max(maxX, pos.x + halfX)
           minY = Math.min(minY, pos.y - halfY)
           maxY = Math.max(maxY, pos.y + halfY)
         })
-
         const shiftX = minX < 0 ? -minX : 0
         const shiftY = minY < 0 ? -minY : 0
-
         const plotWidth = maxX - minX
         const plotHeight = maxY - minY
-
         // --- Layout ---
         const padding = 60
         const viewWidth = plotWidth + 2 * padding
@@ -112,17 +99,14 @@ export function CellPlot({
         const plotLeft = padding
         const plotTop = padding
         const plotBottom = plotTop + plotHeight
-
         // --- Axis & ticks ---
         const tickSpacing = 5
         const tickLength = 1.5
         const fontSize = 5
         const xTicks: number[] = []
         const yTicks: number[] = []
-
         for (let tx = 0; tx <= plotWidth; tx += tickSpacing) xTicks.push(tx)
         for (let ty = 0; ty <= plotHeight; ty += tickSpacing) yTicks.push(ty)
-
         return (
           <div className="w-full aspect-[4/3]">
             <svg
@@ -146,7 +130,6 @@ export function CellPlot({
                   <path d="M0,0 L0,6 L6,3 z" fill="black" />
                 </marker>
               </defs>
-
               {/* Gridlines */}
               {xTicks.map((tx) => (
                 <line
@@ -173,7 +156,6 @@ export function CellPlot({
                   />
                 )
               })}
-
               {/* Axes */}
               <line
                 x1={plotLeft - 20}
@@ -193,7 +175,6 @@ export function CellPlot({
                 strokeWidth="1"
                 markerEnd="url(#arrow)"
               />
-
               {/* Axis Ticks */}
               {xTicks.map((tx) => (
                 <g key={`x-${tx}`}>
@@ -218,7 +199,6 @@ export function CellPlot({
                   )}
                 </g>
               ))}
-
               {yTicks.map((ty) => {
                 const svgY = plotBottom - ty
                 return (
@@ -245,7 +225,6 @@ export function CellPlot({
                   </g>
                 )
               })}
-
               {/* Cells */}
               {positions.map((pos, i) => {
                 const cx = plotLeft + pos.x + shiftX

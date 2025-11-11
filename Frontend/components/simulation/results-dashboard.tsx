@@ -1,3 +1,4 @@
+// Frontend/components/simulation/results-dashboard.tsx
 "use client"
 import React, { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -55,18 +56,18 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
     if (simulationData && simulationData.data.length > 0) {
       const lastPoint = simulationData.data[simulationData.data.length - 1]
       const temps = simulationData.data.map(d => d.temp ?? 0).filter(t => t > 0)
-      const maxTemp = temps.length > 0 ? Math.max(...temps) : 25.0  // Fallback to 25 if no/zero temp
+      const maxTemp = temps.length > 0 ? Math.max(...temps) : 25.0 // Fallback to 25 if no/zero temp
       const initialSoc = simulationData.data[0]?.soc ?? 1.0
       const endSoc = lastPoint.soc ?? 0
       return {
         end_soc: endSoc * 100,
         max_temp: maxTemp,
-        capacity_fade: (1 - endSoc / initialSoc) * 100  // Simple fade estimate
+        capacity_fade: (1 - endSoc / initialSoc) * 100 // Simple fade estimate
       }
     }
     return {
       end_soc: 0,
-      max_temp: 25.0,  // Default
+      max_temp: 25.0, // Default
       capacity_fade: 0
     }
   }, [results.summary, simulationData])
@@ -145,7 +146,10 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         }))
         setSimulationData(data)
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "Failed to load simulation data"
+        let errorMsg = err instanceof Error ? err.message : "Failed to load simulation data"
+        if (errorMsg.includes("Cell not found")) {
+          errorMsg = "Cell not configured for this pack!"
+        }
         console.error("[v0] Error fetching data:", errorMsg)
         setError(errorMsg)
       } finally {

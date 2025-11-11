@@ -1,8 +1,9 @@
+// Frontend/components/simulation/pack-selector.tsx
 "use client"
-
 import { useState, useEffect } from "react"
-import { getPacks } from "@/lib/api/packs"
+import { getPacks,getPack } from "@/lib/api/packs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface PackOption {
   value: string
@@ -41,6 +42,7 @@ async function getPacksFromStorage(): Promise<PackOption[]> {
 export function PackSelector({ value, onValueChange }: PackSelectorProps) {
   const [packs, setPacks] = useState<PackOption[]>([])
   const [loading, setLoading] = useState(true)
+  const [packError, setPackError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -48,6 +50,21 @@ export function PackSelector({ value, onValueChange }: PackSelectorProps) {
       .then(setPacks)
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (value) {
+      // Verify if pack has valid cell
+      getPack(value).then((pack) => {
+        if (!pack.cell) {
+          setPackError("Selected pack does not have a configured cell.")
+        } else {
+          setPackError(null)
+        }
+      }).catch(() => {
+        setPackError("Failed to validate pack.")
+      })
+    }
+  }, [value])
 
   if (loading) {
     return (
@@ -81,6 +98,11 @@ export function PackSelector({ value, onValueChange }: PackSelectorProps) {
           ))}
         </SelectContent>
       </Select>
+      {packError && (
+        <Alert variant="destructive">
+          <AlertDescription>{packError}</AlertDescription>
+        </Alert>
+      )}
     </div>
   )
 }

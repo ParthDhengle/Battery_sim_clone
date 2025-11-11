@@ -1,3 +1,4 @@
+# Backend/app/routers/simulations.py
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 import os, io, sys, shutil
 import pandas as pd
@@ -6,19 +7,14 @@ from datetime import datetime
 from bson import ObjectId
 from app.config import db
 from CoreLogic import NEW_data_processor as adp
-from CoreLogic import  NEW_electrical_solver as aes
+from CoreLogic import NEW_electrical_solver as aes
 from pathlib import Path
-
-
 BASE_DIR = Path(__file__).parent.parent.parent
 CORE_CODE_DIR = BASE_DIR / "Core-python code"
 sys.path.append(str(CORE_CODE_DIR))
-
 STATIC_CSV_PATH = CORE_CODE_DIR / "simulation_results.csv"
-
 router = APIRouter(prefix="/simulations", tags=["simulations"])
 os.makedirs("simulations", exist_ok=True)
-
 # -----------------------------------------------------
 # HELPERS
 # -----------------------------------------------------
@@ -27,26 +23,25 @@ async def inject_cell_config(pack_config: dict) -> dict:
     cell_id = pack_config.get("cell_id")
     if not cell_id:
         raise ValueError("Missing cell_id in pack_config")
-    
+   
     if not ObjectId.is_valid(cell_id):
         raise ValueError("Invalid cell_id format")
-    
+   
     cell_doc = await db.cells.find_one({"_id": ObjectId(cell_id)})
     if not cell_doc:
-        raise ValueError("Cell not found")
-    
+        raise ValueError("Cell not found")  # This will be caught and shown as "cell not configured for this pack"
+   
     pack_config["cell"] = {
         "formFactor": cell_doc.get("formFactor", "cylindrical"),
         "dims": cell_doc.get("dims", {}),
         "capacity": cell_doc.get("capacity", 0),
         "columbic_efficiency": cell_doc.get("columbic_efficiency", 1.0),
         "m_cell": cell_doc.get("cell_weight", 0),
-        "m_jellyroll": cell_doc.get("cell_weight", 0) * 0.85,  # Assuming 85%
+        "m_jellyroll": cell_doc.get("cell_weight", 0) * 0.85, # Assuming 85%
         "cell_voltage_upper_limit": cell_doc.get("cell_upper_voltage_cutoff", 0),
         "cell_voltage_lower_limit": cell_doc.get("cell_lower_voltage_cutoff", 0),
     }
     return pack_config
-
 def _normalize_pack_for_core(pack: dict) -> dict:
     """Normalize API/DB pack (snake_case) into core engine schema (camelCase)."""
     if not isinstance(pack, dict):
@@ -108,7 +103,7 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
     try:
         # Inject cell_config into pack_config
         pack_config = await inject_cell_config(pack_config)
-        
+       
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
         if test:
             # Test mode: copy static CSV

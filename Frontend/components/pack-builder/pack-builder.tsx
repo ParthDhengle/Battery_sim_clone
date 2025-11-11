@@ -1,3 +1,4 @@
+// Frontend/components/pack-builder/pack-builder.tsx
 "use client"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -73,7 +74,6 @@ export function PackBuilder() {
     handleSelectCell,
     handleSave,
   } = usePackBuilder()
-
   const { layers, addLayer, removeLayer, updateLayer } = useLayers([])
   const { varyingCells, addVaryingCell, removeVaryingCell, updateVaryingCell } = useVaryingCells([])
   const {
@@ -84,11 +84,8 @@ export function PackBuilder() {
     updateCustomParallelGroup,
     validateCustomConnection,
   } = useCustomParallelGroups([])
-
   const [previewCells, setPreviewCells] = useState<any[]>([])
-
   const useIndexPitch = layers.some((l) => l.zMode === "index_pitch")
-
   useEffect(() => {
     const config = validateAndGenerateConfig({
       formFactor,
@@ -104,8 +101,8 @@ export function PackBuilder() {
       mJellyroll,
       cellUpperVoltage,
       cellLowerVoltage,
-      moduleUpperVoltage,  
-      moduleLowerVoltage, 
+      moduleUpperVoltage,
+      moduleLowerVoltage,
       columbicEfficiency,
       capacity,
       rP,
@@ -133,7 +130,6 @@ export function PackBuilder() {
     connectionType,
     customParallelGroups,
   ])
-
   const handleSaveClick = async () => {
     const config = validateAndGenerateConfig({
       formFactor,
@@ -149,8 +145,8 @@ export function PackBuilder() {
       mJellyroll,
       cellUpperVoltage,
       cellLowerVoltage,
-      moduleUpperVoltage, 
-      moduleLowerVoltage,   
+      moduleUpperVoltage,
+      moduleLowerVoltage,
       columbicEfficiency,
       capacity,
       rP,
@@ -160,23 +156,21 @@ export function PackBuilder() {
       maxVolume,
       varyingCells,
       selectedCellId,
-      initialTemperature, 
-      initialSOC,         
-      initialSOH,         
+      initialTemperature,
+      initialSOC,
+      initialSOH,
       initialDCIR,
       isPreview: false,
     })
-    
+   
     if (config) {
       await handleSave(config)
     }
   }
-
   const hasWarnings = layers.some((layer) => {
     const total = layers.reduce((sum, l) => sum + l.nRows * l.nCols, 0)
     return total > 1000
   })
-
   return (
     <div className="space-y-6">
       {error && (
@@ -185,7 +179,6 @@ export function PackBuilder() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -195,7 +188,6 @@ export function PackBuilder() {
           <CardDescription>Define your battery pack geometry</CardDescription>
         </CardHeader>
       </Card>
-
       <PackBasicInfo
         packName={packName}
         setPackName={setPackName}
@@ -205,7 +197,6 @@ export function PackBuilder() {
         selectedCellId={selectedCellId}
         onSelectCell={handleSelectCell}
       />
-
       <SelectedCellDetails
         formFactor={formFactor}
         dims={dims}
@@ -223,7 +214,6 @@ export function PackBuilder() {
         zPitch={zPitch}
         setZPitch={setZPitch}
       />
-
       <ElectricalConfiguration
         connectionType={connectionType}
         setConnectionType={setConnectionType}
@@ -241,14 +231,12 @@ export function PackBuilder() {
         onRemoveGroup={removeCustomParallelGroup}
         onUpdateGroup={updateCustomParallelGroup}
       />
-
       <AdvancedOptions
         computeNeighbors={computeNeighbors}
         setComputeNeighbors={setComputeNeighbors}
         labelSchema={labelSchema}
         setLabelSchema={setLabelSchema}
       />
-
       <DesignConstraints
         maxWeight={maxWeight}
         setMaxWeight={setMaxWeight}
@@ -260,12 +248,11 @@ export function PackBuilder() {
         dims={dims}
         layers={layers}
         zPitch={zPitch}
-        labelSchema={labelSchema} 
+        labelSchema={labelSchema}
         onAddLayer={addLayer}
         onRemoveLayer={removeLayer}
         onUpdateLayer={updateLayer}
       />
-
       {/* <Card>
         <CardHeader>
           <CardTitle>Pack 3D Preview</CardTitle>
@@ -274,9 +261,7 @@ export function PackBuilder() {
           <PackLayout3D cells={previewCells} formFactor={formFactor} />
         </CardContent>
       </Card> */}
-
       {packSummary && <PackSummaryDisplay summary={packSummary} />}
-
       {hasWarnings && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
@@ -285,9 +270,8 @@ export function PackBuilder() {
           </AlertDescription>
         </Alert>
       )}
-
       <div className="flex justify-end">
-        <Button onClick={handleSaveClick} disabled={layers.length === 0 || !packName} className="min-w-32">
+        <Button onClick={handleSaveClick} disabled={layers.length === 0 || !packName || !selectedCellId} className="min-w-32">
           {packId ? "Update Pack" : "Save Pack"} Configuration
         </Button>
       </div>
