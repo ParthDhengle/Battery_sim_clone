@@ -1,5 +1,5 @@
 "use client"
-import React, { useState } from "react"
+import React, { useState, useRef, useMemo } from "react"
 import {
   ResponsiveContainer,
   LineChart,
@@ -8,6 +8,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceArea,
 } from "recharts"
 import {
   Tabs,
@@ -16,6 +17,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 
 interface SimulationDataPoint {
   time: number
@@ -30,66 +32,349 @@ interface SimulationDataChartProps {
   data: SimulationDataPoint[]
 }
 
-export function SimulationDataChart({ data }: SimulationDataChartProps) {
-  const [activeTab, setActiveTab] = useState("voltage")
+type SingleConfig = {
+  label: string
+  key: keyof SimulationDataPoint
+  color: string
+  unit: string
+}
 
-  const metricConfig: Record<
-    string,
-    { label: string; key: keyof SimulationDataPoint; color: string; unit: string }
-  > = {
-    voltage: { label: "Voltage vs Time", key: "voltage", color: "#2563eb", unit: "V" },
+type CombinedConfig = {
+  label: string
+  keys: (keyof SimulationDataPoint)[]
+  colors: string[]
+  units: string[]
+  names: string[]
+}
+
+export function SimulationDataChart({ data }: SimulationDataChartProps) {
+  const [activeTab, setActiveTab] = useState("voltage_current")
+  const [zoomDomains, setZoomDomains] = useState<Record<string, { min: number; max: number } | null>>({
+    voltage_current: null,
+    soc: null,
+    qgen: null,
+  })
+  const [refAreaLeft, setRefAreaLeft] = useState<Record<string, number | null>>({
+    voltage_current: null,
+    soc: null,
+    qgen: null,
+  })
+  const [refAreaRight, setRefAreaRight] = useState<Record<string, number | null>>({
+    voltage_current: null,
+    soc: null,
+    qgen: null,
+  })
+  const [initialPinchDistance, setInitialPinchDistance] = useState<number | null>(null)
+  const [initialZoomDomain, setInitialZoomDomain] = useState<{ min: number; max: number } | null>(null)
+  const [pinchFraction, setPinchFraction] = useState<number | null>(null)
+  const [activePinchKey, setActivePinchKey] = useState<string | null>(null)
+  const chartRefs = useRef<Record<string, HTMLDivElement | null>>({
+    voltage_current: null,
+    soc: null,
+    qgen: null,
+  })
+
+  const { minTime, maxTime } = useMemo(() => {
+    if (data.length === 0) return { minTime: 0, maxTime: 0 }
+    const times = data.map((d) => d.time)
+    return { minTime: Math.min(...times), maxTime: Math.max(...times) }
+  }, [data])
+
+  const getDistance = (touch1: { clientX: number; clientY: number }, touch2: { clientX: number; clientY: number }) => {
+    return Math.sqrt(
+      (touch1.clientX - touch2.clientX) ** 2 + (touch1.clientY - touch2.clientY) ** 2
+    )
+  }
+
+  const handleMouseDown = (key: string) => (e: any) => {
+    setRefAreaLeft((prev) => ({ ...prev, [key]: e?.activeLabel ?? 0 }))
+  }
+
+  const handleMouseMove = (key: string) => (e: any) => {
+    const left = refAreaLeft[key]
+    if (left !== null) {
+      setRefAreaRight((prev) => ({ ...prev, [key]: e?.activeLabel ?? 0 }))
+    }
+  }
+
+  const handleMouseUp = (key: string) => () => {
+    const left = refAreaLeft[key]
+    const right = refAreaRight[key]
+    if (left !== null && right !== null) {
+      const min = Math.min(left, right)
+      const max = Math.max(left, right)
+      setZoomDomains((prev) => ({ ...prev, [key]: { min, max } }))
+    }
+    setRefAreaLeft((prev) => ({ ...prev, [key]: null }))
+    setRefAreaRight((prev) => ({ ...prev, [key]: null }))
+  }
+
+  const handleWheel = (key: string) => (e: React.WheelEvent) => {
+    e.preventDefault()
+    const ref = chartRefs.current[key]
+    if (!ref) return
+    const rect = ref.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const width = rect.width
+    if (x < 0 || x > width) return
+    const fraction = x / width
+    const currentDomain = zoomDomains[key] || { min: minTime, max: maxTime }
+    const range = currentDomain.max - currentDomain.min
+    const zoomAmount = e.deltaY < 0 ? 0.9 : 1.1
+    const newRange = range * zoomAmount
+    const delta = newRange - range
+    const addLeft = delta * fraction
+    const addRight = delta * (1 - fraction)
+    let newMin = currentDomain.min - addLeft
+    let newMax = currentDomain.max + addRight
+    if (newMin < minTime) newMin = minTime
+    if (newMax > maxTime) newMax = maxTime
+    if (newMin >= newMax) return // prevent inversion
+    setZoomDomains((prev) => ({ ...prev, [key]: { min: newMin, max: newMax } }))
+  }
+
+  const handleTouchStart = (key: string) => (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      const dist = getDistance(e.touches[0], e.touches[1])
+      setInitialPinchDistance(dist)
+      setInitialZoomDomain(zoomDomains[key] || { min: minTime, max: maxTime })
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+      const ref = chartRefs.current[key]
+      if (ref) {
+        const rect = ref.getBoundingClientRect()
+        const x = centerX - rect.left
+        const fraction = x / rect.width
+        setPinchFraction(fraction)
+      }
+      setActivePinchKey(key)
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault()
+    if (e.touches.length === 2 && initialPinchDistance && pinchFraction !== null && initialZoomDomain && activePinchKey) {
+      const currentDist = getDistance(e.touches[0], e.touches[1])
+      const zoomAmount = initialPinchDistance / currentDist
+      const range = initialZoomDomain.max - initialZoomDomain.min
+      const newRange = range * zoomAmount
+      const delta = newRange - range
+      const addLeft = delta * pinchFraction
+      const addRight = delta * (1 - pinchFraction)
+      let newMin = initialZoomDomain.min - addLeft
+      let newMax = initialZoomDomain.max + addRight
+      if (newMin < minTime) newMin = minTime
+      if (newMax > maxTime) newMax = maxTime
+      if (newMin >= newMax) return
+      setZoomDomains((prev) => ({ ...prev, [activePinchKey]: { min: newMin, max: newMax } }))
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setInitialPinchDistance(null)
+    setInitialZoomDomain(null)
+    setPinchFraction(null)
+    setActivePinchKey(null)
+  }
+
+  const metricConfig: Record<string, SingleConfig | CombinedConfig> = {
+    voltage_current: {
+      label: "Voltage & Current vs Time",
+      keys: ["voltage", "current"],
+      colors: ["#2563eb", "#16a34a"],
+      units: ["V", "A"],
+      names: ["Voltage", "Current"],
+    },
     soc: { label: "SOC vs Time", key: "soc", color: "#f59e0b", unit: "%" },
-    current: { label: "Current vs Time", key: "current", color: "#16a34a", unit: "A" },
     qgen: { label: "Heat Generation vs Time", key: "qgen", color: "#ef4444", unit: "W" },
   }
 
   const renderChart = (key: keyof typeof metricConfig) => {
     const config = metricConfig[key]
-    const formattedData = data.map((d) => ({
-      time: d.time,
-      value:
-        config.key === "soc"
-          ? (d[config.key] ?? 0) * 100 // convert SOC to %
-          : d[config.key] ?? 0,
-    }))
+    const currentZoom = zoomDomains[key]
+    const left = refAreaLeft[key]
+    const right = refAreaRight[key]
+    let xDomain: [number | string, number | string] = ["dataMin", "dataMax"]
 
-    return (
-      <ResponsiveContainer width="100%" height={380}>
-        <LineChart data={formattedData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis
-            dataKey="time"
-            label={{ value: "Time (s)", position: "insideBottomRight", offset: -5 }}
-            tick={{ fontSize: 12 }}
-          />
-          <YAxis
-            label={{
-              value: config.unit,
-              angle: -90,
-              position: "insideLeft",
-              offset: 0,
-            }}
-            tick={{ fontSize: 12 }}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "rgba(255,255,255,0.95)",
-              border: "1px solid #ddd",
-              fontSize: "12px",
-            }}
-            formatter={(value: any) => [`${value.toFixed(2)} ${config.unit}`, config.label]}
-          />
-          <Line
-            type="monotone"
-            dataKey="value"
-            stroke={config.color}
-            strokeWidth={2}
-            dot={false}
-            name={config.label}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    )
+    if ("keys" in config) {
+      // Combined config
+      const formattedData = data.map((d) => ({
+        time: d.time,
+        value1: d[config.keys[0]] ?? 0,
+        value2: d[config.keys[1]] ?? 0,
+      }))
+      let chartData = formattedData
+      if (currentZoom) {
+        chartData = formattedData.filter(
+          (d) => d.time >= currentZoom.min && d.time <= currentZoom.max
+        )
+        xDomain = [currentZoom.min, currentZoom.max]
+      }
+
+      return (
+        <div
+          ref={(el) => { chartRefs.current[key] = el }}
+          onWheel={handleWheel(key)}
+          onTouchStart={handleTouchStart(key)}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ width: "100%", height: 380, touchAction: "none" }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              onMouseDown={handleMouseDown(key)}
+              onMouseMove={handleMouseMove(key)}
+              onMouseUp={handleMouseUp(key)}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="time"
+                domain={xDomain}
+                allowDataOverflow={true}
+                type="number"
+                label={{ value: "Time (s)", position: "insideBottomRight", offset: -5 }}
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis
+                yAxisId="left"
+                domain={["auto", "auto"]}
+                label={{
+                  value: config.units[0],
+                  angle: -90,
+                  position: "insideLeft",
+                  offset: 0,
+                }}
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                domain={["auto", "auto"]}
+                label={{
+                  value: config.units[1],
+                  angle: 90,
+                  position: "insideRight",
+                  offset: 0,
+                }}
+                tick={{ fontSize: 12 }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "rgba(255,255,255,0.95)",
+                  border: "1px solid #ddd",
+                  fontSize: "12px",
+                }}
+                formatter={(value: any, name: string) => [`${value.toFixed(2)} ${name === config.names[0] ? config.units[0] : config.units[1]}`, name]}
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="value1"
+                stroke={config.colors[0]}
+                strokeWidth={2}
+                dot={false}
+                name={config.names[0]}
+                isAnimationActive={false}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="value2"
+                stroke={config.colors[1]}
+                strokeWidth={2}
+                dot={false}
+                name={config.names[1]}
+                isAnimationActive={false}
+              />
+              {left !== null && right !== null && (
+                <ReferenceArea x1={left} x2={right} strokeOpacity={0.3} />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )
+    } else {
+      // Single config
+      const formattedData = data.map((d) => ({
+        time: d.time,
+        value:
+          config.key === "soc"
+            ? (d[config.key] ?? 0) * 100 // convert SOC to %
+            : d[config.key] ?? 0,
+      }))
+      let chartData = formattedData
+      if (currentZoom) {
+        chartData = formattedData.filter(
+          (d) => d.time >= currentZoom.min && d.time <= currentZoom.max
+        )
+        xDomain = [currentZoom.min, currentZoom.max]
+      }
+
+      return (
+        <div
+          ref={(el) => { chartRefs.current[key] = el }}
+          onWheel={handleWheel(key)}
+          onTouchStart={handleTouchStart(key)}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ width: "100%", height: 380, touchAction: "none" }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              onMouseDown={handleMouseDown(key)}
+              onMouseMove={handleMouseMove(key)}
+              onMouseUp={handleMouseUp(key)}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="time"
+                domain={xDomain}
+                allowDataOverflow={true}
+                type="number"
+                label={{ value: "Time (s)", position: "insideBottomRight", offset: -5 }}
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis
+                domain={["auto", "auto"]}
+                label={{
+                  value: config.unit,
+                  angle: -90,
+                  position: "insideLeft",
+                  offset: 0,
+                }}
+                tick={{ fontSize: 12 }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "rgba(255,255,255,0.95)",
+                  border: "1px solid #ddd",
+                  fontSize: "12px",
+                }}
+                formatter={(value: any) => [`${value.toFixed(2)} ${config.unit}`, config.label]}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={config.color}
+                strokeWidth={2}
+                dot={false}
+                name={config.label}
+                isAnimationActive={false}
+              />
+              {left !== null && right !== null && (
+                <ReferenceArea x1={left} x2={right} strokeOpacity={0.3} />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )
+    }
+  }
+
+  const handleResetZoom = () => {
+    setZoomDomains((prev) => ({ ...prev, [activeTab]: null }))
   }
 
   return (
@@ -97,22 +382,24 @@ export function SimulationDataChart({ data }: SimulationDataChartProps) {
       <CardHeader>
         <CardTitle>Simulation Plots</CardTitle>
         <CardDescription>
-          View different simulation parameters over time
+          View different simulation parameters over time. Use mouse wheel or pinch gesture to zoom.
         </CardDescription>
       </CardHeader>
 
       <CardContent>
         <Tabs
-          defaultValue="voltage"
+          defaultValue="voltage_current"
           value={activeTab}
           onValueChange={setActiveTab}
           className="w-full"
         >
           <TabsList className="flex flex-wrap gap-2">
-            <TabsTrigger value="voltage">Voltage</TabsTrigger>
+            <TabsTrigger value="voltage_current">Voltage & Current</TabsTrigger>
             <TabsTrigger value="soc">SOC</TabsTrigger>
-            <TabsTrigger value="current">Current</TabsTrigger>
             <TabsTrigger value="qgen">Heat</TabsTrigger>
+            <Button variant="outline" size="sm" onClick={handleResetZoom}>
+              Reset Zoom
+            </Button>
           </TabsList>
 
           {Object.keys(metricConfig).map((key) => (

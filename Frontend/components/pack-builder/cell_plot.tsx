@@ -4,6 +4,8 @@ export function CellPlot({
   formFactor,
   dims,
   labelSchema, // <-- new prop
+  connectionType,
+  customParallelGroups,
 }: {
   layer: {
     id: number
@@ -16,7 +18,30 @@ export function CellPlot({
   formFactor: "cylindrical" | "prismatic"
   dims: { radius?: number; length?: number; width?: number; height: number }
   labelSchema: string // <-- user-input pattern like "R{row}C{col}L{layer}"
+  connectionType: "row_series_column_parallel" | "row_parallel_column_series" | "custom"
+  customParallelGroups?: { id: number; cellIds: string }[]
 }) {
+  function idToColor(id: number): string {
+    if (id === 0) return "#0000FF";
+    const colors = [
+      "#FF4136",
+      "#2ECC40",
+      "#0074D9",
+      "#FFDC00",
+      "#B10DC9",
+      "#FF851B",
+      "#3D9970",
+      "#001f3f",
+      "#39CCCC",
+      "#01FF70",
+      "#85144b",
+      "#F012BE",
+      "#7FDBFF",
+      "#FFD700",
+    ];
+    return colors[(id - 1) % colors.length];
+  }
+
   return (
     <div className="mt-6 space-y-3 w-full">
       <p className="font-medium text-gray-800">Layer Plot</p>
@@ -44,7 +69,7 @@ export function CellPlot({
         const halfX = cellSizeX / 2
         const halfY = cellSizeY / 2
         // --- Generate cell positions ---
-        const positions: { x: number; y: number; label: string }[] = []
+        const positions: { x: number; y: number; label: string; row: number; col: number; group_id?: number }[] = []
         for (let row = 0; row < nRows; row++) {
           for (let col = 0; col < nCols; col++) {
             let x = col * pitchX
@@ -74,8 +99,28 @@ export function CellPlot({
                     .replace(/{col}/g, (col + 1).toString())
                     .replace(/{layer}/g, layer.id.toString())
                 : `${String.fromCharCode(65 + row)}${col + 1}`
-            positions.push({ x, y, label })
+            positions.push({ x, y, label, row, col })
           }
+        }
+        // --- Assign group IDs ---
+        let seriesDirection: "row" | "column" | undefined;
+        if (connectionType === "row_series_column_parallel") {
+          seriesDirection = "row";
+          positions.forEach((p) => (p.group_id = p.col + 1));
+        } else if (connectionType === "row_parallel_column_series") {
+          seriesDirection = "column";
+          positions.forEach((p) => (p.group_id = p.row + 1));
+        } else if (connectionType === "custom" && customParallelGroups) {
+          const labelToGroup = new Map<string, number>();
+          customParallelGroups.forEach((g) => {
+            g.cellIds
+              .split(",")
+              .map((s) => s.trim())
+              .forEach((l) => labelToGroup.set(l, g.id));
+          });
+          positions.forEach((p) => (p.group_id = labelToGroup.get(p.label) || 0));
+        } else {
+          positions.forEach((p) => (p.group_id = 0));
         }
         // --- Bounding box ---
         let minX = Infinity,
@@ -229,6 +274,7 @@ export function CellPlot({
               {positions.map((pos, i) => {
                 const cx = plotLeft + pos.x + shiftX
                 const cy = plotBottom - (pos.y + shiftY)
+                const color = idToColor(pos.group_id ?? 0)
                 return (
                   <g key={i}>
                     {formFactor === "cylindrical" ? (
@@ -236,8 +282,8 @@ export function CellPlot({
                         cx={cx}
                         cy={cy}
                         r={dims.radius ?? 0}
-                        stroke="blue"
-                        fill="none"
+                        stroke={color}
+                        fill={`${color}33`}
                         strokeWidth="0.8"
                       />
                     ) : (
@@ -246,8 +292,8 @@ export function CellPlot({
                         y={cy - halfY}
                         width={cellSizeX}
                         height={cellSizeY}
-                        stroke="blue"
-                        fill="none"
+                        stroke={color}
+                        fill={`${color}33`}
                         strokeWidth="0.8"
                       />
                     )}
@@ -264,6 +310,59 @@ export function CellPlot({
                   </g>
                 )
               })}
+              {/* Series Lines */}
+              {seriesDirection === "row" &&
+                (() => {
+                  const rowMap = new Map<number, { cx: number; cy: number; row: number }[]>();
+                  positions.forEach((pos) => {
+                    const cx = plotLeft + pos.x + shiftX;
+                    const cy = plotBottom - (pos.y + shiftY);
+                    if (!rowMap.has(pos.row)) rowMap.set(pos.row, []);
+                    rowMap.get(pos.row)!.push({ cx, cy, row: pos.row });
+                  });
+                  return Array.from(rowMap.entries()).map(([rowNum, pts]) => {
+                    pts.sort((a, b) => a.cx - b.cx);
+                    if (pts.length > 1) {
+                      const points = pts.map((pt) => `${pt.cx},${pt.cy}`).join(" ");
+                      return (
+                        <polyline
+                          key={`series-row-${rowNum}`}
+                          points={points}
+                          stroke="black"
+                          strokeWidth="1"
+                          fill="none"
+                        />
+                      );
+                    }
+                    return null;
+                  });
+                })()}
+              {seriesDirection === "column" &&
+                (() => {
+                  const colMap = new Map<number, { cx: number; cy: number; row: number }[]>();
+                  positions.forEach((pos) => {
+                    const cx = plotLeft + pos.x + shiftX;
+                    const cy = plotBottom - (pos.y + shiftY);
+                    if (!colMap.has(pos.col)) colMap.set(pos.col, []);
+                    colMap.get(pos.col)!.push({ cx, cy, row: pos.row });
+                  });
+                  return Array.from(colMap.entries()).map(([colNum, pts]) => {
+                    pts.sort((a, b) => a.row - b.row);
+                    if (pts.length > 1) {
+                      const points = pts.map((pt) => `${pt.cx},${pt.cy}`).join(" ");
+                      return (
+                        <polyline
+                          key={`series-col-${colNum}`}
+                          points={points}
+                          stroke="black"
+                          strokeWidth="1"
+                          fill="none"
+                        />
+                      );
+                    }
+                    return null;
+                  });
+                })()}
             </svg>
           </div>
         )

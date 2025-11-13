@@ -257,25 +257,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
           </div>
         </CardContent>
       </Card>
-      {/* Data Table */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center gap-4 py-12 bg-muted/20 rounded-lg">
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">Loading simulation data...</p>
-          </div>
-        </div>
-      ) : simulationData && simulationData.data.length > 0 ? (
-        <div className="space-y-6">
-          <SimulationDataChart data={simulationData.data} />
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground text-center py-8">No data available</p>
-          </CardContent>
-        </Card>
-      )}
-      {/* Controls */}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Data Controls</CardTitle>
@@ -311,6 +293,33 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
               </Select>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Data Table */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center gap-4 py-12 bg-muted/20 rounded-lg">
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">Loading simulation data...</p>
+          </div>
+        </div>
+      ) : simulationData && simulationData.data.length > 0 ? (
+        <div className="space-y-6">
+          <SimulationDataChart data={simulationData.data} />
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground text-center py-8">No data available</p>
+          </CardContent>
+        </Card>
+      )}
+      {/* Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Save Results</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-2">
             <Button onClick={handleExport} variant="outline" className="gap-2 flex-1 sm:flex-none bg-transparent">
               Export CSV

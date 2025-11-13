@@ -244,7 +244,7 @@ export default function CellBuilder() {
       } else {
         await createCell(payload)
       }
-      router.push("/cells")
+      router.push("library/cells")
     } catch (err) {
       setError("Failed to save cell")
     }

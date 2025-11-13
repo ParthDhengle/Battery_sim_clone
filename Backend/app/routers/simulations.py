@@ -10,6 +10,9 @@ from app.config import db
 from CoreLogic import NEW_data_processor as adp
 from CoreLogic import NEW_electrical_solver as aes
 from pathlib import Path
+import asyncio
+import concurrent.futures
+
 BASE_DIR = Path(__file__).parent.parent.parent
 CORE_CODE_DIR = BASE_DIR / "Core-python code"
 sys.path.append(str(CORE_CODE_DIR))
@@ -24,14 +27,14 @@ async def inject_cell_config(pack_config: dict) -> dict:
     cell_id = pack_config.get("cell_id")
     if not cell_id:
         raise ValueError("Missing cell_id in pack_config")
-  
+ 
     if not ObjectId.is_valid(cell_id):
         raise ValueError("Invalid cell_id format")
-  
+ 
     cell_doc = await db.cells.find_one({"_id": ObjectId(cell_id)})
     if not cell_doc:
         raise ValueError("Cell not found") # This will be caught and shown as "cell not configured for this pack"
-  
+ 
     pack_config["cell"] = {
         "formFactor": cell_doc.get("formFactor", "cylindrical"),
         "dims": cell_doc.get("dims", {}),
@@ -104,7 +107,7 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
     try:
         # Inject cell_config into pack_config
         pack_config = await inject_cell_config(pack_config)
-      
+     
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
         if test:
             # Test mode: copy static CSV
@@ -117,7 +120,18 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
             print("⚡ Running full simulation...")
             normalized_pack = _normalize_pack_for_core(pack_config)
             setup = adp.create_setup_from_configs(normalized_pack, drive_df, model_config)
-            csv_path = aes.run_electrical_solver(setup, filename=csv_path)
+            
+            # --- NEW: Run the blocking simulation in a separate process ---
+            loop = asyncio.get_running_loop()
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                csv_path = await loop.run_in_executor(
+                    executor, 
+                    aes.run_electrical_solver,  # The sync function
+                    setup,                      # First arg: setup
+                    csv_path                    # Second arg: filename
+                )
+            # --- END NEW ---
+            
             print(f"✅ Simulation complete → Output saved at {csv_path}")
         df = pd.read_csv(csv_path)
         summary = {}
@@ -254,7 +268,7 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
             cell_df, time_cum = cell_df.iloc[idx], time_cum[idx]
         sampling_ratio = max(1, int(n / len(cell_df)))
         data = [{
-            "time": float(time_cum[i]),
+            "time": int(round(float(time_cum[i]))),  # FIXED: Round to nearest integer (no decimals)
             "voltage": float(getattr(row, "Vterm", 0.0)),
             "soc": float(getattr(row, "SOC", 1.0)),
             "current": float(getattr(row, "I_module", 0.0)),

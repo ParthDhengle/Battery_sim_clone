@@ -1,4 +1,3 @@
-// Frontend/components/pack-builder/pack-builder.tsx
 "use client"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,20 +17,30 @@ import { DesignConstraints } from "./design-constraints"
 import { LayersConfiguration } from "./layers-configuration"
 import { PackSummaryDisplay } from "./pack-summary-display"
 import { validateAndGenerateConfig } from "./pack-validation"
+import { getPack } from "@/lib/api/packs" // Added import for getPack
 
 export function PackBuilder() {
   const {
     packId,
     cells,
     selectedCellId,
+    setSelectedCellId,
     formFactor,
+    setFormFactor,
     dims,
+    setDims,
     capacity,
+    setCapacity,
     columbicEfficiency,
+    setColumbicEfficiency,
     mCell,
+    setMCell,
     mJellyroll,
+    setMJellyroll,
     cellUpperVoltage,
+    setCellUpperVoltage,
     cellLowerVoltage,
+    setCellLowerVoltage,
     costPerCell,
     setCostPerCell,
     connectionType,
@@ -69,13 +78,14 @@ export function PackBuilder() {
     packDescription,
     setPackDescription,
     error,
+    setError,
     packSummary,
     setPackSummary,
     handleSelectCell,
     handleSave,
   } = usePackBuilder()
-  const { layers, addLayer, removeLayer, updateLayer } = useLayers([])
-  const { varyingCells, addVaryingCell, removeVaryingCell, updateVaryingCell } = useVaryingCells([])
+  const { layers, addLayer, removeLayer, updateLayer, initializeLayers } = useLayers([])
+  const { varyingCells, addVaryingCell, removeVaryingCell, updateVaryingCell, initializeVaryingCells } = useVaryingCells([])
   const {
     customParallelGroups,
     customConnectionError,
@@ -83,9 +93,103 @@ export function PackBuilder() {
     removeCustomParallelGroup,
     updateCustomParallelGroup,
     validateCustomConnection,
+    initializeGroups,
   } = useCustomParallelGroups([])
+  // Initialize default single layer for new packs when cell is selected
+  useEffect(() => {
+    if (layers.length === 0 && selectedCellId && !packId) {
+      const minPitchX = formFactor === "cylindrical" ? 2 * (dims.radius ?? 18) : (dims.length ?? 80); // Default radius 18mm for cyl, length 80mm for prism
+      const minPitchY = formFactor === "cylindrical" ? 2 * (dims.radius ?? 18) : (dims.width ?? 60); // Default width 60mm for prism
+      addLayer(minPitchX + 2, minPitchY + 2, dims.height ?? 70, zPitch);
+    }
+  }, [selectedCellId, formFactor, dims, layers.length, packId, addLayer, zPitch]);
+  // Load pack data including layers for edit mode
+  useEffect(() => {
+    if (packId && packId !== "undefined") {
+      getPack(packId).then((pack: any) => {
+        // ... (other sets as before)
+        setPackName(pack.name);
+        setPackDescription(pack.description || "");
+        setSelectedCellId(pack.cell_id);
+        setFormFactor(pack.cell.form_factor);
+        setDims({
+          radius: pack.cell.dims.radius,
+          length: pack.cell.dims.length,
+          width: pack.cell.dims.width,
+          height: pack.cell.dims.height,
+        });
+        setCapacity(pack.cell.capacity);
+        setColumbicEfficiency(pack.cell.columbic_efficiency);
+        setMCell(pack.cell.m_cell);
+        setMJellyroll(pack.cell.m_jellyroll);
+        setCellUpperVoltage(pack.cell.cell_voltage_upper_limit);
+        setCellLowerVoltage(pack.cell.cell_voltage_lower_limit);
+        setCostPerCell(pack.cost_per_cell.toString());
+        setConnectionType(pack.connection_type);
+        setRP(pack.r_p);
+        setRS(pack.r_s);
+        setModuleUpperVoltage(pack.voltage_limits.module_upper?.toString() || "60");
+        setModuleLowerVoltage(pack.voltage_limits.module_lower?.toString() || "40");
+        setAllowOverlap(pack.options.allow_overlap);
+        setComputeNeighbors(pack.options.compute_neighbors);
+        setLabelSchema(pack.options.label_schema);
+        setMaxWeight(pack.constraints.max_weight?.toString() || "10");
+        setMaxVolume(pack.constraints.max_volume?.toString() || "0.01");
+        setZPitch(pack.z_pitch ? pack.z_pitch.toString() : "80");
+        setInitialTemperature(pack.initial_conditions.temperature.toString());
+        setInitialSOC((pack.initial_conditions.soc * 100).toString());
+        setInitialSOH(pack.initial_conditions.soh.toString());
+        setInitialDCIR(pack.initial_conditions.dcir_aging_factor.toString());
+        setPackSummary(pack.summary);
+
+        // Initialize layers from loaded pack
+        if (pack.layers && pack.layers.length > 0) {
+          const loadedLayers = pack.layers.map((l: any, idx: number) => ({
+            id: idx + 1,
+            gridType: l.grid_type,
+            nRows: l.n_rows,
+            nCols: l.n_cols,
+            pitchX: l.pitch_x,
+            pitchY: l.pitch_y,
+            zMode: l.z_mode as "index_pitch" | "explicit",
+            zCenter: l.z_center ? l.z_center.toString() : "0",
+          }));
+          initializeLayers(loadedLayers);
+        } else {
+          // Fallback to default single layer if no layers in pack
+          const minPitchX = formFactor === "cylindrical" ? 2 * (dims.radius ?? 18) : (dims.length ?? 80);
+          const minPitchY = formFactor === "cylindrical" ? 2 * (dims.radius ?? 18) : (dims.width ?? 60);
+          addLayer(minPitchX + 2, minPitchY + 2, dims.height ?? 70, zPitch);
+        }
+
+        // Initialize custom parallel groups
+        if (pack.custom_parallel_groups) {
+          const loadedGroups = pack.custom_parallel_groups.map((g: any, idx: number) => ({
+            id: idx + 1,
+            cellIds: g.cell_ids,
+          }));
+          initializeGroups(loadedGroups);
+        }
+
+        // Initialize varying cells
+        if (pack.initial_conditions.varying_cells) {
+          const loadedVarying = pack.initial_conditions.varying_cells.map((vc: any, idx: number) => ({
+            id: idx + 1,
+            cellIndex: vc.cell_index.toString(),
+            temp: vc.temperature.toString(),
+            soc: (vc.soc * 100).toString(),
+            soh: vc.soh.toString(),
+            dcir: vc.dcir_aging_factor.toString(),
+          }));
+          initializeVaryingCells(loadedVarying);
+        }
+      }).catch((e: any) => {
+        console.error("Failed to load pack", e);
+        setError(e.message || "Failed to load pack");
+      });
+    }
+  }, [packId]);
   const [previewCells, setPreviewCells] = useState<any[]>([])
-  const useIndexPitch = layers.some((l) => l.zMode === "index_pitch")
   useEffect(() => {
     const config = validateAndGenerateConfig({
       formFactor,
@@ -129,6 +233,7 @@ export function PackBuilder() {
     labelSchema,
     connectionType,
     customParallelGroups,
+    // ... other deps
   ])
   const handleSaveClick = async () => {
     const config = validateAndGenerateConfig({
@@ -162,7 +267,7 @@ export function PackBuilder() {
       initialDCIR,
       isPreview: false,
     })
-   
+  
     if (config) {
       await handleSave(config)
     }
@@ -171,6 +276,7 @@ export function PackBuilder() {
     const total = layers.reduce((sum, l) => sum + l.nRows * l.nCols, 0)
     return total > 1000
   })
+  const useIndexPitch = layers.some((l) => l.zMode === "index_pitch")
   return (
     <div className="space-y-6">
       {error && (
@@ -249,6 +355,8 @@ export function PackBuilder() {
         layers={layers}
         zPitch={zPitch}
         labelSchema={labelSchema}
+        connectionType={connectionType}
+        customParallelGroups={customParallelGroups}
         onAddLayer={addLayer}
         onRemoveLayer={removeLayer}
         onUpdateLayer={updateLayer}

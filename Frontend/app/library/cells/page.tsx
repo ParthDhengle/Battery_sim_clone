@@ -1,3 +1,4 @@
+// Updated: app/cells/page.tsx (or wherever the original Cells component is located)
 "use client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -83,7 +84,7 @@ export default function Cells() {
           </h1>
           <p className="text-muted-foreground">Manage battery cell configurations</p>
         </div>
-        <Link href="/cell-builder">
+        <Link href="/add-cells">
           <Button>
             <Pencil className="w-4 h-4 mr-2" />
             Add Cell

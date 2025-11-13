@@ -10,8 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Layer } from "./use-layers"
 import { CellPlot } from "./cell_plot"
+import { CellDataTable } from "./cell_data_table"
 
 interface LayersConfigurationProps {
   formFactor: "cylindrical" | "prismatic"
@@ -19,6 +21,8 @@ interface LayersConfigurationProps {
   layers: Layer[]
   zPitch: string
   labelSchema: string
+  connectionType: "row_series_column_parallel" | "row_parallel_column_series" | "custom"
+  customParallelGroups?: { id: number; cellIds: string }[]
   onAddLayer: (
     minPitchX: number,
     minPitchY: number,
@@ -40,6 +44,8 @@ export function LayersConfiguration({
   layers,
   zPitch,
   labelSchema,
+  connectionType,
+  customParallelGroups,
   onAddLayer,
   onRemoveLayer,
   onUpdateLayer,
@@ -80,13 +86,13 @@ export function LayersConfiguration({
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle>Layers</CardTitle>
-          <Button
+          {/* <Button
             onClick={() =>
               onAddLayer(getMinPitchX(), getMinPitchY(), dims.height, zPitch)
             }
           >
             Add Layer
-          </Button>
+          </Button> */}
         </div>
       </CardHeader>
       <CardContent className="space-y-8">
@@ -230,7 +236,32 @@ export function LayersConfiguration({
               )}
             </div>
             {/* ---------- PLOT SECTION ---------- */}
-            <CellPlot layer={layer} formFactor={formFactor} dims={dims} labelSchema={labelSchema} />
+            <Tabs defaultValue="plot" className="w-full">
+              <TabsList>
+                <TabsTrigger value="plot">Cell Plot</TabsTrigger>
+                <TabsTrigger value="table">Cell Data Table</TabsTrigger>
+              </TabsList>
+              <TabsContent value="plot">
+                <CellPlot 
+                  layer={layer} 
+                  formFactor={formFactor} 
+                  dims={dims} 
+                  labelSchema={labelSchema} 
+                  connectionType={connectionType}
+                  customParallelGroups={customParallelGroups}
+                />
+              </TabsContent>
+              <TabsContent value="table">
+                <CellDataTable 
+                  layer={layer} 
+                  formFactor={formFactor} 
+                  dims={dims} 
+                  labelSchema={labelSchema} 
+                  connectionType={connectionType}
+                  customParallelGroups={customParallelGroups}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         ))}
         {layers.length === 0 && (

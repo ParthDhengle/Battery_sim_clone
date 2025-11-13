@@ -1,7 +1,5 @@
 "use client"
-
 import { useState } from "react"
-
 export interface VaryingCell {
   id: number
   cellIndex: string
@@ -10,11 +8,9 @@ export interface VaryingCell {
   soh: string
   dcir: string
 }
-
 export function useVaryingCells(initialCells: VaryingCell[] = []) {
   const [varyingCells, setVaryingCells] = useState<VaryingCell[]>(initialCells)
   const [nextVaryingId, setNextVaryingId] = useState(initialCells.length + 1)
-
   const addVaryingCell = () => {
     setVaryingCells([
       ...varyingCells,
@@ -22,11 +18,9 @@ export function useVaryingCells(initialCells: VaryingCell[] = []) {
     ])
     setNextVaryingId(nextVaryingId + 1)
   }
-
   const removeVaryingCell = (id: number) => {
     setVaryingCells(varyingCells.filter((vc) => vc.id !== id))
   }
-
   const updateVaryingCell = (id: number, field: string, value: string) => {
     setVaryingCells(
       varyingCells.map((vc) => {
@@ -35,12 +29,10 @@ export function useVaryingCells(initialCells: VaryingCell[] = []) {
       }),
     )
   }
-
   const initializeVaryingCells = (loadedCells: VaryingCell[]) => {
     setVaryingCells(loadedCells)
     setNextVaryingId(loadedCells.length + 1)
   }
-
   return {
     varyingCells,
     setVaryingCells,
