@@ -239,9 +239,9 @@ def run_electrical_solver(setup, filename="simulation_results.csv", sim_id=None)
             v_module = 0.0
         V_terminal_module_matrix[t] = v_module
       
-        # Check for incremental save every step, but only save if 10 sec passed
+        # Check for incremental save every step, but only save if 60 sec passed
         current_time = time.time()
-        if current_time - last_save_time >= 10:
+        if current_time - last_save_time >= 60:
             if chunk_data:
                 df_chunk = pd.DataFrame(chunk_data)
                 df_chunk.to_csv(filename, mode='a', header=not header_written, index=False)

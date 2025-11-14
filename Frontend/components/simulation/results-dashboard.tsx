@@ -140,7 +140,7 @@ export function ResultsDashboard({ results, onPrevious, isRunning, progress }: R
     const interval = setInterval(() => {
       setIsLoading(true) // To show loading
       fetchData()
-    }, 10000)
+    }, 30000)
     return () => clearInterval(interval)
   }, [isRunning, fetchData]) // Depend on fetchData
 

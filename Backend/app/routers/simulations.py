@@ -102,8 +102,19 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
     try:
         # Inject cell_config into pack_config
         pack_config = await inject_cell_config(pack_config)
-    
+   
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+        Path(csv_path).touch()  # creates empty file so endpoint can see it
+        await db.simulations.update_one(
+            {"_id": ObjectId(sim_id)},
+            {"$set": {
+                "status": "running",
+                "file_csv": csv_path,
+                "updated_at": datetime.utcnow(),
+                "metadata.progress": 0.0
+            }}
+        )
         if test:
             # Test mode: copy static CSV
             if os.path.exists(STATIC_CSV_PATH):
@@ -115,12 +126,12 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
             print("⚡ Running full simulation...")
             normalized_pack = _normalize_pack_for_core(pack_config)
             setup = adp.create_setup_from_configs(normalized_pack, drive_df, model_config)
-           
+          
             # NEW: Compute expected_rows for metadata
             N_cells = len(setup['cells'])
             time_steps = setup['time_steps']
             expected_rows = N_cells * time_steps
-           
+          
             # --- NEW: Run the blocking simulation in a separate process ---
             loop = asyncio.get_running_loop()
             with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -132,7 +143,7 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
                     sim_id # Third arg: sim_id for progress
                 )
             # --- END NEW ---
-           
+          
             print(f"✅ Simulation complete → Output saved at {csv_path}")
         df = pd.read_csv(csv_path)
         summary = {}
@@ -246,7 +257,17 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
         raise HTTPException(status_code=404, detail="Simulation not found")
     csv_path = sim.get("file_csv")
     if not csv_path or not os.path.exists(csv_path):
+        # Fallback for very old simulations (should never happen now)
+        csv_path = os.path.join("simulations", f"{sim_id}.csv")
+
+    if not os.path.exists(csv_path):
         raise HTTPException(status_code=500, detail=f"Simulation CSV not found for {sim_id}")
+
+    # <<< NEW: If file exists but is empty → still "not ready" >>>
+    if os.path.getsize(csv_path) == 0:
+        raise HTTPException(status_code=500, detail="Simulation data not ready yet. Please wait.")
+    # <<< END NEW >>>
+
     try:
         df = pd.read_csv(csv_path, usecols=["cell_id", "time_step", "Vterm", "SOC", "Qgen", "dt", "I_module"])
         print(f"✅ Loaded CSV ({len(df)} rows, {df['cell_id'].nunique()} cells)")
@@ -279,10 +300,11 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
             "temp": 26.85
         } for i, row in enumerate(cell_df.itertuples(index=False))]
         print(f"✅ Returning {len(data)} points for cell {cell_id}")
-        
+       
         # NEW: Get partial/full summary from DB
         summary = sim.get("metadata", {}).get("summary") or sim.get("metadata", {}).get("partial_summary", {})
-        
+        is_partial = sim.get("status") != "completed"
+       
         return {
             "simulation_id": sim_id,
             "cell_id": cell_id,
@@ -291,7 +313,8 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
             "sampled_points": len(data),
             "sampling_ratio": sampling_ratio,
             "data": data,
-            "summary": summary  # NEW: Include in response
+            "summary": summary, # NEW: Include in response
+            "is_partial": is_partial
         }
     except Exception as e:
         import traceback

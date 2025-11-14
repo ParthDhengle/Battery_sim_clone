@@ -206,7 +206,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
         setIsRunning(false)
         clearInterval(interval)
       }
-    }, 10000)  // Poll every 10s
+    }, 30000) 
     return () => clearInterval(interval)
   }, [simulationId, isRunning])
   const handleResetSimulation = () => {
