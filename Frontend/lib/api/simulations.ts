@@ -37,7 +37,7 @@ export async function getSimulationData(
   const usp = new URLSearchParams()
   if (params.time_range) usp.append("time_range", params.time_range)
   if (params.max_points != null) usp.append("max_points", String(params.max_points))
-  const res = await fetch(`${API_BASE}/simulations/${simulationId}/data?${usp.toString()}`)
+  const res = await fetch(`${API_BASE}/simulations/${simulationId}/data?${usp.toString()}`, { cache: "no-store" })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Failed to get simulation data: ${text}`)
@@ -50,5 +50,3 @@ export async function getAllSimulations() {
   if (!res.ok) throw new Error(`Failed to fetch simulations: ${await res.text()}`)
   return res.json()
 }
-
-

@@ -35,7 +35,7 @@ export default function NewSimulation() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="project-type">Simulation Type</Label>
+            <Label htmlFor="project-type">Simulation Description</Label>
             <Input
               id="project-type"
               value={projectType}

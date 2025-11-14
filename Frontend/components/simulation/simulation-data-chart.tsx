@@ -1,5 +1,6 @@
 "use client"
-import React, { useState, useRef, useMemo } from "react"
+import React, { useState, useRef, useMemo, useEffect } from "react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   ResponsiveContainer,
   LineChart,
@@ -30,6 +31,10 @@ interface SimulationDataPoint {
 
 interface SimulationDataChartProps {
   data: SimulationDataPoint[]
+  maxPoints: string
+  timeRange: string
+  onMaxPointsChange: (value: string) => void
+  onTimeRangeChange: (value: string) => void
 }
 
 type SingleConfig = {
@@ -47,7 +52,13 @@ type CombinedConfig = {
   names: string[]
 }
 
-export function SimulationDataChart({ data }: SimulationDataChartProps) {
+export function SimulationDataChart({
+  data,
+  maxPoints,
+  timeRange,
+  onMaxPointsChange,
+  onTimeRangeChange,
+}: SimulationDataChartProps) {
   const [activeTab, setActiveTab] = useState("voltage_current")
   const [zoomDomains, setZoomDomains] = useState<Record<string, { min: number; max: number } | null>>({
     voltage_current: null,
@@ -109,7 +120,7 @@ export function SimulationDataChart({ data }: SimulationDataChartProps) {
     setRefAreaRight((prev) => ({ ...prev, [key]: null }))
   }
 
-  const handleWheel = (key: string) => (e: React.WheelEvent) => {
+  const handleWheel = (key: string) => (e: WheelEvent) => {
     e.preventDefault()
     const ref = chartRefs.current[key]
     if (!ref) return
@@ -177,6 +188,24 @@ export function SimulationDataChart({ data }: SimulationDataChartProps) {
     setActivePinchKey(null)
   }
 
+  useEffect(() => {
+    Object.keys(chartRefs.current).forEach((key) => {
+      const ref = chartRefs.current[key]
+      if (ref) {
+        ref.addEventListener("wheel", handleWheel(key), { passive: false })
+      }
+    })
+
+    return () => {
+      Object.keys(chartRefs.current).forEach((key) => {
+        const ref = chartRefs.current[key]
+        if (ref) {
+          ref.removeEventListener("wheel", handleWheel(key))
+        }
+      })
+    }
+  }, [minTime, maxTime, zoomDomains]) // Dependencies to re-attach if needed
+
   const metricConfig: Record<string, SingleConfig | CombinedConfig> = {
     voltage_current: {
       label: "Voltage & Current vs Time",
@@ -214,7 +243,6 @@ export function SimulationDataChart({ data }: SimulationDataChartProps) {
       return (
         <div
           ref={(el) => { chartRefs.current[key] = el }}
-          onWheel={handleWheel(key)}
           onTouchStart={handleTouchStart(key)}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -314,7 +342,6 @@ export function SimulationDataChart({ data }: SimulationDataChartProps) {
       return (
         <div
           ref={(el) => { chartRefs.current[key] = el }}
-          onWheel={handleWheel(key)}
           onTouchStart={handleTouchStart(key)}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -378,15 +405,57 @@ export function SimulationDataChart({ data }: SimulationDataChartProps) {
   }
 
   return (
+    <div>
+      
+
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Simulation Plots</CardTitle>
         <CardDescription>
-          View different simulation parameters over time. Use mouse wheel or pinch gesture to zoom.
+          View different simulation parameters over time.
         </CardDescription>
       </CardHeader>
+      
+      
+      <CardContent className="space-y-6">
+        {/* Data Controls - Beautifully arranged in a subtle bordered section */}
+          <div className="p-4 bg-muted/50 rounded-lg border">
+            <div className="text-xs font-medium uppercase text-muted-foreground mb-3 tracking-wider">
+              Data Filters
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Max Sample Points</label>
+                <Select value={maxPoints} onValueChange={onMaxPointsChange}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1000">1,000 points</SelectItem>
+                    <SelectItem value="5000">5,000 points</SelectItem>
+                    <SelectItem value="10000">10,000 points</SelectItem>
+                    <SelectItem value="20000">20,000 points</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Time Range</label>
+                <Select value={timeRange} onValueChange={onTimeRangeChange}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full Range</SelectItem>
+                    <SelectItem value="1h">Last 1 Hour</SelectItem>
+                    <SelectItem value="1d">Last 1 Day</SelectItem>
+                    <SelectItem value="1m">Last 1 Month</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
 
-      <CardContent>
+
         <Tabs
           defaultValue="voltage_current"
           value={activeTab}
@@ -416,5 +485,7 @@ export function SimulationDataChart({ data }: SimulationDataChartProps) {
         </Tabs>
       </CardContent>
     </Card>
+    </div>
+    
   )
 }

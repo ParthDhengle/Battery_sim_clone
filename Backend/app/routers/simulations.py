@@ -1,5 +1,4 @@
 # Backend/app/routers/simulations.py
-# Backend/app/routers/simulations.py
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 import os, io, sys, shutil
 import pandas as pd
@@ -128,7 +127,8 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
                     executor, 
                     aes.run_electrical_solver,  # The sync function
                     setup,                      # First arg: setup
-                    csv_path                    # Second arg: filename
+                    csv_path,                   # Second arg: filename
+                    sim_id                      # Third arg: sim_id for progress
                 )
             # --- END NEW ---
             
@@ -198,7 +198,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks, test:
     sim_doc = {
         "status": "pending",
         "created_at": datetime.utcnow(),
-        "metadata": {"name": sim_name, "type": sim_type},
+        "metadata": {"name": sim_name, "type": sim_type, "progress": 0.0},
     }
     result = await db.simulations.insert_one(sim_doc)
     sim_id = str(result.inserted_id)
@@ -217,6 +217,7 @@ async def list_simulations():
         "status": s.get("status", "unknown"),
         "created_at": s.get("created_at"),
         "summary": s.get("metadata", {}).get("summary", None),
+        "progress": s.get("metadata", {}).get("progress", 0.0),
     } for s in sims]
 # -----------------------------------------------------
 # GET SIMULATION STATUS
@@ -239,8 +240,8 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
-    if not sim or sim.get("status") != "completed":
-        raise HTTPException(status_code=404, detail="Simulation not found or not completed")
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulation not found")
     csv_path = sim.get("file_csv")
     if not csv_path or not os.path.exists(csv_path):
         raise HTTPException(status_code=500, detail=f"Simulation CSV not found for {sim_id}")

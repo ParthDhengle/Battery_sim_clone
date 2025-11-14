@@ -1,7 +1,11 @@
-"use client";
-
-import { PackBuilder } from "@/components/pack-builder/pack-builder";
+// app/pack-builder/page.tsx
+import { Suspense } from "react";
+import { PackBuilderContent } from "@/components/pack-builder/PackBuilderContent";
 
 export default function PackBuilderPage() {
-  return <PackBuilder />;
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading pack builder...</div>}>
+      <PackBuilderContent />
+    </Suspense>
+  );
 }

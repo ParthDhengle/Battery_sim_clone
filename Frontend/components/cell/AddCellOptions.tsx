@@ -1,4 +1,4 @@
-// New file: components/cells/AddCellOptions.tsx
+// Updated: components/cells/AddCellOptions.tsx
 "use client"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Download, Pencil, Upload } from "lucide-react"
+import { Download, Pencil, Upload, FileText } from "lucide-react"
 import { createCell } from "@/lib/api/cells"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type ValidationError = {
   row: number
@@ -41,28 +42,28 @@ const expectedHeaders = [
   "cathode_composition"
 ] as const
 
-const requiredDescriptions: Record<string, string | boolean> = {
-  name: "required",
-  formFactor: "required",
-  diameter: "required for cylindrical/coin",
-  length: "required for prismatic/pouch",
-  width: "required for prismatic/pouch",
-  height: "required",
-  cell_nominal_voltage: "required",
-  cell_upper_voltage_cutoff: "required",
-  cell_lower_voltage_cutoff: "required",
-  capacity: "required",
-  max_charging_current_continuous: "optional",
-  max_charging_current_instantaneous: "optional",
-  max_discharging_current_continuous: "optional",
-  max_discharging_current_instantaneous: "optional",
-  max_charge_voltage: "optional",
-  columbic_efficiency: "optional",
-  cell_weight: "required",
-  cell_volume: "optional",
-  cost_per_cell: "optional",
-  anode_composition: "optional",
-  cathode_composition: "optional"
+const requiredDescriptions: Record<string, { isRequired: boolean; note: string }> = {
+  name: { isRequired: true, note: "required" },
+  formFactor: { isRequired: true, note: "required" },
+  diameter: { isRequired: false, note: "required for cylindrical/coin" },
+  length: { isRequired: false, note: "required for prismatic/pouch" },
+  width: { isRequired: false, note: "required for prismatic/pouch" },
+  height: { isRequired: true, note: "required" },
+  cell_nominal_voltage: { isRequired: true, note: "required" },
+  cell_upper_voltage_cutoff: { isRequired: true, note: "required" },
+  cell_lower_voltage_cutoff: { isRequired: true, note: "required" },
+  capacity: { isRequired: true, note: "required" },
+  max_charging_current_continuous: { isRequired: false, note: "optional" },
+  max_charging_current_instantaneous: { isRequired: false, note: "optional" },
+  max_discharging_current_continuous: { isRequired: false, note: "optional" },
+  max_discharging_current_instantaneous: { isRequired: false, note: "optional" },
+  max_charge_voltage: { isRequired: false, note: "optional" },
+  columbic_efficiency: { isRequired: false, note: "optional" },
+  cell_weight: { isRequired: true, note: "required" },
+  cell_volume: { isRequired: false, note: "optional" },
+  cost_per_cell: { isRequired: false, note: "optional" },
+  anode_composition: { isRequired: false, note: "optional" },
+  cathode_composition: { isRequired: false, note: "optional" }
 }
 
 const exampleRow = [
@@ -203,7 +204,7 @@ export default function AddCellOptions() {
   const [isUploading, setIsUploading] = useState(false)
 
   const templateHeaders = expectedHeaders.map(
-    (field) => `${field} (${requiredDescriptions[field as keyof typeof requiredDescriptions] || "optional"})`
+    (field) => `${field} (${requiredDescriptions[field as keyof typeof requiredDescriptions].note})`
   ).join(",")
 
   const downloadTemplate = () => {
@@ -441,6 +442,48 @@ export default function AddCellOptions() {
           </CardContent>
         </Card>
       </div>
+
+      {/* CSV Template Preview */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            CSV Template Preview
+          </CardTitle>
+          <CardDescription>
+            Below is a preview of the CSV template structure. Required fields are highlighted in red. Download the full template for the example row.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {expectedHeaders.map((header) => {
+                    const desc = requiredDescriptions[header as keyof typeof requiredDescriptions]
+                    const isRequired = desc.isRequired
+                    return (
+                      <TableHead key={header} className={isRequired ? "text-red-600 font-semibold" : "text-gray-600"}>
+                        {header} <span className={isRequired ? "text-red-500" : "text-gray-500"}>({desc.note})</span>
+                      </TableHead>
+                    )
+                  })}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  {exampleRow.map((cell, idx) => (
+                    <TableCell key={idx}>{cell}</TableCell>
+                  ))}
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+          <p className="text-xs text-muted-foreground mt-4">
+            * Remove the example row before adding your data. For conditional fields (e.g., diameter), fill based on formFactor.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Zap, Plus, TrendingDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { getAllSimulations } from "@/lib/api/simulations"  // ✅ import your utility function
 
 interface Simulation {
@@ -16,6 +17,7 @@ interface Simulation {
   type: string
   status: "completed" | "running" | "failed" | "pending" | "unknown"
   created_at: string
+  progress: number
   summary?: {
     end_soc?: number
     max_temp?: number
@@ -47,6 +49,8 @@ export default function Simulations() {
 
   useEffect(() => {
     loadSimulations()
+    const interval = setInterval(loadSimulations, 10000) // Poll every 10 seconds for updates
+    return () => clearInterval(interval)
   }, [])
 
   const handleViewResults = (simId: string) => {
@@ -147,6 +151,14 @@ export default function Simulations() {
               </CardHeader>
 
               <CardContent className="space-y-4">
+                {/* Progress Bar if running/pending */}
+                {(sim.status === "running" || sim.status === "pending") && (
+                  <div className="space-y-2">
+                    <Progress value={sim.progress} className="h-2" />
+                    <p className="text-xs text-muted-foreground text-center">{sim.progress.toFixed(1)}% Complete</p>
+                  </div>
+                )}
+
                 {/* Summary Stats */}
                 {sim.summary ? (
                   <div className="grid grid-cols-3 gap-2 text-xs">
