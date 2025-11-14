@@ -11,7 +11,6 @@ from CoreLogic import NEW_electrical_solver as aes
 from pathlib import Path
 import asyncio
 import concurrent.futures
-
 BASE_DIR = Path(__file__).parent.parent.parent
 CORE_CODE_DIR = BASE_DIR / "Core-python code"
 sys.path.append(str(CORE_CODE_DIR))
@@ -26,14 +25,11 @@ async def inject_cell_config(pack_config: dict) -> dict:
     cell_id = pack_config.get("cell_id")
     if not cell_id:
         raise ValueError("Missing cell_id in pack_config")
- 
     if not ObjectId.is_valid(cell_id):
         raise ValueError("Invalid cell_id format")
- 
     cell_doc = await db.cells.find_one({"_id": ObjectId(cell_id)})
     if not cell_doc:
         raise ValueError("Cell not found") # This will be caught and shown as "cell not configured for this pack"
- 
     pack_config["cell"] = {
         "formFactor": cell_doc.get("formFactor", "cylindrical"),
         "dims": cell_doc.get("dims", {}),
@@ -106,7 +102,7 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
     try:
         # Inject cell_config into pack_config
         pack_config = await inject_cell_config(pack_config)
-     
+    
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
         if test:
             # Test mode: copy static CSV
@@ -119,19 +115,24 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
             print("⚡ Running full simulation...")
             normalized_pack = _normalize_pack_for_core(pack_config)
             setup = adp.create_setup_from_configs(normalized_pack, drive_df, model_config)
-            
+           
+            # NEW: Compute expected_rows for metadata
+            N_cells = len(setup['cells'])
+            time_steps = setup['time_steps']
+            expected_rows = N_cells * time_steps
+           
             # --- NEW: Run the blocking simulation in a separate process ---
             loop = asyncio.get_running_loop()
             with concurrent.futures.ProcessPoolExecutor() as executor:
                 csv_path = await loop.run_in_executor(
-                    executor, 
-                    aes.run_electrical_solver,  # The sync function
-                    setup,                      # First arg: setup
-                    csv_path,                   # Second arg: filename
-                    sim_id                      # Third arg: sim_id for progress
+                    executor,
+                    aes.run_electrical_solver, # The sync function
+                    setup, # First arg: setup
+                    csv_path, # Second arg: filename
+                    sim_id # Third arg: sim_id for progress
                 )
             # --- END NEW ---
-            
+           
             print(f"✅ Simulation complete → Output saved at {csv_path}")
         df = pd.read_csv(csv_path)
         summary = {}
@@ -195,6 +196,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks, test:
             raise ValueError("Drive cycle CSV must contain 'Time' and 'Current' columns")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid drive cycle CSV: {e}")
+    # NEW: Compute expected_rows after setup (but setup is in background; approx or move? For now, insert without, solver will handle progress)
     sim_doc = {
         "status": "pending",
         "created_at": datetime.utcnow(),
@@ -269,7 +271,7 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
             cell_df, time_cum = cell_df.iloc[idx], time_cum[idx]
         sampling_ratio = max(1, int(n / len(cell_df)))
         data = [{
-            "time": int(round(float(time_cum[i]))),  # FIXED: Round to nearest integer (no decimals)
+            "time": int(round(float(time_cum[i]))), # FIXED: Round to nearest integer (no decimals)
             "voltage": float(getattr(row, "Vterm", 0.0)),
             "soc": float(getattr(row, "SOC", 1.0)),
             "current": float(getattr(row, "I_module", 0.0)),
@@ -277,6 +279,10 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
             "temp": 26.85
         } for i, row in enumerate(cell_df.itertuples(index=False))]
         print(f"✅ Returning {len(data)} points for cell {cell_id}")
+        
+        # NEW: Get partial/full summary from DB
+        summary = sim.get("metadata", {}).get("summary") or sim.get("metadata", {}).get("partial_summary", {})
+        
         return {
             "simulation_id": sim_id,
             "cell_id": cell_id,
@@ -284,7 +290,8 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
             "total_points": int(n),
             "sampled_points": len(data),
             "sampling_ratio": sampling_ratio,
-            "data": data
+            "data": data,
+            "summary": summary  # NEW: Include in response
         }
     except Exception as e:
         import traceback

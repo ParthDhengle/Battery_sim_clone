@@ -10,7 +10,7 @@ import { ResultsDashboard } from "@/components/simulation/results-dashboard"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { getPacks, getPack } from "@/lib/api/packs"
-import { runSimulation, getSimulationStatus } from "@/lib/api/simulations"
+import { runSimulation, getSimulationStatus, getSimulationData } from "@/lib/api/simulations"
 import { PackSelector } from "@/components/simulation/pack-selector"
 import { DriveCycleSelector } from "@/components/simulation/drive-cycle-selector"
 interface SimulationStepperProps {
@@ -129,6 +129,8 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
   const [simulationResults, setSimulationResults] = useState<any>(null)
   const [simulationError, setSimulationError] = useState<string | null>(null)
   const [simulationId, setSimulationId] = useState<string | null>(null)
+  const [currentProgress, setCurrentProgress] = useState(0)  // Track progress during running
+  const [currentStatus, setCurrentStatus] = useState("pending")  // Track status for rendering
   const addSimulation = useAppStore((state) => state.addSimulation)
   const canProceedToConfig = !!(packId && cycleId)
   const canRunSimulation = !!(canProceedToConfig && simulationConfig)
@@ -141,6 +143,8 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
     setSimulationError(null)
     setSimulationResults(null)
     setSimulationId(null)
+    setCurrentProgress(0)
+    setCurrentStatus("pending")
     setActiveTab("results")
     setIsRunning(true)
     try {
@@ -170,11 +174,24 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
     const interval = setInterval(async () => {
       try {
         const data = await getSimulationStatus(simulationId)
+        setCurrentProgress(data.metadata?.progress || 0)
+        setCurrentStatus(data.status)
         if (data.status === "completed") {
-          setSimulationResults({ 
-            simulation_id: simulationId, 
-            summary: data.metadata?.summary || null 
-          })
+          // Fetch full data immediately on complete
+          try {
+            const fullData = await getSimulationData(simulationId, { max_points: 5000, time_range: "full" })
+            setSimulationResults({
+              simulation_id: simulationId,
+              summary: fullData.summary || data.metadata?.summary || data.metadata?.partial_summary
+            })
+          } catch (fetchErr) {
+            console.warn("Full data fetch on complete failed:", fetchErr)
+            // Fallback to DB summary
+            setSimulationResults({
+              simulation_id: simulationId,
+              summary: data.metadata?.summary || data.metadata?.partial_summary
+            })
+          }
           setIsRunning(false)
           clearInterval(interval)
         } else if (data.status === "failed") {
@@ -185,12 +202,11 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
         // For "pending" or "running", continue polling
       } catch (err: any) {
         console.error("Polling error:", err)
-        // Optionally stop polling on error, or continue
         setSimulationError(err.message || "Polling error")
         setIsRunning(false)
         clearInterval(interval)
       }
-    }, 2000) // Poll every 2 seconds
+    }, 10000)  // Poll every 10s
     return () => clearInterval(interval)
   }, [simulationId, isRunning])
   const handleResetSimulation = () => {
@@ -203,6 +219,42 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
     setSimulationError(null)
     setSimulationId(null)
     setIsRunning(false)
+    setCurrentProgress(0)
+    setCurrentStatus("pending")
+  }
+  // FIXED: Always render dashboard if simulationId, with running state
+  const renderResults = () => {
+    if (!simulationId) {
+      return <div className="text-center py-12 text-muted-foreground">No simulation started</div>
+    }
+    return (
+      <div className="space-y-6">
+        <ResultsDashboard
+          results={{
+            simulation_id: simulationId,
+            summary: simulationResults?.summary || (currentStatus === "completed" ? null : undefined)
+          }}
+          onPrevious={() => setActiveTab("setup")}
+          isRunning={isRunning || currentStatus === "running" || currentStatus === "pending"}
+          progress={currentProgress}
+        />
+        {simulationError && (
+          <Alert variant="destructive">
+            <AlertDescription>{simulationError}</AlertDescription>
+          </Alert>
+        )}
+        <div className="flex justify-between pt-4 gap-3">
+          <Button variant="outline" onClick={() => setActiveTab("setup")}>
+            Back to Configuration
+          </Button>
+          {!isRunning && currentStatus !== "running" && currentStatus !== "pending" && (
+            <Button onClick={handleResetSimulation} className="gap-2">
+              🔄 Run New Simulation
+            </Button>
+          )}
+        </div>
+      </div>
+    )
   }
   return (
     <div className="min-h-screen bg-background py-8 px-4">
@@ -211,9 +263,9 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
           <h1 className="text-3xl font-bold text-foreground">Battery Simulation</h1>
           <p className="text-muted-foreground">Configure your battery components and run performance simulations</p>
         </div>
-        {(error || simulationError) && (
+        {error && (
           <Alert variant="destructive">
-            <AlertDescription>{error || simulationError}</AlertDescription>
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         <Card className="border-border/60">
@@ -237,7 +289,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                   <span className="hidden sm:inline">2. Configuration</span>
                   <span className="sm:hidden">Config</span>
                 </TabsTrigger>
-                <TabsTrigger value="results" disabled={!simulationResults && !isRunning}>
+                <TabsTrigger value="results" disabled={!simulationId && !isRunning}>
                   <span className="hidden sm:inline">3. Results</span>
                   <span className="sm:hidden">Results</span>
                 </TabsTrigger>
@@ -278,40 +330,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                 </div>
               </TabsContent>
               <TabsContent value="results" className="space-y-6">
-                {isRunning ? (
-                  <div className="flex flex-col items-center justify-center gap-4 py-12">
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-foreground">Running Simulation</p>
-                      <p className="text-xs text-muted-foreground">
-                        Please wait while we process your configuration...
-                      </p>
-                      {simulationId && (
-                        <p className="text-xs text-muted-foreground">
-                          ID: {simulationId}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : simulationError ? (
-                  <Alert variant="destructive">
-                    <AlertDescription>{simulationError}</AlertDescription>
-                  </Alert>
-                ) : simulationResults ? (
-                  <div className="space-y-6">
-                    <ResultsDashboard
-                      results={simulationResults}
-                      onPrevious={() => setActiveTab("setup")}
-                    />
-                    <div className="flex justify-between pt-4 gap-3">
-                      <Button variant="outline" onClick={() => setActiveTab("setup")}>
-                        Back to Configuration
-                      </Button>
-                      <Button onClick={handleResetSimulation} className="gap-2">
-                        🔄 Run New Simulation
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
+                {renderResults()}
               </TabsContent>
             </Tabs>
           </CardContent>
