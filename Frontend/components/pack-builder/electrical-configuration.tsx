@@ -56,8 +56,8 @@ export function ElectricalConfiguration({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="row_series_column_parallel">Row Series, Column Parallel</SelectItem>
-              <SelectItem value="row_parallel_column_series">Row Parallel, Column Series</SelectItem>
+              <SelectItem value="row_series_column_parallel">Column Parallel</SelectItem>
+              <SelectItem value="row_parallel_column_series">Row Parallel</SelectItem>
               <SelectItem value="custom">Custom Connection</SelectItem>
             </SelectContent>
           </Select>
@@ -102,11 +102,11 @@ export function ElectricalConfiguration({
         )}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
-            <Label>R_p (Ohms) - Parallel Connection Resistance<span className="text-red-500">*</span></Label>
+            <Label>Parallel Connection Resistance (R_p (Ω))<span className="text-red-500">*</span></Label>
             <Input type="number" value={rP} onChange={(e) => setRP(Number.parseFloat(e.target.value) || 0)} />
           </div>
           <div className="space-y-3">
-            <Label>R_s (Ohms) - Series Connection Resistance<span className="text-red-500">*</span></Label>
+            <Label>Series Connection Resistance (R_s (Ω))<span className="text-red-500">*</span></Label>
             <Input type="number" value={rS} onChange={(e) => setRS(Number.parseFloat(e.target.value) || 0)} />
           </div>
         </div>

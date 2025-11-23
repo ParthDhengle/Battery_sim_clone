@@ -50,7 +50,7 @@ export default function Home() {
         </Link>
       
 
-        <Link href="/library/drive-cycles">
+        <Link href="drive-cycle-builder">
           <Card className="cursor-pointer hover:border-accent transition-colors h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -69,7 +69,7 @@ export default function Home() {
         
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Projects</CardTitle>
@@ -84,14 +84,6 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">0</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Efficiency</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">92%</p>
           </CardContent>
         </Card>
       </div>

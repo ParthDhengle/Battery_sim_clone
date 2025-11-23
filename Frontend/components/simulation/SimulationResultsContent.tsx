@@ -1,41 +1,47 @@
-// component/simulationResultContent
-"use client"
-import React, { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { ResultsDashboard } from "@/components/simulation/results-dashboard"
-import { getSimulationStatus } from "@/lib/api/simulations"
+// components/simulation/SimulationResultsContent.tsx
+"use client";
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { ResultsDashboard } from "@/components/simulation/results-dashboard";
+
 export function SimulationResultsContent() {
-  const params = useParams()
-  const router = useRouter()
-  const simulationId = params.id as string
-  const [simulation, setSimulation] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isRunning, setIsRunning] = useState(false)
+  const params = useParams();
+  const router = useRouter();
+  const simulationId = params.id as string;
+  const [simulation, setSimulation] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchSimulation = async () => {
-      try {
-        setLoading(true)
-        const data = await getSimulationStatus(simulationId)
-        setSimulation(data)
-        setIsRunning(data.status === "pending" || data.status === "running")
-        setError(null)
-      } catch (err: any) {
-        setError(err.message || "Failed to load simulation")
-      } finally {
-        setLoading(false)
+      if (!simulationId) {
+        setError("No simulation ID provided");
+        setLoading(false);
+        return;
       }
-    }
-    fetchSimulation()
-    const interval = setInterval(fetchSimulation, 30000) // Poll every 30 seconds
-    return () => clearInterval(interval)
-  }, [simulationId])
+      try {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(`${API_BASE}/simulations/${simulationId}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch simulation: ${response.statusText}`);
+        }
+        const data = await response.json();
+        setSimulation(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load simulation");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSimulation();
+  }, [simulationId]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <p>Loading simulation results...</p>
       </div>
-    )
+    );
   }
   if (error || !simulation) {
     return (
@@ -45,15 +51,15 @@ export function SimulationResultsContent() {
           Go Back
         </button>
       </div>
-    )
+    );
   }
   const results = {
     simulation_id: simulation.simulation_id || simulationId,
     summary: simulation.metadata?.summary || null,
-  }
+  };
   const handlePrevious = () => {
-    router.push(`/simulation/${simulationId}`)
-  }
+    router.push(`/simulation/${simulationId}`);
+  };
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -62,7 +68,7 @@ export function SimulationResultsContent() {
           ← Back to Simulation
         </button>
       </div>
-      <ResultsDashboard results={results} onPrevious={handlePrevious} isRunning={isRunning} progress={simulation.metadata?.progress || 0} />
+      <ResultsDashboard results={results} onPrevious={handlePrevious} />
     </div>
-  )
+  );
 }

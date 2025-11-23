@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import {InitialCellConditions} from "@/components/initial-cell-conditions"
+import {InitialCellConditions} from "@/components/simulation/initial-cell-conditions"
 const electricalModels = [
   {
     id: "simple",

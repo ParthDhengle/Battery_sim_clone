@@ -1,14 +1,14 @@
+// Updated: Frontend/components/cell/CellBuilderContent.tsx
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCell, createCell, updateCell } from "@/lib/api/cells";
-import BasicInfo from "@/components/cell/BasicInfo";
-import ElectricalParams1 from "@/components/cell/ElectricalParams1";
-import ElectricalParams2AndMechanical from "@/components/cell/ElectricalParams2AndMechanical";
-import CommercialAndChemical from "@/components/cell/CommercialAndChemical";
+import BasicParameters from "@/components/cell/BasicParameters";
+import AdvancedParameters from "@/components/cell/AdvancedParameters";
 import { AlertCircle, Battery } from "lucide-react";
 
 export default function CellBuilderContent() {
@@ -16,7 +16,6 @@ export default function CellBuilderContent() {
   type FormData = {
     name: string;
     formFactor: FormFactor;
-    radius: string;
     diameter: string;
     length: string;
     width: string;
@@ -38,14 +37,12 @@ export default function CellBuilderContent() {
     cathode_composition: string;
   };
   type SohFile = { name: string; data: string; type: string } | null;
-
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams.get('id') || undefined;
   const [formData, setFormData] = useState<FormData>({
     name: "",
     formFactor: "cylindrical",
-    radius: "",
     diameter: "",
     length: "",
     width: "",
@@ -77,6 +74,23 @@ export default function CellBuilderContent() {
     }
   }, [id]);
 
+  // Auto-calculate volume if not manually set
+  useEffect(() => {
+    const d = Number.parseFloat(formData.diameter) || 0;
+    const l = Number.parseFloat(formData.length) || 0;
+    const w = Number.parseFloat(formData.width) || 0;
+    const h = Number.parseFloat(formData.height) || 0;
+    let vol = 0;
+    if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
+      vol = Math.PI * Math.pow(d / 2, 2) * h;
+    } else {
+      vol = l * w * h;
+    }
+    if (!formData.cell_volume || formData.cell_volume.trim() === "") {
+      setFormData((prev) => ({ ...prev, cell_volume: vol.toString() }));
+    }
+  }, [formData.formFactor, formData.diameter, formData.length, formData.width, formData.height]);
+
   const fetchCell = async (cellId: string) => {
     try {
       const cell = await getCell(cellId);
@@ -84,7 +98,6 @@ export default function CellBuilderContent() {
         setFormData({
           name: cell.name || "",
           formFactor: cell.formFactor || "cylindrical",
-          radius: cell.dims.radius != null ? cell.dims.radius.toString() : "",
           diameter: cell.dims.diameter != null ? cell.dims.diameter.toString() : "",
           length: cell.dims.length != null ? cell.dims.length.toString() : "",
           width: cell.dims.width != null ? cell.dims.width.toString() : "",
@@ -247,15 +260,23 @@ export default function CellBuilderContent() {
           <CardDescription>Define your battery cell specifications</CardDescription>
         </CardHeader>
       </Card>
-      <BasicInfo formData={formData} setFormData={setFormData} errors={errors} />
-      <ElectricalParams1 formData={formData} setFormData={setFormData} errors={errors} />
-      <ElectricalParams2AndMechanical formData={formData} setFormData={setFormData} errors={errors} />
-      <CommercialAndChemical
-        formData={formData}
-        setFormData={setFormData}
-        sohFile={sohFile}
-        handleFileUpload={handleFileUpload}
-      />
+      <Tabs defaultValue="basic" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="basic">Step 1: Basic Parameters</TabsTrigger>
+          <TabsTrigger value="advanced">Step 2: Advanced Parameters</TabsTrigger>
+        </TabsList>
+        <TabsContent value="basic">
+          <BasicParameters formData={formData} setFormData={setFormData} errors={errors} />
+        </TabsContent>
+        <TabsContent value="advanced">
+          <AdvancedParameters
+            formData={formData}
+            setFormData={setFormData}
+            sohFile={sohFile}
+            handleFileUpload={handleFileUpload}
+          />
+        </TabsContent>
+      </Tabs>
       <div className="flex justify-end">
         <Button onClick={handleSave} className="min-w-32">
           {isEditing ? "Update Cell" : "Save Cell"}

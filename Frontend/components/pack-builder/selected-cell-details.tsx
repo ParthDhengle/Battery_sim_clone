@@ -93,12 +93,12 @@ export function SelectedCellDetails({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
-            <Label>Cell Mass (kg)</Label>
-            <p className="text-sm font-medium">{mCell}</p>
+            <Label>Cell Mass (g)</Label>
+            <p className="text-sm font-medium">{mCell * 1000}</p>
           </div>
           <div className="space-y-3">
-            <Label>Jellyroll Mass (kg)</Label>
-            <p className="text-sm font-medium">{mJellyroll}</p>
+            <Label>Jellyroll Mass (g)</Label>
+            <p className="text-sm font-medium">{mJellyroll * 1000}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">

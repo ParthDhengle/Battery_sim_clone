@@ -8,7 +8,7 @@ const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/library/cells", label: "Cell Library", icon: Battery  },
   { href: "/library/packs", label: "Pack Library", icon: Zap },
-  { href: "/library/drive-cycles", label: "DriveCycle Library", icon: CalendarDays },
+  { href: "/library/drive-cycles", label: "Drive Cycle Library", icon: CalendarDays },
   { href: "/library/simulations", label: "Simulations", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/help", label: "Help", icon: HelpCircle },

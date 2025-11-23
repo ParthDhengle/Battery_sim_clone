@@ -1,32 +1,34 @@
 "use client"
+
 import { useState, useEffect } from "react"
-import Link from 'next/link'
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Zap, Plus, TrendingDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { getAllSimulations } from "@/lib/api/simulations" // ✅ import your utility function
+import { getAllSimulations } from "@/lib/api/simulations"  // ✅ import your utility function
+
 interface Simulation {
   _id: string
   name: string
   type: string
   status: "completed" | "running" | "failed" | "pending" | "unknown"
   created_at: string
-  progress: number
   summary?: {
     end_soc?: number
     max_temp?: number
     capacity_fade?: number
   }
 }
+
 export default function Simulations() {
   const [simulations, setSimulations] = useState<Simulation[]>([])
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+
   // ✅ Fetch all simulations from backend
   const loadSimulations = async () => {
     try {
@@ -42,14 +44,15 @@ export default function Simulations() {
       setIsLoading(false)
     }
   }
+
   useEffect(() => {
     loadSimulations()
-    const interval = setInterval(loadSimulations, 30000) // Poll every 30 seconds for updates
-    return () => clearInterval(interval)
   }, [])
+
   const handleViewResults = (simId: string) => {
     router.push(`/simulation/${simId}/results`)
   }
+
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case "completed":
@@ -63,6 +66,7 @@ export default function Simulations() {
         return "bg-gray-100 text-gray-800"
     }
   }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "running":
@@ -76,6 +80,7 @@ export default function Simulations() {
         return "○"
     }
   }
+
   return (
     <div className="space-y-8 p-6">
       {/* Header */}
@@ -94,12 +99,14 @@ export default function Simulations() {
           </Button>
         </Link>
       </div>
+
       {/* Error Alert */}
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
       {/* Loading State */}
       {isLoading ? (
         <Card>
@@ -138,14 +145,8 @@ export default function Simulations() {
                   </Badge>
                 </div>
               </CardHeader>
+
               <CardContent className="space-y-4">
-                {/* Progress Bar if running/pending */}
-                {(sim.status === "running" || sim.status === "pending") && (
-                  <div className="space-y-2">
-                    <Progress value={sim.progress} className="h-2" />
-                    <p className="text-xs text-muted-foreground text-center">{sim.progress.toFixed(1)}% Complete</p>
-                  </div>
-                )}
                 {/* Summary Stats */}
                 {sim.summary ? (
                   <div className="grid grid-cols-3 gap-2 text-xs">
@@ -184,6 +185,7 @@ export default function Simulations() {
                     </p>
                   </div>
                 )}
+
                 {/* Metadata */}
                 <div className="text-xs text-muted-foreground">
                   <span className="block">
@@ -193,6 +195,7 @@ export default function Simulations() {
                       : "Unknown date"}
                   </span>
                 </div>
+
                 {/* View Results Button */}
                 {sim.status === "completed" && (
                   <Button

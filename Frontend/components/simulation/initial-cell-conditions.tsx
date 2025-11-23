@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import type { VaryingCell } from "./pack-builder/use-varying-cells"
+import type { VaryingCell } from "../pack-builder/use-varying-cells"
 
 interface InitialCellConditionsProps {
   initialTemperature: string

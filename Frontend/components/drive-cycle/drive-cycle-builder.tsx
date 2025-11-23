@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, TrendingUp, Thermometer } from "lucide-react"
-import { ManualDriveCycleBuilder } from "./manualDriveCycleBuilder" // Import the new component
-import { DriveCyclePreview } from "./DriveCyclePreview"
+import { ManualDriveCycleBuilder } from "@/components/drive-cycle/manualDriveCycleBuilder" // Import the new component
+import { DriveCyclePreview } from "@/components/drive-cycle/DriveCyclePreview"
 import { useMemo } from "react"
 interface NamedConfig {
   name: string

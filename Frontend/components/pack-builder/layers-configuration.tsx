@@ -114,8 +114,8 @@ export function LayersConfiguration({
               )}
             </div>
             {/* ---------- INPUT GRID ---------- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
+            
+            <div className="space-y-3">
                 <Label>Grid Type<span className="text-red-500">*</span></Label>
                 <Select
                   value={layer.gridType}
@@ -135,67 +135,76 @@ export function LayersConfiguration({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-3">
-                <Label>Number of Rows<span className="text-red-500">*</span></Label>
-                <Input
-                  type="number"
-                  value={layer.nRows}
-                  onChange={(e) =>
-                    onUpdateLayer(
-                      layer.id,
-                      "nRows",
-                      e.target.value,
-                      getMinPitchY()
-                    )
-                  }
-                />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                  <div className="space-y-3">
+                  <Label>Number of Rows<span className="text-red-500">*</span></Label>
+                  <Input
+                    type="number"
+                    value={layer.nRows}
+                    onChange={(e) =>
+                      onUpdateLayer(
+                        layer.id,
+                        "nRows",
+                        e.target.value,
+                        getMinPitchY()
+                      )
+                    }
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label>Number of Columns<span className="text-red-500">*</span></Label>
+                  <Input
+                    type="number"
+                    value={layer.nCols}
+                    onChange={(e) =>
+                      onUpdateLayer(
+                        layer.id,
+                        "nCols",
+                        e.target.value,
+                        getMinPitchY()
+                      )
+                    }
+                  />
+                </div>
               </div>
-              <div className="space-y-3">
-                <Label>Number of Columns<span className="text-red-500">*</span></Label>
-                <Input
-                  type="number"
-                  value={layer.nCols}
-                  onChange={(e) =>
-                    onUpdateLayer(
-                      layer.id,
-                      "nCols",
-                      e.target.value,
-                      getMinPitchY()
-                    )
-                  }
-                />
+              <div>
+                  <div className="space-y-3">
+                  <Label>Pitch X (mm) [{getPitchXCondition()}]<span className="text-red-500">*</span></Label>
+                  <Input
+                    type="number"
+                    value={layer.pitchX}
+                    onChange={(e) =>
+                      onUpdateLayer(
+                        layer.id,
+                        "pitchX",
+                        e.target.value,
+                        getMinPitchY()
+                      )
+                    }
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label>Pitch Y (mm) [{getPitchYCondition()}]<span className="text-red-500">*</span></Label>
+                  <Input
+                    type="number"
+                    value={layer.pitchY}
+                    onChange={(e) =>
+                      onUpdateLayer(
+                        layer.id,
+                        "pitchY",
+                        e.target.value,
+                        getMinPitchY()
+                      )
+                    }
+                  />
+                </div>
               </div>
-              <div className="space-y-3">
-                <Label>Pitch X (mm) [{getPitchXCondition()}]<span className="text-red-500">*</span></Label>
-                <Input
-                  type="number"
-                  value={layer.pitchX}
-                  onChange={(e) =>
-                    onUpdateLayer(
-                      layer.id,
-                      "pitchX",
-                      e.target.value,
-                      getMinPitchY()
-                    )
-                  }
-                />
-              </div>
-              <div className="space-y-3">
-                <Label>Pitch Y (mm) [{getPitchYCondition()}]<span className="text-red-500">*</span></Label>
-                <Input
-                  type="number"
-                  value={layer.pitchY}
-                  onChange={(e) =>
-                    onUpdateLayer(
-                      layer.id,
-                      "pitchY",
-                      e.target.value,
-                      getMinPitchY()
-                    )
-                  }
-                />
-              </div>
-              <div className="space-y-3">
+              
+              
+
+              {/* <div className="space-y-3">
                 <Label>Z Mode<span className="text-red-500">*</span></Label>
                 <Select
                   value={layer.zMode}
@@ -233,13 +242,13 @@ export function LayersConfiguration({
                     }
                   />
                 </div>
-              )}
+              )} */}
             </div>
             {/* ---------- PLOT SECTION ---------- */}
             <Tabs defaultValue="plot" className="w-full">
               <TabsList>
-                <TabsTrigger value="plot">Cell Plot</TabsTrigger>
-                <TabsTrigger value="table">Cell Data Table</TabsTrigger>
+                <TabsTrigger value="plot">Pack Arrangement</TabsTrigger>
+                <TabsTrigger value="table">Pack Arrangement Details (Tabular)</TabsTrigger>
               </TabsList>
               <TabsContent value="plot">
                 <CellPlot 
