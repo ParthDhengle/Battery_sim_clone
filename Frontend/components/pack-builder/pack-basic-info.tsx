@@ -1,4 +1,3 @@
-// Frontend/components/pack-builder/pack-basic-info.tsx
 "use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -30,32 +29,46 @@ export function PackBasicInfo({
         <CardTitle>Pack Information</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-3">
-          <Label>Pack Name<span className="text-red-500">*</span></Label>
-          <Input value={packName} onChange={(e) => setPackName(e.target.value)} placeholder="Enter pack name" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <Label htmlFor="packName">
+              Pack Name <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="packName"
+              value={packName}
+              onChange={(e) => setPackName(e.target.value)}
+              placeholder="e.g., EV Battery Pack v1"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <Label htmlFor="cellSelect">
+              Select Cell <span className="text-red-500">*</span>
+            </Label>
+            <Select value={selectedCellId} onValueChange={onSelectCell}>
+              <SelectTrigger id="cellSelect">
+                <SelectValue placeholder="Choose a cell" />
+              </SelectTrigger>
+              <SelectContent>
+                {cells.map((cell) => (
+                  <SelectItem key={cell.id} value={cell.id}>
+                    {cell.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
         <div className="space-y-3">
-          <Label>Pack Description (Optional)</Label>
+          <Label htmlFor="packDesc">Description (Optional)</Label>
           <Input
+            id="packDesc"
             value={packDescription}
             onChange={(e) => setPackDescription(e.target.value)}
-            placeholder="Enter pack description"
+            placeholder="Add notes about this pack configuration"
           />
-        </div>
-        <div className="space-y-3">
-          <Label>Select Cell from Database<span className="text-red-500">*</span></Label>
-          <Select value={selectedCellId} onValueChange={onSelectCell}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {cells.map((cell) => (
-                <SelectItem key={cell.id} value={cell.id}>
-                  {cell.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </CardContent>
     </Card>

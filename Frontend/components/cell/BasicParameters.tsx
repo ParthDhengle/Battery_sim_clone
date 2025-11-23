@@ -1,4 +1,5 @@
-// New file: Frontend/components/cell/BasicParameters.tsx
+"use client"
+
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -58,21 +59,28 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-3">
               <Label className={errors.cell_nominal_voltage ? "text-red-500" : ""}>
-                Cell Nominal Voltage (V) <span className="text-red-500">*</span>
+                Cell Nominal Voltage <span className="text-red-500">*</span>
               </Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.1"
-                value={formData.cell_nominal_voltage}
-                onChange={(e) => updateField("cell_nominal_voltage", e.target.value)}
-                placeholder="e.g., 3.7"
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={formData.cell_nominal_voltage}
+                  onChange={(e) => updateField("cell_nominal_voltage", e.target.value)}
+                  placeholder="e.g., 3.7"
+                  className="pr-10"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                  V
+                </span>
+              </div>
             </div>
             <div className="space-y-3">
               <Label className={errors.cell_upper_voltage_cutoff ? "text-red-500" : ""}>
-                Cell Upper Voltage Cut-off (V) <span className="text-red-500">*</span>
+                Cell Upper Voltage Cut-off <span className="text-red-500">*</span>
               </Label>
+              <div className="relative">
               <Input
                 type="number"
                 min="0"
@@ -81,12 +89,17 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                 onChange={(e) => updateField("cell_upper_voltage_cutoff", e.target.value)}
                 placeholder="e.g., 4.2"
               />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                V
+              </span>
+              </div>
             </div>
             <div className="space-y-3">
               <Label className={errors.cell_lower_voltage_cutoff ? "text-red-500" : ""}>
-                Cell Lower Voltage Cut-off (V) <span className="text-red-500">*</span>
+                Cell Lower Voltage Cut-off <span className="text-red-500">*</span>
               </Label>
-              <Input
+              <div className="relative">
+                <Input
                 type="number"
                 min="0"
                 step="0.1"
@@ -94,12 +107,18 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                 onChange={(e) => updateField("cell_lower_voltage_cutoff", e.target.value)}
                 placeholder="e.g., 2.5"
               />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                  V
+                </span>
+              </div>
+              
             </div>
             <div className="space-y-3">
               <Label className={errors.capacity ? "text-red-500" : ""}>
-                Cell Capacity (Ah) <span className="text-red-500">*</span>
+                Cell Capacity <span className="text-red-500">*</span>
               </Label>
-              <Input
+              <div className="relative">
+                <Input
                 type="number"
                 min="0"
                 step="0.1"
@@ -107,6 +126,11 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                 onChange={(e) => updateField("capacity", e.target.value)}
                 placeholder="e.g., 5.0"
               />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                  Ah
+                </span>
+              </div>
+              
             </div>
           </div>
         </CardContent>
@@ -119,7 +143,9 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3">
-            <Label>Form Factor <span className="text-red-500">*</span></Label>
+            <Label>
+              Form Factor <span className="text-red-500">*</span>
+            </Label>
             <Select value={formData.formFactor} onValueChange={handleFormFactorChange}>
               <SelectTrigger>
                 <SelectValue />
@@ -134,9 +160,10 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
           </div>
           <div className="space-y-3">
             <Label className={errors.cell_weight ? "text-red-500" : ""}>
-              Cell Weight (kg) <span className="text-red-500">*</span>
+              Cell Weight <span className="text-red-500">*</span>
             </Label>
-            <Input
+            <div className="relative"> 
+              <Input
               type="number"
               min="0"
               step="0.001"
@@ -144,6 +171,11 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
               onChange={(e) => updateField("cell_weight", e.target.value)}
               placeholder="e.g., 0.050"
             />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                  Kg
+                </span>
+            </div>
+            
           </div>
           <div className="space-y-3">
             <Label>Dimensions (mm)</Label>
@@ -152,9 +184,10 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                 <>
                   <div className="space-y-3">
                     <Label className={errors.length ? "text-red-500" : ""}>
-                      Cell Length (mm) <span className="text-red-500">*</span>
+                      Cell Length<span className="text-red-500">*</span>
                     </Label>
-                    <Input
+                    <div className="relative">
+                      <Input
                       type="number"
                       min="0"
                       step="0.1"
@@ -162,12 +195,18 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                       onChange={(e) => updateField("length", e.target.value)}
                       placeholder="e.g., 65"
                     />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                        mm
+                      </span>
+                    </div>
+                    
                   </div>
                   <div className="space-y-3">
                     <Label className={errors.width ? "text-red-500" : ""}>
-                      Cell Width (mm) <span className="text-red-500">*</span>
+                      Cell Width <span className="text-red-500">*</span>
                     </Label>
-                    <Input
+                    <div className="relative">
+                      <Input
                       type="number"
                       min="0"
                       step="0.1"
@@ -175,15 +214,21 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                       onChange={(e) => updateField("width", e.target.value)}
                       placeholder="e.g., 18"
                     />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">  
+                        mm
+                      </span>
+                    </div>
+                    
                   </div>
                 </>
               )}
               {isCylindricalOrCoin && (
                 <div className="space-y-3">
                   <Label className={errors.diameter ? "text-red-500" : ""}>
-                    Cell Diameter (mm) <span className="text-red-500">*</span>
+                    Cell Diameter <span className="text-red-500">*</span>
                   </Label>
-                  <Input
+                  <div className="relative">
+                    <Input
                     type="number"
                     min="0"
                     step="0.1"
@@ -191,13 +236,19 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                     onChange={(e) => updateField("diameter", e.target.value)}
                     placeholder="e.g., 21"
                   />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">  
+                      mm
+                    </span> 
+                  </div>
+                  
                 </div>
               )}
               <div className="space-y-3">
                 <Label className={errors.height ? "text-red-500" : ""}>
-                  Cell Height (mm) <span className="text-red-500">*</span>
+                  Cell Height <span className="text-red-500">*</span>
                 </Label>
-                <Input
+                <div className="relative">
+                  <Input
                   type="number"
                   min="0"
                   step="0.1"
@@ -205,6 +256,11 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
                   onChange={(e) => updateField("height", e.target.value)}
                   placeholder="e.g., 70"
                 />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">  
+                    mm
+                  </span>
+                </div>
+                
               </div>
             </div>
           </div>

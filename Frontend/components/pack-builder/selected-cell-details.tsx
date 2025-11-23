@@ -1,10 +1,8 @@
-// Frontend/components/pack-builder/selected-cell-details.tsx
 "use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-// import { CellPreview3D } from "@/components/3D_preview/cell_3d"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface SelectedCellDetailsProps {
   formFactor: "cylindrical" | "prismatic"
@@ -44,92 +42,129 @@ export function SelectedCellDetails({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Selected Cell Details</CardTitle>
+        <CardTitle>Cell Properties</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Physical Properties */}
         <div className="space-y-3">
-          <Label>Cell Form Factor</Label>
-          <p className="text-sm font-medium">{formFactor}</p>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          {formFactor === "cylindrical" ? (
-            <>
-              <div className="space-y-3">
-                <Label>Radius (mm)</Label>
-                <p className="text-sm font-medium">{dims.radius ?? "N/A"}</p>
-              </div>
-              <div className="space-y-3">
-                <Label>Height (mm)</Label>
-                <p className="text-sm font-medium">{dims.height ?? "N/A"}</p>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="space-y-3">
-                <Label>Length (mm)</Label>
-                <p className="text-sm font-medium">{dims.length ?? "N/A"}</p>
-              </div>
-              <div className="space-y-3">
-                <Label>Width (mm)</Label>
-                <p className="text-sm font-medium">{dims.width ?? "N/A"}</p>
-              </div>
-              <div className="space-y-3">
-                <Label>Height (mm)</Label>
-                <p className="text-sm font-medium">{dims.height ?? "N/A"}</p>
-              </div>
-            </>
-          )}
-        </div>
-        {/* <CellPreview3D formFactor={formFactor} dims={dims} /> */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <Label>Capacity (Ah)</Label>
-            <p className="text-sm font-medium">{capacity}</p>
-          </div>
-          <div className="space-y-3">
-            <Label>Columbic Efficiency</Label>
-            <p className="text-sm font-medium">{columbicEfficiency}</p>
+          <h3 className="font-semibold text-sm">Physical Properties</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Form Factor</Label>
+              <p className="text-sm font-medium">{formFactor}</p>
+            </div>
+            {formFactor === "cylindrical" ? (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Radius (mm)</Label>
+                  <p className="text-sm font-medium">{dims.radius ?? "N/A"}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Height (mm)</Label>
+                  <p className="text-sm font-medium">{dims.height ?? "N/A"}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Length (mm)</Label>
+                  <p className="text-sm font-medium">{dims.length ?? "N/A"}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Width (mm)</Label>
+                  <p className="text-sm font-medium">{dims.width ?? "N/A"}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Height (mm)</Label>
+                  <p className="text-sm font-medium">{dims.height ?? "N/A"}</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <Label>Cell Mass (g)</Label>
-            <p className="text-sm font-medium">{mCell * 1000}</p>
-          </div>
-          <div className="space-y-3">
-            <Label>Jellyroll Mass (g)</Label>
-            <p className="text-sm font-medium">{mJellyroll * 1000}</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <Label>Cell Voltage Upper Limit (V)</Label>
-            <p className="text-sm font-medium">{cellUpperVoltage}</p>
-          </div>
-          <div className="space-y-3">
-            <Label>Cell Voltage Lower Limit (V)</Label>
-            <p className="text-sm font-medium">{cellLowerVoltage}</p>
-          </div>
-        </div>
+
+        {/* Electrical Properties */}
         <div className="space-y-3">
-          <Label>Cost per Cell (USD)</Label>
-          <Input type="number" value={costPerCell} onChange={(e) => setCostPerCell(e.target.value)} />
-        </div>
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="allow-overlap"
-            checked={allowOverlap}
-            onCheckedChange={(checked) => setAllowOverlap(checked as boolean)}
-          />
-          <Label htmlFor="allow-overlap">Allow cell overlap (for testing only)</Label>
-        </div>
-        {useIndexPitch && (
-          <div className="space-y-3">
-            <Label>Z Pitch (mm)</Label>
-            <Input type="number" value={zPitch} onChange={(e) => setZPitch(e.target.value)} />
-            <p className="text-sm text-muted-foreground">Vertical spacing between layers for index_pitch mode</p>
+          <h3 className="font-semibold text-sm">Electrical Properties</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Capacity (Ah)</Label>
+              <p className="text-sm font-medium">{capacity}</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Upper Voltage (V)</Label>
+              <p className="text-sm font-medium">{cellUpperVoltage}</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Lower Voltage (V)</Label>
+              <p className="text-sm font-medium">{cellLowerVoltage}</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Efficiency</Label>
+              <p className="text-sm font-medium">{columbicEfficiency}</p>
+            </div>
           </div>
-        )}
+        </div>
+
+        {/* Mass Properties */}
+        <div className="space-y-3">
+          <h3 className="font-semibold text-sm">Mass Properties</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Cell Mass (g)</Label>
+              <p className="text-sm font-medium">{(mCell * 1000).toFixed(2)}</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Jellyroll Mass (g)</Label>
+              <p className="text-sm font-medium">{(mJellyroll * 1000).toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Configuration Options */}
+        {/* <div className="border-t pt-6 space-y-3">
+          <h3 className="font-semibold text-sm">Pack Configuration</h3>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label htmlFor="costPerCell">
+                Cost per Cell (USD) <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="costPerCell"
+                type="number"
+                step="0.01"
+                value={costPerCell}
+                onChange={(e) => setCostPerCell(e.target.value)}
+                placeholder="3.0"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="allowOverlap"
+                checked={allowOverlap}
+                onCheckedChange={(checked) => setAllowOverlap(checked as boolean)}
+              />
+              <Label htmlFor="allowOverlap" className="font-normal">
+                Allow cell overlap (testing only)
+              </Label>
+            </div>
+
+            {useIndexPitch && (
+              <div className="space-y-3">
+                <Label htmlFor="zPitch">Z Pitch (mm)</Label>
+                <Input
+                  id="zPitch"
+                  type="number"
+                  value={zPitch}
+                  onChange={(e) => setZPitch(e.target.value)}
+                  placeholder="80"
+                />
+                <p className="text-xs text-muted-foreground">Vertical spacing between layers</p>
+              </div>
+            )}
+          </div>
+        </div> */}
       </CardContent>
     </Card>
   )

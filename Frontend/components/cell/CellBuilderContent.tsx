@@ -1,45 +1,48 @@
-// Updated: Frontend/components/cell/CellBuilderContent.tsx
-"use client";
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCell, createCell, updateCell } from "@/lib/api/cells";
-import BasicParameters from "@/components/cell/BasicParameters";
-import AdvancedParameters from "@/components/cell/AdvancedParameters";
-import { AlertCircle, Battery } from "lucide-react";
+"use client"
+import { useState, useEffect } from "react"
+import type React from "react"
+
+import { useRouter, useSearchParams } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getCell, createCell, updateCell } from "@/lib/api/cells"
+import BasicParameters from "@/components/cell/BasicParameters"
+import AdvancedParameters from "@/components/cell/AdvancedParameters"
+import { AlertCircle, Battery, ArrowLeft } from "lucide-react"
 
 export default function CellBuilderContent() {
-  type FormFactor = "cylindrical" | "prismatic" | "pouch" | "coin";
+  type FormFactor = "cylindrical" | "prismatic" | "pouch" | "coin"
   type FormData = {
-    name: string;
-    formFactor: FormFactor;
-    diameter: string;
-    length: string;
-    width: string;
-    height: string;
-    cell_nominal_voltage: string;
-    cell_upper_voltage_cutoff: string;
-    cell_lower_voltage_cutoff: string;
-    capacity: string;
-    max_charge_voltage: string;
-    columbic_efficiency: string;
-    max_charging_current_continuous: string;
-    max_charging_current_instantaneous: string;
-    max_discharging_current_continuous: string;
-    max_discharging_current_instantaneous: string;
-    cell_weight: string;
-    cell_volume: string;
-    cost_per_cell: string;
-    anode_composition: string;
-    cathode_composition: string;
-  };
-  type SohFile = { name: string; data: string; type: string } | null;
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const id = searchParams.get('id') || undefined;
+    name: string
+    formFactor: FormFactor
+    diameter: string
+    length: string
+    width: string
+    height: string
+    cell_nominal_voltage: string
+    cell_upper_voltage_cutoff: string
+    cell_lower_voltage_cutoff: string
+    capacity: string
+    max_charge_voltage: string
+    columbic_efficiency: string
+    max_charging_current_continuous: string
+    max_charging_current_instantaneous: string
+    max_discharging_current_continuous: string
+    max_discharging_current_instantaneous: string
+    cell_weight: string
+    cell_volume: string
+    cost_per_cell: string
+    anode_composition: string
+    cathode_composition: string
+  }
+  type SohFile = { name: string; data: string; type: string } | null
+
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const id = searchParams.get("id") || undefined
+
+  const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<FormData>({
     name: "",
     formFactor: "cylindrical",
@@ -62,38 +65,40 @@ export default function CellBuilderContent() {
     cost_per_cell: "",
     anode_composition: "",
     cathode_composition: "",
-  });
-  const [sohFile, setSohFile] = useState<SohFile>(null);
-  const [error, setError] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isEditing, setIsEditing] = useState(!!id);
+  })
+
+  const [sohFile, setSohFile] = useState<SohFile>(null)
+  const [error, setError] = useState("")
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isEditing, setIsEditing] = useState(!!id)
 
   useEffect(() => {
     if (id) {
-      fetchCell(id);
+      fetchCell(id)
     }
-  }, [id]);
+  }, [id])
 
-  // Auto-calculate volume if not manually set
   useEffect(() => {
-    const d = Number.parseFloat(formData.diameter) || 0;
-    const l = Number.parseFloat(formData.length) || 0;
-    const w = Number.parseFloat(formData.width) || 0;
-    const h = Number.parseFloat(formData.height) || 0;
-    let vol = 0;
+    const d = Number.parseFloat(formData.diameter) || 0
+    const l = Number.parseFloat(formData.length) || 0
+    const w = Number.parseFloat(formData.width) || 0
+    const h = Number.parseFloat(formData.height) || 0
+    let vol = 0
+
     if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
-      vol = Math.PI * Math.pow(d / 2, 2) * h;
+      vol = Math.PI * Math.pow(d / 2, 2) * h
     } else {
-      vol = l * w * h;
+      vol = l * w * h
     }
+
     if (!formData.cell_volume || formData.cell_volume.trim() === "") {
-      setFormData((prev) => ({ ...prev, cell_volume: vol.toString() }));
+      setFormData((prev) => ({ ...prev, cell_volume: vol.toString() }))
     }
-  }, [formData.formFactor, formData.diameter, formData.length, formData.width, formData.height]);
+  }, [formData.formFactor, formData.diameter, formData.length, formData.width, formData.height])
 
   const fetchCell = async (cellId: string) => {
     try {
-      const cell = await getCell(cellId);
+      const cell = await getCell(cellId)
       if (cell) {
         setFormData({
           name: cell.name || "",
@@ -103,113 +108,138 @@ export default function CellBuilderContent() {
           width: cell.dims.width != null ? cell.dims.width.toString() : "",
           height: cell.dims.height != null ? cell.dims.height.toString() : "",
           cell_nominal_voltage: cell.cell_nominal_voltage != null ? cell.cell_nominal_voltage.toString() : "",
-          cell_upper_voltage_cutoff: cell.cell_upper_voltage_cutoff != null ? cell.cell_upper_voltage_cutoff.toString() : "",
-          cell_lower_voltage_cutoff: cell.cell_lower_voltage_cutoff != null ? cell.cell_lower_voltage_cutoff.toString() : "",
+          cell_upper_voltage_cutoff:
+            cell.cell_upper_voltage_cutoff != null ? cell.cell_upper_voltage_cutoff.toString() : "",
+          cell_lower_voltage_cutoff:
+            cell.cell_lower_voltage_cutoff != null ? cell.cell_lower_voltage_cutoff.toString() : "",
           capacity: cell.capacity != null ? cell.capacity.toString() : "",
           max_charge_voltage: cell.max_charge_voltage != null ? cell.max_charge_voltage.toString() : "",
           columbic_efficiency: cell.columbic_efficiency != null ? cell.columbic_efficiency.toString() : "",
-          max_charging_current_continuous: cell.max_charging_current_continuous != null
-            ? cell.max_charging_current_continuous.toString()
-            : "",
-          max_charging_current_instantaneous: cell.max_charging_current_instantaneous != null
-            ? cell.max_charging_current_instantaneous.toString()
-            : "",
-          max_discharging_current_continuous: cell.max_discharging_current_continuous != null
-            ? cell.max_discharging_current_continuous.toString()
-            : "",
-          max_discharging_current_instantaneous: cell.max_discharging_current_instantaneous != null
-            ? cell.max_discharging_current_instantaneous.toString()
-            : "",
+          max_charging_current_continuous:
+            cell.max_charging_current_continuous != null ? cell.max_charging_current_continuous.toString() : "",
+          max_charging_current_instantaneous:
+            cell.max_charging_current_instantaneous != null ? cell.max_charging_current_instantaneous.toString() : "",
+          max_discharging_current_continuous:
+            cell.max_discharging_current_continuous != null ? cell.max_discharging_current_continuous.toString() : "",
+          max_discharging_current_instantaneous:
+            cell.max_discharging_current_instantaneous != null
+              ? cell.max_discharging_current_instantaneous.toString()
+              : "",
           cell_weight: cell.cell_weight != null ? cell.cell_weight.toString() : "",
           cell_volume: cell.cell_volume != null ? cell.cell_volume.toString() : "",
           cost_per_cell: cell.cost_per_cell != null ? cell.cost_per_cell.toString() : "",
           anode_composition: cell.anode_composition || "",
           cathode_composition: cell.cathode_composition || "",
-        });
-        setSohFile(cell.soh_file || null);
-        setIsEditing(true);
+        })
+        setSohFile(cell.soh_file || null)
+        setIsEditing(true)
       }
     } catch (err) {
-      setError("Failed to fetch cell");
+      setError("Failed to fetch cell")
     }
-  };
+  }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validTypes = [".csv", ".json", ".mat"];
-    const fileExt = "." + file.name.split(".").pop()?.toLowerCase();
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validTypes = [".csv", ".json", ".mat"]
+    const fileExt = "." + file.name.split(".").pop()?.toLowerCase()
     if (!validTypes.includes(fileExt)) {
-      setError(`Invalid file type. Please upload ${validTypes.join(", ")} files only.`);
-      return;
+      setError(`Invalid file type. Please upload ${validTypes.join(", ")} files only.`)
+      return
     }
-    const reader = new FileReader();
+
+    const reader = new FileReader()
     reader.onload = (event) => {
-      const data = event.target?.result as string;
+      const data = event.target?.result as string
       setSohFile({
         name: file.name,
         data: data,
         type: file.type || "application/octet-stream",
-      });
-      setError("");
-    };
-    reader.readAsDataURL(file);
-  };
+      })
+      setError("")
+    }
+    reader.readAsDataURL(file)
+  }
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
+  const validateStep1 = () => {
+    const newErrors: Record<string, string> = {}
+
     if (!formData.name.trim()) {
-      newErrors.name = "Cell name is required";
+      newErrors.name = "Cell name is required"
     }
+
     if (!formData.cell_nominal_voltage || Number.parseFloat(formData.cell_nominal_voltage) <= 0) {
-      newErrors.cell_nominal_voltage = "Valid nominal voltage is required";
+      newErrors.cell_nominal_voltage = "Valid nominal voltage is required"
     }
+
     if (!formData.cell_upper_voltage_cutoff || Number.parseFloat(formData.cell_upper_voltage_cutoff) <= 0) {
-      newErrors.cell_upper_voltage_cutoff = "Valid upper voltage cut-off is required";
+      newErrors.cell_upper_voltage_cutoff = "Valid upper voltage cut-off is required"
     }
+
     if (!formData.cell_lower_voltage_cutoff || Number.parseFloat(formData.cell_lower_voltage_cutoff) <= 0) {
-      newErrors.cell_lower_voltage_cutoff = "Valid lower voltage cut-off is required";
+      newErrors.cell_lower_voltage_cutoff = "Valid lower voltage cut-off is required"
     }
+
     if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
       if (!formData.diameter || Number.parseFloat(formData.diameter) <= 0) {
-        newErrors.diameter = "Valid diameter is required for cylindrical/coin cells";
+        newErrors.diameter = "Valid diameter is required for cylindrical/coin cells"
       }
     } else if (formData.formFactor === "prismatic" || formData.formFactor === "pouch") {
       if (!formData.length || Number.parseFloat(formData.length) <= 0) {
-        newErrors.length = "Valid length is required for prismatic/pouch cells";
+        newErrors.length = "Valid length is required for prismatic/pouch cells"
       }
       if (!formData.width || Number.parseFloat(formData.width) <= 0) {
-        newErrors.width = "Valid width is required for prismatic/pouch cells";
+        newErrors.width = "Valid width is required for prismatic/pouch cells"
       }
     }
+
     if (!formData.height || Number.parseFloat(formData.height) <= 0) {
-      newErrors.height = "Valid height is required";
+      newErrors.height = "Valid height is required"
     }
+
     if (!formData.capacity || Number.parseFloat(formData.capacity) <= 0) {
-      newErrors.capacity = "Valid capacity is required";
+      newErrors.capacity = "Valid capacity is required"
     }
+
     if (!formData.cell_weight || Number.parseFloat(formData.cell_weight) <= 0) {
-      newErrors.cell_weight = "Valid cell weight is required";
+      newErrors.cell_weight = "Valid cell weight is required"
     }
+
     if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      setError("Please fill in the required fields highlighted in red.");
-      return false;
+      setErrors(newErrors)
+      setError("Please fill in all required fields in Step 1 before proceeding.")
+      return false
     }
-    setErrors({});
-    setError("");
-    return true;
-  };
+
+    setErrors({})
+    setError("")
+    return true
+  }
+
+  const handleNext = () => {
+    if (validateStep1()) {
+      setCurrentStep(2)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handleBack = () => {
+    setCurrentStep(1)
+    setError("")
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const handleSave = async () => {
-    if (!validateForm()) return;
-    const dims: any = { height: Number.parseFloat(formData.height) };
+    const dims: any = { height: Number.parseFloat(formData.height) }
     if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
-      dims.diameter = Number.parseFloat(formData.diameter);
+      dims.diameter = Number.parseFloat(formData.diameter)
     } else {
-      dims.length = Number.parseFloat(formData.length);
-      dims.width = Number.parseFloat(formData.width);
+      dims.length = Number.parseFloat(formData.length)
+      dims.width = Number.parseFloat(formData.width)
     }
+
     const payload = {
       name: formData.name,
       formFactor: formData.formFactor,
@@ -230,18 +260,19 @@ export default function CellBuilderContent() {
       anode_composition: formData.anode_composition,
       cathode_composition: formData.cathode_composition,
       soh_file: sohFile,
-    };
+    }
+
     try {
       if (isEditing && id) {
-        await updateCell(id, payload);
+        await updateCell(id, payload)
       } else {
-        await createCell(payload);
+        await createCell(payload)
       }
-      router.push("/library/cells");
+      router.push("/library/cells")
     } catch (err) {
-      setError("Failed to save cell");
+      setError("Failed to save cell")
     }
-  };
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -251,37 +282,49 @@ export default function CellBuilderContent() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+      
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Battery className="w-5 h-5" />
             {isEditing ? "Edit Cell" : "Create Cell"}
           </CardTitle>
-          <CardDescription>Define your battery cell specifications</CardDescription>
+          <CardDescription>
+            {currentStep === 1 ? "Step 1 of 2: Basic Parameters" : "Step 2 of 2: Advanced Parameters"}
+          </CardDescription>
         </CardHeader>
       </Card>
-      <Tabs defaultValue="basic" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="basic">Step 1: Basic Parameters</TabsTrigger>
-          <TabsTrigger value="advanced">Step 2: Advanced Parameters</TabsTrigger>
-        </TabsList>
-        <TabsContent value="basic">
+
+      {currentStep === 1 ? (
+        <>
+          <div className="text-2xl font-semibold mb-4">Step 1: Basic Parameters</div>
           <BasicParameters formData={formData} setFormData={setFormData} errors={errors} />
-        </TabsContent>
-        <TabsContent value="advanced">
+          <div className="flex justify-end">
+            <Button onClick={handleNext} className="min-w-32">
+              Next
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="text-2xl font-semibold mb-4">Step 2: Advanced Parameters</div>
           <AdvancedParameters
             formData={formData}
             setFormData={setFormData}
             sohFile={sohFile}
             handleFileUpload={handleFileUpload}
           />
-        </TabsContent>
-      </Tabs>
-      <div className="flex justify-end">
-        <Button onClick={handleSave} className="min-w-32">
-          {isEditing ? "Update Cell" : "Save Cell"}
-        </Button>
-      </div>
+          <div className="flex justify-between">
+            <Button onClick={handleBack} variant="outline" className="min-w-32">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <Button onClick={handleSave} className="min-w-32">
+              {isEditing ? "Update Cell" : "Save Cell"}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
-  );
+  )
 }

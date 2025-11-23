@@ -1,6 +1,7 @@
-// Updated: components/cells/AddCellOptions.tsx
 "use client"
 import { useState } from "react"
+import type React from "react"
+
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,7 @@ type ValidationError = {
   message: string
 }
 
-type ParsedPayload = any // Matches the payload shape for createCell
+type ParsedPayload = any
 
 const expectedHeaders = [
   "name",
@@ -39,7 +40,7 @@ const expectedHeaders = [
   "cell_volume",
   "cost_per_cell",
   "anode_composition",
-  "cathode_composition"
+  "cathode_composition",
 ] as const
 
 const requiredDescriptions: Record<string, { isRequired: boolean; note: string }> = {
@@ -63,7 +64,7 @@ const requiredDescriptions: Record<string, { isRequired: boolean; note: string }
   cell_volume: { isRequired: false, note: "optional" },
   cost_per_cell: { isRequired: false, note: "optional" },
   anode_composition: { isRequired: false, note: "optional" },
-  cathode_composition: { isRequired: false, note: "optional" }
+  cathode_composition: { isRequired: false, note: "optional" },
 }
 
 const exampleRow = [
@@ -87,7 +88,7 @@ const exampleRow = [
   "",
   "5.5",
   "Graphite",
-  "NCA"
+  "NCA",
 ]
 
 function parseCSVLine(line: string): string[] {
@@ -136,7 +137,7 @@ function validateRow(data: Record<string, string>): string[] {
     { key: "cell_upper_voltage_cutoff", val: data.cell_upper_voltage_cutoff },
     { key: "cell_lower_voltage_cutoff", val: data.cell_lower_voltage_cutoff },
     { key: "capacity", val: data.capacity },
-    { key: "cell_weight", val: data.cell_weight }
+    { key: "cell_weight", val: data.cell_weight },
   ]
 
   requiredNums.forEach(({ key, val }) => {
@@ -189,7 +190,7 @@ function buildPayload(data: Record<string, string>, formFactor: string): ParsedP
     cell_volume: parseNumSafe(data.cell_volume),
     cost_per_cell: parseNumSafe(data.cost_per_cell),
     anode_composition: data.anode_composition?.trim() || "",
-    cathode_composition: data.cathode_composition?.trim() || ""
+    cathode_composition: data.cathode_composition?.trim() || "",
   }
 }
 
@@ -203,9 +204,9 @@ export default function AddCellOptions() {
   const [uploadSuccessCount, setUploadSuccessCount] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
 
-  const templateHeaders = expectedHeaders.map(
-    (field) => `${field} (${requiredDescriptions[field as keyof typeof requiredDescriptions].note})`
-  ).join(",")
+  const templateHeaders = expectedHeaders
+    .map((field) => `${field} (${requiredDescriptions[field as keyof typeof requiredDescriptions].note})`)
+    .join(",")
 
   const downloadTemplate = () => {
     const csvContent = `${templateHeaders}\n${exampleRow.join(",")}\n`
@@ -231,7 +232,10 @@ export default function AddCellOptions() {
     reader.onload = (ev) => {
       try {
         const content = ev.target?.result as string
-        const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+        const lines = content
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
 
         if (lines.length < 1) {
           throw new Error("CSV file is empty.")
@@ -239,19 +243,18 @@ export default function AddCellOptions() {
 
         const rawHeaders = parseCSVLine(lines[0])
         const headers = rawHeaders.map((h) =>
-          h.replace(/^"|"$/g, "").replace(/\s*\([^)]*\)\s*$/i, "").trim()
+          h
+            .replace(/^"|"$/g, "")
+            .replace(/\s*$$[^)]*$$\s*$/i, "")
+            .trim(),
         )
 
-        if (
-          headers.length !== expectedHeaders.length ||
-          headers.some((h, i) => h !== expectedHeaders[i])
-        ) {
+        if (headers.length !== expectedHeaders.length || headers.some((h, i) => h !== expectedHeaders[i])) {
           throw new Error(
-            "Invalid CSV format. The columns do not match the template. Please download and use the template CSV."
+            "Invalid CSV format. The columns do not match the template. Please download and use the template CSV.",
           )
         }
 
-        // Skip the example row if present
         let startIdx = 1
         if (lines[1] && parseCSVLine(lines[1])[0]?.includes("Example")) {
           startIdx = 2
@@ -283,8 +286,8 @@ export default function AddCellOptions() {
           setValidationErrors(
             rowErrors.map((re) => ({
               row: re.row,
-              message: `Missing or invalid fields: ${re.errors.join("; ")}`
-            }))
+              message: `Missing or invalid fields: ${re.errors.join("; ")}`,
+            })),
           )
           setParsedPayloads([])
         } else {
@@ -335,7 +338,6 @@ export default function AddCellOptions() {
 
     setIsUploading(false)
 
-    // Redirect after 2 seconds
     setTimeout(() => {
       router.push("library/cells")
     }, 2000)
@@ -375,7 +377,9 @@ export default function AddCellOptions() {
               <strong>Validation errors found:</strong>
               <ul className="list-disc pl-5 mt-2">
                 {validationErrors.map((err, idx) => (
-                  <li key={idx}>Row {err.row}: {err.message}</li>
+                  <li key={idx}>
+                    Row {err.row}: {err.message}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -384,27 +388,21 @@ export default function AddCellOptions() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Manual Add Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Pencil className="w-4 h-4" />
               Add Manually
             </CardTitle>
-            <CardDescription>
-              Build your cell configuration step by step using the interactive form.
-            </CardDescription>
+            <CardDescription>Build your cell configuration step by step using the interactive form.</CardDescription>
           </CardHeader>
           <CardContent>
             <Link href="/cell-builder">
-              <Button className="w-full">
-                Open Cell Builder
-              </Button>
+              <Button className="w-full">Open Cell Builder</Button>
             </Link>
           </CardContent>
         </Card>
 
-        {/* CSV Upload Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -412,27 +410,22 @@ export default function AddCellOptions() {
               Bulk Upload (CSV)
             </CardTitle>
             <CardDescription>
-              Upload multiple cells at once. Download the template to see the exact format, including required (*) and optional fields.
+              Upload multiple cells at once. Download the template to see the exact format, including required (*) and
+              optional fields.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button onClick={downloadTemplate} variant="outline" className="w-full">
+            <Button onClick={downloadTemplate} variant="outline" className="w-full bg-transparent">
               <Download className="w-4 h-4 mr-2" />
               Download Template CSV
             </Button>
-            <Input
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              placeholder="Select CSV file"
-            />
-            {selectedFile && (
-              <p className="text-sm text-muted-foreground">Selected: {selectedFile.name}</p>
-            )}
+            <Input type="file" accept=".csv" onChange={handleFileUpload} placeholder="Select CSV file" />
+            {selectedFile && <p className="text-sm text-muted-foreground">Selected: {selectedFile.name}</p>}
             {parsedPayloads.length > 0 && validationErrors.length === 0 && (
               <div className="p-3 bg-green-50 rounded-md">
                 <p className="text-sm font-medium text-green-800">
-                  Validated successfully! Ready to upload {parsedPayloads.length} cell{parsedPayloads.length !== 1 ? "s" : ""}.
+                  Validated successfully! Ready to upload {parsedPayloads.length} cell
+                  {parsedPayloads.length !== 1 ? "s" : ""}.
                 </p>
                 <Button onClick={handleUpload} disabled={isUploading} className="mt-2 w-full">
                   {isUploading ? "Uploading..." : "Upload Cells"}
@@ -443,7 +436,6 @@ export default function AddCellOptions() {
         </Card>
       </div>
 
-      {/* CSV Template Preview */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -451,7 +443,8 @@ export default function AddCellOptions() {
             CSV Template Preview
           </CardTitle>
           <CardDescription>
-            Below is a preview of the CSV template structure. Required fields are highlighted in red. Download the full template for the example row.
+            Below is a preview of the CSV template structure. Required fields are highlighted in red. Download the full
+            template for the example row.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -480,7 +473,8 @@ export default function AddCellOptions() {
             </Table>
           </div>
           <p className="text-xs text-muted-foreground mt-4">
-            * Remove the example row before adding your data. For conditional fields (e.g., diameter), fill based on formFactor.
+            * Remove the example row before adding your data. For conditional fields (e.g., diameter), fill based on
+            formFactor.
           </p>
         </CardContent>
       </Card>

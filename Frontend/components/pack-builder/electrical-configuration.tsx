@@ -49,19 +49,24 @@ export function ElectricalConfiguration({
         <CardTitle>Electrical Configuration</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Connection Type */}
         <div className="space-y-3">
-          <Label>Connection Type<span className="text-red-500">*</span></Label>
+          <Label htmlFor="connType">
+            Connection Type <span className="text-red-500">*</span>
+          </Label>
           <Select value={connectionType} onValueChange={(value) => setConnectionType(value as any)}>
-            <SelectTrigger>
+            <SelectTrigger id="connType">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="row_series_column_parallel">Column Parallel</SelectItem>
-              <SelectItem value="row_parallel_column_series">Row Parallel</SelectItem>
+              <SelectItem value="row_series_column_parallel">Column Parallel (Series Columns)</SelectItem>
+              <SelectItem value="row_parallel_column_series">Row Parallel (Series Rows)</SelectItem>
               <SelectItem value="custom">Custom Connection</SelectItem>
             </SelectContent>
           </Select>
         </div>
+
+        {/* Custom Parallel Groups */}
         {connectionType === "custom" && (
           <div className="space-y-4 border-t pt-4">
             <div className="flex justify-between items-center">
@@ -71,21 +76,23 @@ export function ElectricalConfiguration({
                 Add Group
               </Button>
             </div>
+
             {customConnectionError && (
               <Alert className="border-destructive bg-destructive/10">
                 <AlertCircle className="h-4 w-4 text-destructive" />
-                <AlertDescription className="text-destructive">{customConnectionError}</AlertDescription>
+                <AlertDescription className="text-destructive text-sm">{customConnectionError}</AlertDescription>
               </Alert>
             )}
+
             {customParallelGroups.map((group, idx) => (
-              <div key={group.id} className="space-y-2 p-3 border rounded">
+              <div key={group.id} className="space-y-2 p-3 border rounded-lg bg-muted/30">
                 <div className="flex justify-between items-center">
-                  <Label>Parallel Group {idx + 1}<span className="text-red-500">*</span></Label>
+                  <Label className="font-medium">Group {idx + 1}</Label>
                   <Button
                     onClick={() => onRemoveGroup(group.id)}
                     size="sm"
                     variant="ghost"
-                    className="text-destructive"
+                    className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -95,29 +102,89 @@ export function ElectricalConfiguration({
                   value={group.cellIds}
                   onChange={(e) => onUpdateGroup(group.id, e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">Enter comma-separated cell labels</p>
+                <p className="text-xs text-muted-foreground">Comma-separated cell labels</p>
               </div>
             ))}
           </div>
         )}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <Label>Parallel Connection Resistance (R_p (Ω))<span className="text-red-500">*</span></Label>
-            <Input type="number" value={rP} onChange={(e) => setRP(Number.parseFloat(e.target.value) || 0)} />
-          </div>
-          <div className="space-y-3">
-            <Label>Series Connection Resistance (R_s (Ω))<span className="text-red-500">*</span></Label>
-            <Input type="number" value={rS} onChange={(e) => setRS(Number.parseFloat(e.target.value) || 0)} />
+
+        {/* Resistance Configuration */}
+        <div className="space-y-3 border-t pt-6">
+          <h3 className="font-semibold text-sm">Resistance Parameters</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <Label htmlFor="rp">
+                Parallel Resistance (R_p) <span className="text-red-500">*</span>
+              </Label>
+                <div className="relative">
+                  <Input
+                    id="rp"
+                    type="number"
+                    step="0.0001"
+                    value={rP}
+                    onChange={(e) => setRP(Number.parseFloat(e.target.value) || 0)}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    Ω
+                  </span>
+                </div>
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="rs">
+                Series Resistance (R_s)  <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+              <Input
+                id="rs"
+                type="number"
+                step="0.0001"
+                value={rS}
+                onChange={(e) => setRS(Number.parseFloat(e.target.value) || 0)}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                Ω
+              </span>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <Label>Module Voltage Upper Limit (V)<span className="text-red-500">*</span></Label>
-            <Input type="number" value={moduleUpperVoltage} onChange={(e) => setModuleUpperVoltage(e.target.value)} />
-          </div>
-          <div className="space-y-3">
-            <Label>Module Voltage Lower Limit (V)<span className="text-red-500">*</span></Label>
-            <Input type="number" value={moduleLowerVoltage} onChange={(e) => setModuleLowerVoltage(e.target.value)} />
+
+        {/* Voltage Limits */}
+        <div className="space-y-3 border-t pt-6">
+          <h3 className="font-semibold text-sm">Module Voltage Limits</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <Label htmlFor="upperVolt">
+                Upper Limit (V) <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+              <Input
+                id="upperVolt"
+                type="number"
+                value={moduleUpperVoltage}
+                onChange={(e) => setModuleUpperVoltage(e.target.value)}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                V
+              </span>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="lowerVolt">
+                Lower Limit (V) <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+              <Input
+                id="lowerVolt"
+                type="number"
+                value={moduleLowerVoltage}
+                onChange={(e) => setModuleLowerVoltage(e.target.value)}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                V
+              </span>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>
