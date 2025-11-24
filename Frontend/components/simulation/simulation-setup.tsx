@@ -89,9 +89,10 @@ const busbarMaterials = [
 
 interface SimulationSetupProps {
   onConfigChange: (config: any) => void
+  packData?: any
 }
 
-export function SimulationSetup({ onConfigChange }: SimulationSetupProps) {
+export function SimulationSetup({ onConfigChange, packData }: SimulationSetupProps) {
   const [electricalModel, setElectricalModel] = useState("simple")
   const [thermalEnabled, setThermalEnabled] = useState(false)
   const [thermalModel, setThermalModel] = useState("lumped")
@@ -105,7 +106,7 @@ export function SimulationSetup({ onConfigChange }: SimulationSetupProps) {
   const [initialSOH, setInitialSOH] = useState('1.0')
   const [initialDCIR, setInitialDCIR] = useState('1.0')
   const [varyingCells, setVaryingCells] = useState<
-    { id: number; cellIndex: string; temp: string; soc: string; soh: string; dcir: string }[]
+    { id: number; cellIds: string[]; temp: string; soc: string; soh: string; dcir: string }[]
   >([])
   const [nextVaryingId, setNextVaryingId] = useState(1)
   const selectedElectricalModel = electricalModels.find((m) => m.id === electricalModel)
@@ -135,7 +136,7 @@ export function SimulationSetup({ onConfigChange }: SimulationSetupProps) {
   }, [electricalModel, thermalEnabled, lifeEnabled, busbarEnabled])
 
   const addVaryingCell = () => {
-    setVaryingCells([...varyingCells, { id: nextVaryingId, cellIndex: '', temp: '300', soc: '100', soh: '1.0', dcir: '1.0' }])
+    setVaryingCells([...varyingCells, { id: nextVaryingId, cellIds: [], temp: '300', soc: '100', soh: '1.0', dcir: '1.0' }])
     setNextVaryingId(nextVaryingId + 1)
   }
   const removeVaryingCell = (id: number) => {
@@ -169,6 +170,21 @@ export function SimulationSetup({ onConfigChange }: SimulationSetupProps) {
       },
       estimatedComputeTime: getEstimatedComputeTime(),
       complexityLevel: getComplexityLevel().level,
+      initial_conditions: {
+        temperature: Number.parseFloat(initialTemperature) || 300,
+        soc: (Number.parseFloat(initialSOC) / 100) || 1.0,
+        soh: Number.parseFloat(initialSOH) || 1.0,
+        dcir_aging_factor: Number.parseFloat(initialDCIR) || 1.0,
+        varying_conditions: varyingCells
+          .filter(vc => vc.cellIds && vc.cellIds.length > 0) // Filter out conditions with no cells
+          .map((vc) => ({
+            cell_ids: vc.cellIds, // Use cellIds directly as array of strings
+            temperature: Number.parseFloat(vc.temp) || 300,
+            soc: (Number.parseFloat(vc.soc) / 100) || 1.0,
+            soh: Number.parseFloat(vc.soh) || 1.0,
+            dcir_aging_factor: Number.parseFloat(vc.dcir) || 1.0,
+          })),
+      },
     }
 
     onConfigChange(config)
@@ -185,6 +201,11 @@ export function SimulationSetup({ onConfigChange }: SimulationSetupProps) {
     selectedBusbarMaterial,
     getEstimatedComputeTime,
     getComplexityLevel,
+    initialTemperature, 
+    initialSOC, 
+    initialSOH, 
+    initialDCIR, 
+    varyingCells
   ])
 
   const complexity = getComplexityLevel()
@@ -229,6 +250,7 @@ export function SimulationSetup({ onConfigChange }: SimulationSetupProps) {
         onAddVaryingCell={addVaryingCell}
         onRemoveVaryingCell={removeVaryingCell}
         onUpdateVaryingCell={updateVaryingCell}
+        packData={packData}
       />  
 
       {/* Electrical Model Configuration */}

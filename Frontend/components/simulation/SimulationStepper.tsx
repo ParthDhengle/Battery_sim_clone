@@ -168,6 +168,7 @@ async function getDriveCycleData(cycleId: string): Promise<{ time: number[]; cur
 export function SimulationStepper({ projectId, name, simType }: SimulationStepperProps) {
   const [activeTab, setActiveTab] = useState("selection")
   const [packId, setPackId] = useState("")
+  const [packData, setPackData] = useState<any>(null)
   const [cycleId, setCycleId] = useState("")
   const [simulationConfig, setSimulationConfig] = useState<Record<string, any> | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
@@ -236,9 +237,18 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
         setIsRunning(false)
         clearInterval(interval)
       }
+
     }, 2000) // Poll every 2 seconds
     return () => clearInterval(interval)
+
   }, [simulationId, isRunning])
+  useEffect(() => {
+    if (packId) {
+      getPack(packId).then(setPackData).catch(console.error)
+    } else {
+      setPackData(null)
+    }
+  }, [packId])
   const handleResetSimulation = () => {
     setActiveTab("selection")
     setPackId("")
@@ -306,7 +316,10 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                 </div>
               </TabsContent>
               <TabsContent value="setup" className="space-y-6">
-                <SimulationSetup onConfigChange={setSimulationConfig} />
+                <SimulationSetup 
+                  onConfigChange={setSimulationConfig}  
+                  packData={packData} 
+                />
                 <ConfigurationSummary packId={packId} cycleId={cycleId} simulationConfig={simulationConfig} />
                 <div className="flex justify-between pt-4 gap-3">
                   <Button variant="outline" onClick={() => setActiveTab("selection")}>

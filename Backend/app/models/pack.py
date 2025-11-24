@@ -34,12 +34,7 @@ class VaryingCell(BaseModel):
     soh: float = 1.0
     dcir_aging_factor: float = 1.0
 
-class InitialConditions(BaseModel):
-    temperature: float = 300
-    soc: float = 1.0
-    soh: float = 1.0
-    dcir_aging_factor: float = 1.0
-    varying_cells: List[VaryingCell] = []
+# REMOVED: InitialConditions (moved to simulation)
 
 class VoltageLimits(BaseModel):
     module_upper: Optional[float] = None
@@ -99,10 +94,11 @@ class PackCreate(BaseModel):
     voltage_limits: VoltageLimits
     options: PackOptions
     constraints: Constraints
-    z_pitch: Optional[float] = None
-    layers: List[LayerConfig]
-    initial_conditions: InitialConditions
     cost_per_cell: float = 3.0
+    # REMOVED: layers, z_pitch (if not needed; assuming they stay for geometry)
+    layers: List[LayerConfig]
+    z_pitch: Optional[float] = None
+    # REMOVED: initial_conditions
 
 class PackUpdate(BaseModel):
     name: Optional[str] = None
@@ -117,8 +113,8 @@ class PackUpdate(BaseModel):
     constraints: Optional[Constraints] = None
     z_pitch: Optional[float] = None
     layers: Optional[List[LayerConfig]] = None
-    initial_conditions: Optional[InitialConditions] = None
     cost_per_cell: Optional[float] = None
+    # REMOVED: initial_conditions
 
 class PackResponse(BaseModel):
     id: str = Field(alias="_id")
@@ -135,14 +131,13 @@ class PackResponse(BaseModel):
     constraints: Constraints
     z_pitch: Optional[float]
     layers: List[LayerConfig]
-    initial_conditions: InitialConditions
+    # REMOVED: initial_conditions
     cost_per_cell: float
     summary: Optional[PackSummary] = None
     cells_data: Optional[List[Dict[str, Any]]] = None
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
-
     class Config:
         populate_by_name = True
         json_encoders = {datetime: lambda v: v.isoformat()}

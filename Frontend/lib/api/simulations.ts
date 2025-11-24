@@ -30,37 +30,14 @@ export async function getSimulationStatus(simulationId: string) {
   return res.json()
 }
 
-export interface SimulationDataResponse {
-  simulation_id: string
-  cell_id: number
-  time_range: string
-  total_points: number
-  sampled_points: number
-  sampling_ratio: number
-  data: Array<{
-    time: number
-    voltage: number
-    soc: number
-    current: number
-    qgen: number
-    temp: number
-  }>
-  summary?: {
-    end_soc?: number
-    max_temp?: number
-    capacity_fade?: number
-    is_partial?: boolean
-  }
-}
-
 export async function getSimulationData(
   simulationId: string,
   params: { time_range?: string; max_points?: number } = {},
-): Promise<SimulationDataResponse> {
+) {
   const usp = new URLSearchParams()
   if (params.time_range) usp.append("time_range", params.time_range)
   if (params.max_points != null) usp.append("max_points", String(params.max_points))
-  const res = await fetch(`${API_BASE}/simulations/${simulationId}/data?${usp.toString()}`, { cache: "no-store" })
+  const res = await fetch(`${API_BASE}/simulations/${simulationId}/data?${usp.toString()}`)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Failed to get simulation data: ${text}`)
@@ -73,3 +50,5 @@ export async function getAllSimulations() {
   if (!res.ok) throw new Error(`Failed to fetch simulations: ${await res.text()}`)
   return res.json()
 }
+
+
