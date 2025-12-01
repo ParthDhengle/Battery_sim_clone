@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { SimulationDataChart } from "./simulation-data-chart"
+import { generatePDFReport } from './pdf-report-generator'
 
 interface SimulationDataPoint {
   time: number
@@ -340,6 +341,153 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       setError(errorMsg)
     }
   }
+const handleReport = async () => {
+  if (!simulationData || !simulationId) {
+    setError("No simulation data available");
+    return;
+  }
+  
+  try {
+    setError(null);
+    
+    // Fetch simulation metadata from API
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const simResponse = await fetch(`${API_BASE}/simulations/${simulationId}`, {
+      cache: "no-store"
+    });
+    
+    if (!simResponse.ok) {
+      throw new Error("Failed to fetch simulation metadata");
+    }
+    
+    const simMetadata = await simResponse.json();
+    
+    // Fetch pack data
+    const packId = simMetadata.pack_id;
+    if (!packId) {
+      throw new Error("No pack ID found in simulation");
+    }
+    
+    const packResponse = await fetch(`${API_BASE}/packs/${packId}`, {
+      cache: "no-store"
+    });
+    
+    if (!packResponse.ok) {
+      throw new Error("Failed to fetch pack data");
+    }
+    
+    const packData = await packResponse.json();
+    
+    // Fetch cell data
+    const cellId = packData.cell_id;
+    if (!cellId) {
+      throw new Error("No cell ID found in pack");
+    }
+    
+    const cellResponse = await fetch(`${API_BASE}/cells/${cellId}`, {
+      cache: "no-store"
+    });
+    
+    if (!cellResponse.ok) {
+      throw new Error("Failed to fetch cell data");
+    }
+    
+    const cellData = await cellResponse.json();
+    
+    // Calculate pack summary if not available
+    const electrical = packData.summary?.electrical || {
+      nSeries: packData.r_s || 0,
+      nParallel: packData.r_p || 0,
+      nTotal: (packData.r_s || 0) * (packData.r_p || 0),
+      packNominalVoltage: (packData.r_s || 0) * (cellData.nominal_voltage || 3.7),
+      packCapacity: (packData.r_p || 0) * (cellData.capacity || 0),
+      packEnergyWh: (packData.r_s || 0) * (cellData.nominal_voltage || 3.7) * (packData.r_p || 0) * (cellData.capacity || 0),
+      packMaxVoltage: (packData.r_s || 0) * (cellData.upper_voltage || 4.2),
+      packMinVoltage: (packData.r_s || 0) * (cellData.lower_voltage || 2.5),
+      adjustedPackEnergyWh: (packData.r_s || 0) * (cellData.nominal_voltage || 3.7) * (packData.r_p || 0) * (cellData.capacity || 0) * (cellData.columbic_efficiency || 1.0),
+    };
+    
+    const mechanical = packData.summary?.mechanical || {
+      totalCells: (packData.r_s || 0) * (packData.r_p || 0),
+      totalPackWeight: ((packData.r_s || 0) * (packData.r_p || 0) * (cellData.m_cell || 0)),
+      totalPackVolume: 0.001,
+      energyDensityGravimetric: 0,
+      energyDensityVolumetric: 0,
+    };
+    
+    const commercial = packData.summary?.commercial || {
+      totalPackCost: ((packData.r_s || 0) * (packData.r_p || 0) * (packData.cost_per_cell || 0)),
+      costPerKwh: 0,
+    };
+    
+    // Get drive cycle info from simulation metadata
+    const driveCycleName = simMetadata.drive_cycle_name || simMetadata.metadata?.drive_cycle_name || "Unknown";
+    const duration = simMetadata.duration || simMetadata.metadata?.duration || 0;
+    const frequency = simMetadata.frequency || simMetadata.metadata?.frequency || 1;
+    
+    // Get initial conditions from simulation metadata
+    const initialConditions = simMetadata.initial_conditions || packData.initial_conditions || {
+      default: {
+        temperature: 298.15,
+        soc: 100,
+        soh: 1.0,
+        dcir: 1.0,
+      }
+    };
+    
+    const reportData = {
+      simulationId: simulationId,
+      packInfo: {
+        cellDetails: {
+          formFactor: cellData.form_factor || "cylindrical",
+          dimensions: {
+            radius: cellData.radius,
+            height: cellData.height,
+            length: cellData.length,
+            width: cellData.width,
+          },
+          capacity: cellData.capacity || 0,
+          voltage: { 
+            max: cellData.upper_voltage || 4.2, 
+            min: cellData.lower_voltage || 2.5 
+          },
+          mass: cellData.m_cell || 0,
+        },
+        packDetails: {
+          electrical,
+          mechanical,
+          commercial,
+        },
+      },
+      driveCycleInfo: {
+        name: driveCycleName,
+        duration: duration,
+        frequency: frequency,
+      },
+      initialConditions: {
+        default: {
+          temperature: initialConditions.default?.temperature || 298.15,
+          soc: initialConditions.default?.soc || 100,
+          soh: initialConditions.default?.soh || 1.0,
+          dcir: initialConditions.default?.dcir || 1.0,
+        },
+        varying: initialConditions.varying || [],
+      },
+      simulationResults: {
+        summary: summary,
+        total_points: simulationData.total_points,
+        data: simulationData.data,
+      },
+    };
+    
+    await generatePDFReport(reportData);
+    
+  } catch (err) {
+    console.error("❌ Failed to generate report:", err);
+    const errorMsg = err instanceof Error ? err.message : "Failed to generate PDF report";
+    setError(errorMsg);
+  }
+}
 
   const handleStopSimulation = async () => {
     if (!simulationId || isStopping) return
@@ -528,6 +676,14 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
               disabled={!isSimulationComplete && simulationStatus !== "stopped"}
             >
               📥 Export CSV
+            </Button>
+            <Button 
+              onClick={handleReport} 
+              variant="outline" 
+              className="gap-2 flex-1 sm:flex-none bg-transparent"
+              disabled={!isSimulationComplete && simulationStatus !== "stopped"}
+            >
+              📋 Download Report
             </Button>
             <Button 
               onClick={handleRefresh} 
