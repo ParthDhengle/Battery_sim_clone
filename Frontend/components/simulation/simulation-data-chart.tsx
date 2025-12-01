@@ -79,11 +79,6 @@ export function SimulationDataChart({
   const [initialZoomDomain, setInitialZoomDomain] = useState<{ min: number; max: number } | null>(null)
   const [pinchFraction, setPinchFraction] = useState<number | null>(null)
   const [activePinchKey, setActivePinchKey] = useState<string | null>(null)
-  const chartRefs = useRef<Record<string, HTMLDivElement | null>>({
-    voltage_current: null,
-    soc: null,
-    qgen: null,
-  })
 
   const { minTime, maxTime } = useMemo(() => {
     if (data.length === 0) return { minTime: 0, maxTime: 0 }
@@ -120,30 +115,6 @@ export function SimulationDataChart({
     setRefAreaRight((prev) => ({ ...prev, [key]: null }))
   }
 
-  const handleWheel = (key: string) => (e: WheelEvent) => {
-    e.preventDefault()
-    const ref = chartRefs.current[key]
-    if (!ref) return
-    const rect = ref.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const width = rect.width
-    if (x < 0 || x > width) return
-    const fraction = x / width
-    const currentDomain = zoomDomains[key] || { min: minTime, max: maxTime }
-    const range = currentDomain.max - currentDomain.min
-    const zoomAmount = e.deltaY < 0 ? 0.9 : 1.1
-    const newRange = range * zoomAmount
-    const delta = newRange - range
-    const addLeft = delta * fraction
-    const addRight = delta * (1 - fraction)
-    let newMin = currentDomain.min - addLeft
-    let newMax = currentDomain.max + addRight
-    if (newMin < minTime) newMin = minTime
-    if (newMax > maxTime) newMax = maxTime
-    if (newMin >= newMax) return // prevent inversion
-    setZoomDomains((prev) => ({ ...prev, [key]: { min: newMin, max: newMax } }))
-  }
-
   const handleTouchStart = (key: string) => (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       e.preventDefault()
@@ -151,13 +122,11 @@ export function SimulationDataChart({
       setInitialPinchDistance(dist)
       setInitialZoomDomain(zoomDomains[key] || { min: minTime, max: maxTime })
       const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2
-      const ref = chartRefs.current[key]
-      if (ref) {
-        const rect = ref.getBoundingClientRect()
-        const x = centerX - rect.left
-        const fraction = x / rect.width
-        setPinchFraction(fraction)
-      }
+      const target = e.currentTarget as HTMLElement
+      const rect = target.getBoundingClientRect()
+      const x = centerX - rect.left
+      const fraction = x / rect.width
+      setPinchFraction(fraction)
       setActivePinchKey(key)
     }
   }
@@ -188,23 +157,57 @@ export function SimulationDataChart({
     setActivePinchKey(null)
   }
 
-  useEffect(() => {
-    Object.keys(chartRefs.current).forEach((key) => {
-      const ref = chartRefs.current[key]
-      if (ref) {
-        ref.addEventListener("wheel", handleWheel(key), { passive: false })
-      }
-    })
+  const ChartWrapper = ({ chartKey, children }: { chartKey: string; children: React.ReactNode }) => {
+    const chartRef = useRef<HTMLDivElement>(null)
 
-    return () => {
-      Object.keys(chartRefs.current).forEach((key) => {
-        const ref = chartRefs.current[key]
-        if (ref) {
-          ref.removeEventListener("wheel", handleWheel(key))
-        }
-      })
-    }
-  }, [minTime, maxTime, zoomDomains]) // Dependencies to re-attach if needed
+    useEffect(() => {
+      const ref = chartRef.current
+      if (!ref) return
+
+      const handler = (e: WheelEvent) => {
+        e.preventDefault()
+        const rect = ref.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const width = rect.width
+        if (x < 0 || x > width) return
+        const fraction = x / width
+
+        setZoomDomains((prev) => {
+          const currentDomain = prev[chartKey] || { min: minTime, max: maxTime }
+          const range = currentDomain.max - currentDomain.min
+          const zoomAmount = e.deltaY < 0 ? 0.9 : 1.1
+          const newRange = range * zoomAmount
+          const delta = newRange - range
+          const addLeft = delta * fraction
+          const addRight = delta * (1 - fraction)
+          let newMin = currentDomain.min - addLeft
+          let newMax = currentDomain.max + addRight
+          if (newMin < minTime) newMin = minTime
+          if (newMax > maxTime) newMax = maxTime
+          if (newMin >= newMax) return prev
+          return { ...prev, [chartKey]: { min: newMin, max: newMax } }
+        })
+      }
+
+      ref.addEventListener("wheel", handler, { passive: false })
+
+      return () => {
+        ref.removeEventListener("wheel", handler)
+      }
+    }, [chartKey, minTime, maxTime])
+
+    return (
+      <div
+        ref={chartRef}
+        onTouchStart={handleTouchStart(chartKey)}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ width: "100%", height: 380, touchAction: "none" }}
+      >
+        {children}
+      </div>
+    )
+  }
 
   const metricConfig: Record<string, SingleConfig | CombinedConfig> = {
     voltage_current: {
@@ -241,13 +244,7 @@ export function SimulationDataChart({
       }
 
       return (
-        <div
-          ref={(el) => { chartRefs.current[key] = el }}
-          onTouchStart={handleTouchStart(key)}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          style={{ width: "100%", height: 380, touchAction: "none" }}
-        >
+        <ChartWrapper chartKey={key}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
@@ -320,7 +317,7 @@ export function SimulationDataChart({
               )}
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </ChartWrapper>
       )
     } else {
       // Single config
@@ -340,13 +337,7 @@ export function SimulationDataChart({
       }
 
       return (
-        <div
-          ref={(el) => { chartRefs.current[key] = el }}
-          onTouchStart={handleTouchStart(key)}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          style={{ width: "100%", height: 380, touchAction: "none" }}
-        >
+        <ChartWrapper chartKey={key}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
@@ -395,7 +386,7 @@ export function SimulationDataChart({
               )}
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </ChartWrapper>
       )
     }
   }

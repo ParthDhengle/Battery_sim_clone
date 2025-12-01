@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { getPacks,getPack } from "@/lib/api/packs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { getPacksFromStorage } from "@/lib/api/get-packs-storage"
 
 interface PackOption {
   value: string
@@ -16,28 +17,6 @@ export interface PackSelectorProps {
   onValueChange: (value: string) => void
 }
 
-async function getPacksFromStorage(): Promise<PackOption[]> {
-  if (typeof window === "undefined") return []
-  try {
-    const packs = await getPacks()
-    return packs
-      .filter((pack: any) => pack._id || pack.id)
-      .map((pack: any) => ({
-        value: String(pack._id ?? pack.id),
-        label: pack.name,
-        specs: {
-          config: `${pack.r_s || 0}s${pack.r_p || 0}p`,
-          connection: pack.connection_type,
-        },
-      }))
-  } catch (error) {
-    console.error("Failed to fetch packs:", error)
-    return [
-      { value: "series-parallel-10s5p", label: "10S5P Pack (Mock)", specs: { config: "10s5p", energy: "150Wh" } },
-      { value: "series-parallel-20s10p", label: "20S10P Pack (Mock)", specs: { config: "20s10p", energy: "300Wh" } },
-    ]
-  }
-}
 
 export function PackSelector({ value, onValueChange }: PackSelectorProps) {
   const [packs, setPacks] = useState<PackOption[]>([])
@@ -78,26 +57,32 @@ export function PackSelector({ value, onValueChange }: PackSelectorProps) {
     <div className="space-y-2">
       <label className="text-sm font-medium text-foreground">Battery Pack Configuration</label>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger>
-          <SelectValue placeholder="Select a pack configuration" />
-        </SelectTrigger>
-        <SelectContent>
-          {packs.map((pack) => (
-            <SelectItem key={pack.value} value={pack.value}>
-              <div className="flex flex-col">
-                <span>{pack.label}</span>
-                {pack.specs && (
-                  <span className="text-xs text-muted-foreground">
-                    {Object.entries(pack.specs)
-                      .map(([k, v]) => `${k}: ${v}`)
-                      .join(", ")}
-                  </span>
-                )}
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+  <SelectTrigger className="w-full">
+    <SelectValue placeholder="Select pack">
+      {value 
+        ? packs.find((p) => p.value === value)?.label 
+        : "Select pack"}
+    </SelectValue>
+  </SelectTrigger>
+
+  <SelectContent className="w-[var(--radix-select-trigger-width)]">
+    {packs.map((pack) => (
+      <SelectItem key={pack.value} value={pack.value}>
+        <div className="flex flex-col">
+          <span>{pack.label}</span>
+          {pack.specs && (
+            <span className="text-xs text-muted-foreground whitespace-normal break-words">
+              {Object.entries(pack.specs)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ")}
+            </span>
+          )}
+        </div>
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
       {packError && (
         <Alert variant="destructive">
           <AlertDescription>{packError}</AlertDescription>

@@ -199,15 +199,14 @@ export function PackBuilder() {
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Battery className="w-5 h-5" />
-            {packId ? "Edit Pack" : "Create Pack"}
-          </CardTitle>
-          <CardDescription>Define your battery pack geometry and electrical configuration</CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="pb-6 border-b mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Battery className="w-6 h-6" />
+          {packId ? "Edit Pack" : "Create Pack"}
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">Define your battery pack geometry and electrical configuration</p>
+      </div>
+
 
       <PackBasicInfo
         packName={packName}

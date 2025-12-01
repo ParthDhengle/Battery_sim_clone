@@ -110,11 +110,11 @@ export default function Packs() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Total Cells:</span>
-                    <p className="font-medium">{pack.summary.mechanical.totalCells}</p>
+                    <p className="font-medium">{pack.summary.mechanical.total_cells}</p>
                   </div>
                   <div className="col-span-2">
                     <span className="text-muted-foreground">Connection:</span>
-                    <p className="font-medium">{pack.connection_type}</p>
+                    <p className="font-medium">{pack.connection_type=='row_series_column_parallel'? 'Row Parallel' : 'Column Parallel' }</p>
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">

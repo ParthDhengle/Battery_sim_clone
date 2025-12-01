@@ -12,6 +12,7 @@ from pathlib import Path
 import asyncio
 import concurrent.futures
 from app.models.simulation import InitialConditions, VaryingCellsCondition
+from fastapi.responses import StreamingResponse
 
 BASE_DIR = Path(__file__).parent.parent.parent
 CORE_CODE_DIR = BASE_DIR / "Core-python code"
@@ -19,6 +20,7 @@ sys.path.append(str(CORE_CODE_DIR))
 STATIC_CSV_PATH = CORE_CODE_DIR / "simulation_results.csv"
 router = APIRouter(prefix="/simulations", tags=["simulations"])
 os.makedirs("simulations", exist_ok=True)
+
 # -----------------------------------------------------
 # HELPERS
 # -----------------------------------------------------
@@ -31,20 +33,20 @@ async def inject_cell_config(pack_config: dict) -> dict:
         raise ValueError("Invalid cell_id format")
     cell_doc = await db.cells.find_one({"_id": ObjectId(cell_id)})
     if not cell_doc:
-        raise ValueError("Cell not found") # This will be caught and shown as "cell not configured for this pack"
+        raise ValueError("Cell not found")
     pack_config["cell"] = {
         "formFactor": cell_doc.get("formFactor", "cylindrical"),
         "dims": cell_doc.get("dims", {}),
         "capacity": cell_doc.get("capacity", 0),
         "columbic_efficiency": cell_doc.get("columbic_efficiency", 1.0),
         "m_cell": cell_doc.get("cell_weight", 0),
-        "m_jellyroll": cell_doc.get("cell_weight", 0) * 0.85, # Assuming 85%
+        "m_jellyroll": cell_doc.get("cell_weight", 0) * 0.85,
         "cell_voltage_upper_limit": cell_doc.get("cell_upper_voltage_cutoff", 0),
         "cell_voltage_lower_limit": cell_doc.get("cell_lower_voltage_cutoff", 0),
     }
     return pack_config
 
-def _normalize_pack_for_core(pack: dict) -> dict:
+def _normalize_pack_for_core(pack: dict, initial_conditions: dict = None) -> dict:
     """Normalize API/DB pack (snake_case) into core engine schema (camelCase)."""
     if not isinstance(pack, dict):
         return pack
@@ -70,17 +72,16 @@ def _normalize_pack_for_core(pack: dict) -> dict:
             "z_mode": lyr.get("z_mode", "explicit"),
             "z_center": lyr.get("z_center", 0),
         })
-    init = pack.get("initial_conditions", {})
-    # UPDATED: Handle varying_conditions with cell_indices array
-    varying_conditions = []  # For new structure
-    # Flatten for legacy varying_cells if needed, but use varying_conditions
-    for vc in init.get("varying_conditions", []) or []:
-        varying_conditions.append({
-            "cell_indices": vc.get("cell_indices", []),  # Array of indices
-            "temperature": float(vc.get("temperature", init.get("temperature", 300) or 300)),
-            "soc": float(vc.get("soc", init.get("soc", 1) or 1)),
-            "soh": float(vc.get("soh", init.get("soh", 1) or 1)),
-            "dcir_aging_factor": float(vc.get("dcir_aging_factor", init.get("dcir_aging_factor", 1) or 1)),
+    init = initial_conditions or {}
+    varying_conditions_normalized = []
+    
+    for vc in init.get("varying_conditions", []):
+        varying_conditions_normalized.append({
+            "cell_ids": vc.get("cell_ids", []),
+            "temperature": float(vc.get("temperature", init.get("temperature", 300))),
+            "soc": float(vc.get("soc", init.get("soc", 1))),
+            "soh": float(vc.get("soh", init.get("soh", 1))),
+            "dcir_aging_factor": float(vc.get("dcir_aging_factor", init.get("dcir_aging_factor", 1))),
         })
     return {
         "cell": norm_cell,
@@ -93,24 +94,58 @@ def _normalize_pack_for_core(pack: dict) -> dict:
         "z_pitch": pack.get("z_pitch"),
         "layers": layers,
         "initial_conditions": {
-            "temperature": float(init.get("temperature", 300) or 300),
-            "soc": float(init.get("soc", 1) or 1),
-            "soh": float(init.get("soh", 1) or 1),
-            "dcir_aging_factor": float(init.get("dcir_aging_factor", 1) or 1),
-            "varying_conditions": varying_conditions,  # UPDATED: Use varying_conditions
+            "temperature": float(init.get("temperature", 300)),
+            "soc": float(init.get("soc", 1)),
+            "soh": float(init.get("soh", 1)),
+            "dcir_aging_factor": float(init.get("dcir_aging_factor", 1)),
+            "varying_conditions": varying_conditions_normalized,
         },
     }
-# -----------------------------------------------------
-# BACKGROUND SIMULATION EXECUTION
-# -----------------------------------------------------
-async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_config: dict, sim_id: str, sim_name: str, sim_type: str, test: bool = False, initial_conditions: dict = None):
-    try:
-        # Inject cell_config into pack_config
-        pack_config = await inject_cell_config(pack_config)
 
+def compute_partial_summary(df: pd.DataFrame) -> dict:
+    """Compute summary from partial data."""
+    if df.empty:
+        return {"end_soc": None, "max_temp": None, "capacity_fade": None}
+    
+    try:
+        end_soc = float(df["SOC"].iloc[-1])
+        start_soc = float(df["SOC"].iloc[0])
+        soc_diff = max(0, start_soc - end_soc)
+        max_qgen = float(df["Qgen"].max())
+        max_temp = round(max_qgen * 0.01 + 26.85, 2)
+        capacity_fade = round(min(100, soc_diff * 100), 3)
+        
+        summary = {
+            "end_soc": round(end_soc, 4),
+            "max_temp": max_temp,
+            "capacity_fade": capacity_fade
+        }
+        print(f"📊 Computed summary: SOC={end_soc:.4f}, Temp={max_temp}°C, Fade={capacity_fade}%")
+        return summary
+    except Exception as e:
+        print(f"⚠️ Error computing partial summary: {e}")
+        return {"end_soc": None, "max_temp": None, "capacity_fade": None}
+
+# -----------------------------------------------------
+# BACKGROUND SIMULATION EXECUTION WITH PROGRESS
+# -----------------------------------------------------
+async def run_sim_background(
+    pack_config: dict, 
+    drive_df: pd.DataFrame, 
+    model_config: dict, 
+    sim_id: str, 
+    sim_name: str, 
+    sim_type: str, 
+    test: bool = False, 
+    initial_conditions: dict = None
+):
+    try:
+        pack_config = await inject_cell_config(pack_config)
+        
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-        Path(csv_path).touch() # creates empty file so endpoint can see it
+        Path(csv_path).touch()
+        
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
             {"$set": {
@@ -120,56 +155,37 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
                 "metadata.progress": 0.0
             }}
         )
+        
         if test:
-            # Test mode: copy static CSV
+            # TEST MODE: Copy static CSV
             if os.path.exists(STATIC_CSV_PATH):
                 shutil.copy(STATIC_CSV_PATH, csv_path)
                 print(f"✅ TEST MODE: Copied static CSV → {csv_path}")
             else:
                 raise FileNotFoundError(f"Static test CSV not found at {STATIC_CSV_PATH}")
         else:
-            print("⚡ Running full simulation...")
-            # UPDATED: Merge initial_conditions if provided (now with varying_conditions)
-            if initial_conditions:
-                pack_config["initial_conditions"] = initial_conditions
-            normalized_pack = _normalize_pack_for_core(pack_config)
+            # FULL SIMULATION MODE
+            print("⚡ Running full simulation with progress tracking...")
+            normalized_pack = _normalize_pack_for_core(pack_config, initial_conditions)
             setup = adp.create_setup_from_configs(normalized_pack, drive_df, model_config)
-         
-            # NEW: Compute expected_rows for metadata
-            N_cells = len(setup['cells'])
-            time_steps = setup['time_steps']
-            expected_rows = N_cells * time_steps
-         
-            # --- NEW: Run the blocking simulation in a separate process ---
+            
+            # Run simulation with progress callback
             loop = asyncio.get_running_loop()
             with concurrent.futures.ProcessPoolExecutor() as executor:
                 csv_path = await loop.run_in_executor(
                     executor,
-                    aes.run_electrical_solver, # The sync function
-                    setup, # First arg: setup
-                    csv_path, # Second arg: filename
-                    sim_id # Third arg: sim_id for progress
+                    aes.run_electrical_solver_with_progress,
+                    setup,
+                    csv_path,
+                    sim_id  # Pass sim_id for progress updates
                 )
-            # --- END NEW ---
-         
+            
             print(f"✅ Simulation complete → Output saved at {csv_path}")
+        
+        # Compute final summary
         df = pd.read_csv(csv_path)
-        summary = {}
-        try:
-            end_soc = float(df["SOC"].iloc[-1])
-            start_soc = float(df["SOC"].iloc[0])
-            soc_diff = max(0, start_soc - end_soc)
-            total_energy = (
-                df["energy_throughput"].iloc[-1]
-                if "energy_throughput" in df.columns
-                else np.trapz(df["Vterm"] * df["I_module"], dx=df["dt"]) / 3600.0
-            )
-            capacity_fade = round(min(100, soc_diff * 100), 3)
-            max_temp = round(float(df["Qgen"].max() * 0.01 + 26.85), 2)
-            summary = {"end_soc": end_soc, "max_temp": max_temp, "capacity_fade": capacity_fade}
-        except Exception as e:
-            print("⚠️ Could not compute summary:", e)
-            summary = {"end_soc": None, "max_temp": None, "capacity_fade": None}
+        summary = compute_partial_summary(df)
+        
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
             {"$set": {
@@ -178,41 +194,43 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
                 "metadata.summary": summary,
                 "metadata.name": sim_name,
                 "metadata.type": sim_type,
+                "metadata.progress": 100.0,
                 "updated_at": datetime.utcnow()
             }}
         )
         print(f"✅ Simulation {sim_name} ({sim_type}) completed and saved.")
+        
     except Exception as e:
         print("❌ ERROR in run_sim_background:", e)
+        import traceback
+        traceback.print_exc()
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
-            {"$set": {"status": "failed", "error": str(e)}}
+            {"$set": {
+                "status": "failed",
+                "error": str(e),
+                "updated_at": datetime.utcnow()
+            }}
         )
+
 # -----------------------------------------------------
 # START SIMULATION ENDPOINT
 # -----------------------------------------------------
 @router.post("/run", status_code=202)
 async def run_simulation(request: dict, background_tasks: BackgroundTasks, test: bool = Query(False)):
-    """
-    Starts a simulation.
-    Request body must include:
-      - name
-      - type
-      - packConfig
-      - modelConfig
-      - driveCycleCsv
-      - initialConditions (UPDATED: with varying_conditions and cell_indices array)
-    """
+    """Starts a simulation in the background."""
     pack_config = request.get("packConfig")
     model_config = request.get("modelConfig")
     drive_cycle_csv = request.get("driveCycleCsv")
-    initial_conditions = request.get("initialConditions")  # UPDATED
+    initial_conditions = model_config.get("initial_conditions") if model_config else None
     sim_name = request.get("name", "Untitled Simulation")
     sim_type = request.get("type", "Generic")
+    
     if not pack_config or not model_config or not drive_cycle_csv:
         raise HTTPException(status_code=400, detail="Missing required configurations")
-    if not initial_conditions:  # Validate
-        raise HTTPException(status_code=400, detail="Missing initialConditions")
+    if not initial_conditions:
+        raise HTTPException(status_code=400, detail="Missing initialConditions in modelConfig")
+    
     try:
         drive_df = pd.read_csv(io.StringIO(drive_cycle_csv))
         if "Time" not in drive_df.columns or "Current" not in drive_df.columns:
@@ -220,26 +238,90 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks, test:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid drive cycle CSV: {e}")
     
-    # UPDATED: Parse and validate initial_conditions with new schema
     try:
         initial_conditions_obj = InitialConditions(**initial_conditions)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid initialConditions: {e}")
     
-    # UPDATED: Store with new structure
     sim_doc = {
         "status": "pending",
         "created_at": datetime.utcnow(),
-        "initial_conditions": initial_conditions_obj.model_dump(),  # Now includes varying_conditions
-        "metadata": {"name": sim_name, "type": sim_type, "progress": 0.0},
+        "updated_at": datetime.utcnow(),
+        "initial_conditions": initial_conditions_obj.model_dump(),
+        "metadata": {
+            "name": sim_name,
+            "type": sim_type,
+            "progress": 0.0
+        },
     }
     result = await db.simulations.insert_one(sim_doc)
     sim_id = str(result.inserted_id)
-    background_tasks.add_task(run_sim_background, pack_config, drive_df, model_config, sim_id, sim_name, sim_type, test, initial_conditions_obj.model_dump())  # Pass new structure
+    
+    background_tasks.add_task(
+        run_sim_background,
+        pack_config,
+        drive_df,
+        model_config,
+        sim_id,
+        sim_name,
+        sim_type,
+        test,
+        initial_conditions_obj.model_dump()
+    )
+    
     return {"simulation_id": sim_id, "status": "started"}
 
 # -----------------------------------------------------
-# LIST ALL SIMULATIONS (Library View)
+# STOP SIMULATION ENDPOINT
+# -----------------------------------------------------
+@router.post("/{sim_id}/stop")
+async def stop_simulation(sim_id: str):
+    """Stop a running simulation and mark it as stopped."""
+    if not ObjectId.is_valid(sim_id):
+        raise HTTPException(status_code=400, detail="Invalid simulation ID")
+    
+    sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    
+    if sim.get("status") not in ["running", "pending"]:
+        raise HTTPException(status_code=400, detail="Simulation is not running")
+    
+    # Update status to stopped
+    await db.simulations.update_one(
+        {"_id": ObjectId(sim_id)},
+        {"$set": {
+            "status": "stopped",
+            "updated_at": datetime.utcnow(),
+            "metadata.stopped_at": datetime.utcnow()
+        }}
+    )
+    
+    # Compute partial summary if CSV exists
+    csv_path = sim.get("file_csv")
+    partial_summary = {}
+    if csv_path and os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+        try:
+            df = pd.read_csv(csv_path)
+            partial_summary = compute_partial_summary(df)
+            await db.simulations.update_one(
+                {"_id": ObjectId(sim_id)},
+                {"$set": {"metadata.partial_summary": partial_summary}}
+            )
+        except Exception as e:
+            print(f"⚠️ Could not compute partial summary: {e}")
+    
+    print(f"🛑 Simulation {sim_id} stopped by user")
+    
+    return {
+        "simulation_id": sim_id,
+        "status": "stopped",
+        "message": "Simulation stopped successfully",
+        "partial_summary": partial_summary
+    }
+
+# -----------------------------------------------------
+# LIST ALL SIMULATIONS
 # -----------------------------------------------------
 @router.get("/all")
 async def list_simulations():
@@ -255,7 +337,7 @@ async def list_simulations():
     } for s in sims]
 
 # -----------------------------------------------------
-# GET SIMULATION STATUS
+# GET SIMULATION STATUS WITH PROGRESS
 # -----------------------------------------------------
 @router.get("/{sim_id}")
 async def get_simulation_status(sim_id: str):
@@ -264,67 +346,95 @@ async def get_simulation_status(sim_id: str):
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
+    
+    # Check if CSV has data and compute partial summary
+    csv_path = sim.get("file_csv")
+    if csv_path and os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+        try:
+            df = pd.read_csv(csv_path)
+            if not df.empty and sim.get("status") == "running":
+                partial_summary = compute_partial_summary(df)
+                sim["metadata"]["partial_summary"] = partial_summary
+        except Exception as e:
+            print(f"⚠️ Could not read CSV for partial summary: {e}")
+    
     sim["simulation_id"] = str(sim["_id"])
     del sim["_id"]
-    return sim  # Now includes initial_conditions with new structure
+    return sim
 
 # -----------------------------------------------------
-# GET SIMULATION DATA
+# GET SIMULATION DATA WITH SAMPLING
 # -----------------------------------------------------
 @router.get("/{sim_id}/data")
-async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "full", max_points: int = 5000):
+async def get_simulation_data(
+    sim_id: str,
+    cell_id: int = 0,
+    time_range: str = "full",
+    max_points: int = 5000
+):
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
+    
     csv_path = sim.get("file_csv")
     if not csv_path or not os.path.exists(csv_path):
-        # Fallback for very old simulations (should never happen now)
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
+    
     if not os.path.exists(csv_path):
         raise HTTPException(status_code=500, detail=f"Simulation CSV not found for {sim_id}")
-    # <<< NEW: If file exists but is empty → still "not ready" >>>
+    
     if os.path.getsize(csv_path) == 0:
-        raise HTTPException(status_code=500, detail="Simulation data not ready yet. Please wait.")
-    # <<< END NEW >>>
+        raise HTTPException(status_code=202, detail="Simulation data not ready yet. Please wait.")
+    
     try:
         df = pd.read_csv(csv_path, usecols=["cell_id", "time_step", "Vterm", "SOC", "Qgen", "dt", "I_module"])
         print(f"✅ Loaded CSV ({len(df)} rows, {df['cell_id'].nunique()} cells)")
+        
         if cell_id not in df["cell_id"].values:
             cell_id = int(df["cell_id"].min())
             print(f"⚠️ Requested cell {cell_id} not found — defaulted to first cell")
+        
         cell_df = df[df["cell_id"] == cell_id].sort_values("time_step").reset_index(drop=True)
         time_cum = np.cumsum(cell_df["dt"].fillna(1.0).values)
+        
         low, high = 0.0, float(time_cum[-1])
         if time_range != "full":
             try:
                 low, high = map(float, time_range.split("-"))
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid time_range format")
+        
         mask = (time_cum >= low) & (time_cum <= high)
         cell_df, time_cum = cell_df.loc[mask], time_cum[mask]
+        
         n = len(cell_df)
         if n == 0:
             raise HTTPException(status_code=400, detail="No data in selected time range")
+        
+        # Smart sampling to keep max_points
         if n > max_points:
             idx = np.linspace(0, n - 1, max_points, dtype=int)
             cell_df, time_cum = cell_df.iloc[idx], time_cum[idx]
+        
         sampling_ratio = max(1, int(n / len(cell_df)))
+        
         data = [{
-            "time": int(round(float(time_cum[i]))), # FIXED: Round to nearest integer (no decimals)
+            "time": int(round(float(time_cum[i]))),
             "voltage": float(getattr(row, "Vterm", 0.0)),
             "soc": float(getattr(row, "SOC", 1.0)),
             "current": float(getattr(row, "I_module", 0.0)),
             "qgen": float(getattr(row, "Qgen", 0.0)),
             "temp": 26.85
         } for i, row in enumerate(cell_df.itertuples(index=False))]
+        
         print(f"✅ Returning {len(data)} points for cell {cell_id}")
-      
-        # NEW: Get partial/full summary from DB
+        
+        # Get summary (partial or final)
         summary = sim.get("metadata", {}).get("summary") or sim.get("metadata", {}).get("partial_summary", {})
         is_partial = sim.get("status") != "completed"
-      
+        
         return {
             "simulation_id": sim_id,
             "cell_id": cell_id,
@@ -333,10 +443,49 @@ async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "
             "sampled_points": len(data),
             "sampling_ratio": sampling_ratio,
             "data": data,
-            "summary": summary, # NEW: Include in response
-            "is_partial": is_partial
+            "summary": summary,
+            "is_partial": is_partial,
+            "status": sim.get("status"),
+            "progress": sim.get("metadata", {}).get("progress", 0.0)
         }
+        
     except Exception as e:
         import traceback
         print("❌ ERROR in get_simulation_data:", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error reading simulation data: {e}")
+
+# -----------------------------------------------------
+# EXPORT SIMULATION DATA
+# -----------------------------------------------------
+@router.get("/{sim_id}/export")
+async def export_simulation_data(sim_id: str):
+    """Export simulation data as CSV file."""
+    if not ObjectId.is_valid(sim_id):
+        raise HTTPException(status_code=400, detail="Invalid simulation ID")
+    
+    sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    
+    csv_path = sim.get("file_csv")
+    if not csv_path or not os.path.exists(csv_path):
+        csv_path = os.path.join("simulations", f"{sim_id}.csv")
+    
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="Simulation CSV not found")
+    
+    if os.path.getsize(csv_path) == 0:
+        raise HTTPException(status_code=400, detail="Simulation data not ready yet")
+    
+    def iter_file():
+        with open(csv_path, 'rb') as f:
+            yield from f
+    
+    sim_name = sim.get("metadata", {}).get("name", "simulation")
+    filename = f"{sim_name.replace(' ', '_')}_{sim_id[:8]}.csv"
+    
+    return StreamingResponse(
+        iter_file(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

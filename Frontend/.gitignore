@@ -34,7 +34,6 @@ BatteryData_SOH1.json
 /__pycache__
 
 Simulation_results/
-drive_cycles/
 
 simulation_results.csv
 simulation_plot.png

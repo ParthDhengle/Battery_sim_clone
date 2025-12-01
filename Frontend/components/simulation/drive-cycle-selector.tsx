@@ -26,6 +26,57 @@ export interface DriveCycleSelectorProps {
   onValueChange: (value: string) => void
 }
 
+// Helper function to clear all drive cycle related storage
+function clearAllDriveCycles() {
+  const keysToRemove: string[] = []
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i)
+    if (key && (key.startsWith("csv:") || key.startsWith("csv-preview:"))) {
+      keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach((key) => sessionStorage.removeItem(key))
+}
+
+// Helper function to fetch drive cycle CSV from public folder
+async function fetchDriveCycleData(filename: string): Promise<{ full: string; preview: string } | null> {
+  try {
+    const response = await fetch(`/drive_cycles/${filename}`)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${filename}`)
+    }
+    const fullText = await response.text()
+    const lines = fullText.split(/\r?\n/)
+    
+    // Keep full data for backend
+    // Create preview with max 5000 samples for frontend display
+    const MAX_PREVIEW_ROWS = 5000
+    let previewText = fullText
+    
+    if (lines.length > MAX_PREVIEW_ROWS + 1) { // +1 for header
+      const header = lines[0]
+      const sampledLines = [header]
+      
+      // Sample evenly across the dataset
+      const step = Math.floor((lines.length - 1) / MAX_PREVIEW_ROWS)
+      for (let i = 1; i < lines.length; i += step) {
+        if (sampledLines.length >= MAX_PREVIEW_ROWS + 1) break
+        sampledLines.push(lines[i])
+      }
+      
+      previewText = sampledLines.join('\n')
+    }
+    
+    return {
+      full: fullText,
+      preview: previewText
+    }
+  } catch (error) {
+    console.error(`Error fetching drive cycle ${filename}:`, error)
+    return null
+  }
+}
+
 async function getDriveCyclesFromStorage(): Promise<DriveOption[]> {
   if (typeof window === "undefined") return []
   
@@ -54,14 +105,24 @@ async function getDriveCyclesFromStorage(): Promise<DriveOption[]> {
     console.error("Failed to fetch drive cycles:", error)
     return [
       { 
-        value: "urban-dynamometer", 
-        label: "Urban Dynamometer Cycle", 
-        specs: { duration: "1200s", avgSpeed: "32kmh" } 
+        value: "drive_cycle1.csv", 
+        label: "Drive Cycle 1", 
+        specs: {} 
       },
       {
-        value: "highway-fuel-economy",
-        label: "Highway Fuel Economy Cycle",
-        specs: { duration: "765s", avgSpeed: "77kmh" },
+        value: "drive_cycle2.csv",
+        label: "Drive Cycle 2",
+        specs: {},
+      },
+      {
+        value: "drive_cycle3.csv",
+        label: "Drive Cycle 3",
+        specs: {},
+      },
+      {
+        value: "drive_cycle4.csv",
+        label: "Drive Cycle 4",
+        specs: {},
       },
     ]
   }
@@ -89,17 +150,13 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
     }
   }
 
-  const isDbCycleSelected = value && !value.endsWith(".csv")
-  const isCsvUploaded = value && value.endsWith(".csv")
+  const predefinedCycles = ['drive_cycle1.csv', 'drive_cycle2.csv', 'drive_cycle3.csv', 'drive_cycle4.csv']
+  const isDbCycleSelected = value && predefinedCycles.includes(value)
+  const isCsvUploaded = value && value.endsWith(".csv") && !predefinedCycles.includes(value)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    // Clear previous upload if exists
-    if (isCsvUploaded) {
-      sessionStorage.removeItem(`csv:${value}`)
-    }
 
     setUploadError(null)
     setIsProcessing(true)
@@ -138,6 +195,9 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
         throw new Error("No valid data rows found in CSV")
       }
 
+      // Clear all previous drive cycle storage
+      clearAllDriveCycles()
+
       // Store CSV content in sessionStorage
       sessionStorage.setItem(`csv:${file.name}`, text)
 
@@ -157,9 +217,7 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
   }
 
   const handleRemoveCsv = () => {
-    if (value && value.endsWith(".csv")) {
-      sessionStorage.removeItem(`csv:${value}`)
-    }
+    clearAllDriveCycles()
     setUploadedFile(null)
     setUploadError(null)
     onValueChange("")
@@ -169,15 +227,47 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
   }
 
   const handleRemoveDbSelection = () => {
+    clearAllDriveCycles()
     onValueChange("")
   }
 
-  const handleDbCycleSelect = (selectedValue: string) => {
+  const handleDbCycleSelect = async (selectedValue: string) => {
     // Remove any uploaded CSV first
     if (isCsvUploaded) {
       handleRemoveCsv()
     }
-    onValueChange(selectedValue)
+    
+    // Clear all previous storage if changing selection
+    if (value !== selectedValue) {
+      clearAllDriveCycles()
+    }
+    
+    // If it's one of the predefined CSV files, fetch and store it
+    if (predefinedCycles.includes(selectedValue)) {
+      setIsProcessing(true)
+      setUploadError(null)
+      
+      try {
+        const data = await fetchDriveCycleData(selectedValue)
+        if (data) {
+          // Store both full and preview data
+          sessionStorage.setItem(`csv:${selectedValue}`, data.full)
+          sessionStorage.setItem(`csv-preview:${selectedValue}`, data.preview)
+          console.log(`Successfully loaded ${selectedValue} from public folder`)
+          // Only update the value after data is stored
+          onValueChange(selectedValue)
+        } else {
+          throw new Error(`Failed to load ${selectedValue}`)
+        }
+      } catch (error) {
+        console.error('Error loading drive cycle:', error)
+        setUploadError(`Failed to load ${selectedValue}. Please try again.`)
+      } finally {
+        setIsProcessing(false)
+      }
+    } else {
+      onValueChange(selectedValue)
+    }
   }
 
   if (loading) {
@@ -214,7 +304,7 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
             >
               <SelectTrigger
                 id="cycle-select"
-                className={isCsvUploaded ? "opacity-50" : ""}
+                className={isCsvUploaded || isProcessing ? "opacity-50" : ""}
               >
                 <SelectValue placeholder="Choose a drive cycle..." />
               </SelectTrigger>
@@ -242,7 +332,7 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
                 )}
               </SelectContent>
             </Select>
-            {isDbCycleSelected && (
+            {isDbCycleSelected && !isProcessing && (
               <Button
                 variant="outline"
                 size="icon"
@@ -254,7 +344,13 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
               </Button>
             )}
           </div>
-          {isDbCycleSelected && (
+          {isProcessing && isDbCycleSelected && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Loading drive cycle data...</span>
+            </div>
+          )}
+          {isDbCycleSelected && !isProcessing && (
             <p className="text-xs text-muted-foreground">
               ✓ Drive cycle selected from database
             </p>
@@ -371,4 +467,4 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
   )
 }
 
-export { getDriveCyclesFromStorage }
+export { getDriveCyclesFromStorage, fetchDriveCycleData }

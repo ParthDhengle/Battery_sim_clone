@@ -46,13 +46,13 @@ export function LayersConfiguration({
   }
 
   const getPitchXCondition = () => {
-    if (formFactor === "cylindrical") return "greater than diameter"
+    if (formFactor === "cylindrical") return "greater than 2x radius"
     if (formFactor === "prismatic") return "greater than length"
     return ""
   }
 
   const getPitchYCondition = () => {
-    if (formFactor === "cylindrical") return "greater than diameter"
+    if (formFactor === "cylindrical") return "greater than 2x radius"
     if (formFactor === "prismatic") return "greater than width"
     return ""
   }
@@ -164,7 +164,7 @@ export function LayersConfiguration({
             <Tabs defaultValue="plot" className="w-full mt-6 border-t pt-6">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="plot">Pack Arrangement</TabsTrigger>
-                <TabsTrigger value="table">Details (Tabular)</TabsTrigger>
+                <TabsTrigger value="table">Pack Arrangement Details (Tabular)</TabsTrigger>
               </TabsList>
 
               <TabsContent value="plot">

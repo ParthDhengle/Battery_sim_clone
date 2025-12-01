@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 class VaryingCellsCondition(BaseModel):
-    cell_indices: List[int]  # Array of cell indices (0-based or 1-based as per your logic)
+    cell_ids: List[str]  # CHANGED: String IDs like ["R1C1L1", "R2C3L1"]
     temperature: float = 300.0
     soc: float = 1.0
     soh: float = 1.0
@@ -14,7 +14,7 @@ class InitialConditions(BaseModel):
     soc: float = 1.0
     soh: float = 1.0
     dcir_aging_factor: float = 1.0
-    varying_conditions: List[VaryingCellsCondition] = []  # Renamed & array of indices
+    varying_conditions: List[VaryingCellsCondition] = []
 
 class SimulationBase(BaseModel):
     name: Optional[str] = None

@@ -41,16 +41,25 @@ export function PackBasicInfo({
               placeholder="e.g., EV Battery Pack v1"
             />
           </div>
-
           <div className="space-y-3">
             <Label htmlFor="cellSelect">
               Select Cell <span className="text-red-500">*</span>
             </Label>
-            <Select value={selectedCellId} onValueChange={onSelectCell}>
+            <Select 
+              value={selectedCellId || "placeholder"} 
+              onValueChange={(value) => {
+                if (value !== "placeholder") {
+                  onSelectCell(value)
+                }
+              }}
+            >
               <SelectTrigger id="cellSelect">
-                <SelectValue placeholder="Choose a cell" />
+                <SelectValue placeholder="Select cell" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="placeholder" disabled>
+                  Select cell
+                </SelectItem>
                 {cells.map((cell) => (
                   <SelectItem key={cell.id} value={cell.id}>
                     {cell.name}
@@ -60,7 +69,6 @@ export function PackBasicInfo({
             </Select>
           </div>
         </div>
-
         <div className="space-y-3">
           <Label htmlFor="packDesc">Description (Optional)</Label>
           <Input

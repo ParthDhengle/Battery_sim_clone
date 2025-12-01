@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {InitialCellConditions} from "@/components/simulation/initial-cell-conditions"
+
 const electricalModels = [
   {
     id: "simple",
@@ -111,6 +112,7 @@ export function SimulationSetup({ onConfigChange, packData }: SimulationSetupPro
   const [nextVaryingId, setNextVaryingId] = useState(1)
   const selectedElectricalModel = electricalModels.find((m) => m.id === electricalModel)
   const selectedBusbarMaterial = busbarMaterials.find((m) => m.id === busbarMaterial)
+  const [simulationFrequency, setSimulationFrequency] = useState("1");
 
   const getEstimatedComputeTime = useCallback(() => {
     let baseTime = electricalModel === "simple" ? 1 : 3
@@ -170,6 +172,8 @@ export function SimulationSetup({ onConfigChange, packData }: SimulationSetupPro
       },
       estimatedComputeTime: getEstimatedComputeTime(),
       complexityLevel: getComplexityLevel().level,
+      simulation_frequency: Number(simulationFrequency),
+
       initial_conditions: {
         temperature: Number.parseFloat(initialTemperature) || 300,
         soc: (Number.parseFloat(initialSOC) / 100) || 1.0,
@@ -205,7 +209,8 @@ export function SimulationSetup({ onConfigChange, packData }: SimulationSetupPro
     initialSOC, 
     initialSOH, 
     initialDCIR, 
-    varyingCells
+    varyingCells,
+    simulationFrequency
   ])
 
   const complexity = getComplexityLevel()
@@ -252,8 +257,34 @@ export function SimulationSetup({ onConfigChange, packData }: SimulationSetupPro
         onUpdateVaryingCell={updateVaryingCell}
         packData={packData}
       />  
+      {/* Simulation Frequency */}
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">⏱️ Simulation Frequency</CardTitle>
+        <CardDescription>
+          How often simulation data is processed and stored (seconds)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-3">
+          <Label>Frequency (seconds)</Label>
+          <Select value={simulationFrequency} onValueChange={setSimulationFrequency}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["0.1", "0.5", "1", "5", "10", "20", "30", "60"].map((sec) => (
+                <SelectItem key={sec} value={sec}>
+                  {sec} sec
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent>
+    </Card>
 
-      {/* Electrical Model Configuration */}
+      {/* Electrical Model Configuration
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">⚡ Electrical Model</CardTitle>
@@ -296,10 +327,10 @@ export function SimulationSetup({ onConfigChange, packData }: SimulationSetupPro
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Advanced: Busbar Model */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">🖥️ Advanced: Busbar Model</CardTitle>
           <CardDescription>Optional interconnect resistance modeling</CardDescription>
@@ -346,7 +377,7 @@ export function SimulationSetup({ onConfigChange, packData }: SimulationSetupPro
             </>
           )}
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Performance Warning */}
       {complexity.level === "High" && (

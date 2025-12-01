@@ -71,7 +71,7 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
     height: dims.height || 0,
   }
   if (formFactor === "cylindrical") {
-    if (!dims.radius || dims.radius <= 0 || !dims.height || dims.height <= 0) {
+    if (!dims.radius || !dims.height || dims.height <= 0 || dims.radius <= 0) {
       if (!isPreview) alert("Invalid dimensions for cylindrical cells")
       return null
     }
@@ -447,19 +447,7 @@ export function validateAndGenerateConfig(config: ValidateConfig) {
           z_mode: l.zMode,
           z_center: Number(l.zCenter),
         })),
-        initial_conditions: {
-          temperature: Number.parseFloat(initialTemperature || "300") || 300,
-          soc: (Number.parseFloat(initialSOC || "100") / 100) || 1.0,
-          soh: Number.parseFloat(initialSOH || "1.0") || 1.0,
-          dcir_aging_factor: Number.parseFloat(initialDCIR || "1.0") || 1.0,
-          varying_cells: varyingCells.map((vc) => ({
-            cell_index: Number.parseInt(vc.cellIndex) || 1,
-            temperature: Number.parseFloat(vc.temp) || 300,
-            soc: Number.parseFloat(vc.soc) / 100 || 1.0,
-            soh: Number.parseFloat(vc.soh) || 1.0,
-            dcir_aging_factor: Number.parseFloat(vc.dcir) || 1.0,
-          })),
-        },
+        
         cost_per_cell: costPerCellNum,
       }
       if (connectionType === "custom") {

@@ -19,7 +19,7 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
         newData.length = ""
         newData.width = ""
       } else {
-        newData.diameter = ""
+        newData.radius = ""
       }
       return newData
     })
@@ -64,7 +64,6 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
               <div className="relative">
                 <Input
                   type="number"
-                  min="0"
                   step="0.1"
                   value={formData.cell_nominal_voltage}
                   onChange={(e) => updateField("cell_nominal_voltage", e.target.value)}
@@ -83,7 +82,6 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
               <div className="relative">
               <Input
                 type="number"
-                min="0"
                 step="0.1"
                 value={formData.cell_upper_voltage_cutoff}
                 onChange={(e) => updateField("cell_upper_voltage_cutoff", e.target.value)}
@@ -101,7 +99,6 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
               <div className="relative">
                 <Input
                 type="number"
-                min="0"
                 step="0.1"
                 value={formData.cell_lower_voltage_cutoff}
                 onChange={(e) => updateField("cell_lower_voltage_cutoff", e.target.value)}
@@ -178,7 +175,7 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
             
           </div>
           <div className="space-y-3">
-            <Label>Dimensions (mm)</Label>
+            <Label>Dimensions</Label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {!isCylindricalOrCoin && (
                 <>
@@ -224,17 +221,17 @@ export default function BasicParameters({ formData, setFormData, errors }: Props
               )}
               {isCylindricalOrCoin && (
                 <div className="space-y-3">
-                  <Label className={errors.diameter ? "text-red-500" : ""}>
-                    Cell Diameter <span className="text-red-500">*</span>
+                  <Label className={errors.radius ? "text-red-500" : ""}>
+                    Cell Radius <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
                     <Input
                     type="number"
                     min="0"
                     step="0.1"
-                    value={formData.diameter}
-                    onChange={(e) => updateField("diameter", e.target.value)}
-                    placeholder="e.g., 21"
+                    value={formData.radius}
+                    onChange={(e) => updateField("radius", e.target.value)}
+                    placeholder="e.g., 10.5"
                   />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">  
                       mm

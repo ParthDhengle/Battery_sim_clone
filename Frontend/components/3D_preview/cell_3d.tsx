@@ -3,7 +3,7 @@ import { OrbitControls, PerspectiveCamera } from "@react-three/drei"
 
 type Props = {
   formFactor: "cylindrical" | "prismatic" | "pouch" | "coin"
-  dims: { diameter?: number; length?: number; width?: number; height: number }
+  dims: { radius?: number; length?: number; width?: number; height: number }
 }
 
 export default function CellPreview3D({ formFactor, dims }: Props) {
@@ -20,14 +20,14 @@ export default function CellPreview3D({ formFactor, dims }: Props) {
   let geometry
 
   if (formFactor === "cylindrical" || formFactor === "coin") {
-    const realDiameter = (dims.diameter || 0) / 1000
-    if (realDiameter === 0)
+    const realRadius = (dims.radius || 0) / 1000
+    if (realRadius === 0)
       return (
         <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-          <p>Enter diameter</p>
+          <p>Enter radius</p>
         </div>
       )
-    geometry = <cylinderGeometry args={[realDiameter / 2, realDiameter / 2, realHeight, 32]} />
+    geometry = <cylinderGeometry args={[realRadius, realRadius, realHeight, 32]} />
   } else {
     const realLength = (dims.length || 0) / 1000
     const realWidth = (dims.width || 0) / 1000

@@ -88,14 +88,15 @@ export function DriveCycleBuilder() {
 
   return (
     <div className="space-y-6">
+      <div className="pb-6 border-b mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <TrendingUp className="w-5 h-5" />
+          Drive Cycle Configuration
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">Configure your drive cycle using predefined/upload or manual building.</p>
+      </div>
+
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Drive Cycle Configuration
-          </CardTitle>
-          <CardDescription>Configure your drive cycle using predefined/upload or manual building.</CardDescription>
-        </CardHeader>
         <CardContent>
           <Tabs value={configMethod} onValueChange={setConfigMethod}>
             <TabsList className="grid w-full grid-cols-2">

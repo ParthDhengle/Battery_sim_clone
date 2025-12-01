@@ -10,26 +10,30 @@ import { ResultsDashboard } from "@/components/simulation/results-dashboard"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { getPacks, getPack } from "@/lib/api/packs"
-import { runSimulation, getSimulationStatus } from "@/lib/api/simulations"
+import { runSimulation } from "@/lib/api/simulations"
 import { PackSelector } from "@/components/simulation/pack-selector"
 import { DriveCycleSelector } from "@/components/simulation/drive-cycle-selector"
 import { DriveCyclePreview } from "@/components/simulation/drive-cycle-preview"
-import type { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { getPacksFromStorage } from "@/lib/api/get-packs-storage"
+
 interface SimulationStepperProps {
   projectId?: string
   name: string
   simType: string
 }
+
 interface PackOption {
   value: string
   label: string
   specs?: Record<string, string | number>
 }
+
 interface DriveOption {
   value: string
   label: string
   specs?: Record<string, string | number>
 }
+
 function StepIndicator({ step, totalSteps }: { step: number; totalSteps: number }) {
   return (
     <div className="flex gap-1">
@@ -42,6 +46,7 @@ function StepIndicator({ step, totalSteps }: { step: number; totalSteps: number 
     </div>
   )
 }
+
 function ConfigurationSummary({
   packId,
   cycleId,
@@ -53,16 +58,17 @@ function ConfigurationSummary({
 }) {
   const [packs, setPacks] = useState<PackOption[]>([])
   const [cycles, setCycles] = useState<DriveOption[]>([])
+
   useEffect(() => {
-    getPacks().then(setPacks)
-    // Note: getDriveCyclesFromStorage is from drive-cycle-selector, import if needed
-    // For simplicity, assuming cycles are loaded similarly
+    // FIX: Use same function as PackSelector
+    getPacksFromStorage().then(setPacks)
   }, [])
+
   const pack = packs.find((p) => p.value === packId)
-  const cycle = cycles.find((c) => c.value === cycleId)
-  const cycleLabel = cycle?.label ?? (cycleId?.endsWith(".csv") ? cycleId : null)
+  const cycleLabel = cycleId?.endsWith(".csv") ? cycleId : null
+
   if (!pack && !cycleLabel && !simulationConfig) return null
-  if (!simulationConfig && !pack && !cycleLabel) return null
+
   return (
     <Card className="bg-muted/40">
       <CardHeader className="pb-3">
@@ -97,17 +103,16 @@ function ConfigurationSummary({
     </Card>
   )
 }
+
 async function getDriveCycleCsv(cycleId: string): Promise<string> {
   if (cycleId.endsWith('.csv')) {
     return sessionStorage.getItem(`csv:${cycleId}`) || ''
   } else {
-    // Assume key format and that window.storage is available
-    const key = `drivecycle:${cycleId}` // Adjust based on actual storage key format
+    const key = `drivecycle:${cycleId}`
     if (typeof window !== 'undefined' && window.storage && window.storage.get) {
       const dc = await window.storage.get(key)
       if (!dc) return ''
       const cycle = JSON.parse(dc.value)
-      // Assume cycle.data is array of objects with Time and Current, or [time, current]
       let rows = ''
       if (Array.isArray(cycle.data)) {
         rows = cycle.data.map((item: any) => {
@@ -121,6 +126,7 @@ async function getDriveCycleCsv(cycleId: string): Promise<string> {
     return ''
   }
 }
+
 async function getDriveCycleData(cycleId: string): Promise<{ time: number[]; current: number[] } | null> {
   try {
     const csvContent = await getDriveCycleCsv(cycleId)
@@ -165,6 +171,7 @@ async function getDriveCycleData(cycleId: string): Promise<{ time: number[]; cur
     return null
   }
 }
+
 export function SimulationStepper({ projectId, name, simType }: SimulationStepperProps) {
   const [activeTab, setActiveTab] = useState("selection")
   const [packId, setPackId] = useState("")
@@ -172,28 +179,34 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
   const [cycleId, setCycleId] = useState("")
   const [simulationConfig, setSimulationConfig] = useState<Record<string, any> | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
-  const [isRunning, setIsRunning] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
   const [simulationResults, setSimulationResults] = useState<any>(null)
   const [simulationError, setSimulationError] = useState<string | null>(null)
   const [simulationId, setSimulationId] = useState<string | null>(null)
+
   const addSimulation = useAppStore((state) => state.addSimulation)
+
   const canProceedToConfig = !!(packId && cycleId)
   const canRunSimulation = !!(canProceedToConfig && simulationConfig)
+
   const handleRunSimulation = async () => {
+    console.log(simulationConfig)
     if (!canRunSimulation) {
       setError("Please complete all configuration steps before running the simulation.")
       return
     }
+
     setError(null)
     setSimulationError(null)
     setSimulationResults(null)
     setSimulationId(null)
-    setActiveTab("results")
-    setIsRunning(true)
+    setIsStarting(true)
+
     try {
       const packConfig = await getPack(packId)
       const driveCycleCsv = await getDriveCycleCsv(cycleId)
       const modelConfig = simulationConfig
+
       const payload = {
         name,
         type: simType,
@@ -201,47 +214,34 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
         modelConfig,
         driveCycleCsv,
       }
+
       const res = await runSimulation(payload)
       setSimulationId(res.simulation_id)
+
+      // Immediately transition to results page (simulation runs in background)
+      setActiveTab("results")
+      setSimulationResults({ 
+        simulation_id: res.simulation_id, 
+        summary: null // Summary will be populated by ResultsDashboard
+      })
+
       if (projectId) {
-        addSimulation(projectId, JSON.stringify({ packId, cycleId, simulationConfig, results: { simulation_id: res.simulation_id } }))
+        addSimulation(projectId, JSON.stringify({ 
+          packId, 
+          cycleId, 
+          simulationConfig, 
+          results: { simulation_id: res.simulation_id } 
+        }))
       }
+
+      console.log("✅ Simulation started:", res.simulation_id)
     } catch (err: any) {
       setSimulationError(err.message || "Failed to start simulation")
-      setIsRunning(false)
+    } finally {
+      setIsStarting(false)
     }
   }
-  // Polling effect for simulation status
-  useEffect(() => {
-    if (!simulationId || !isRunning) return
-    const interval = setInterval(async () => {
-      try {
-        const data = await getSimulationStatus(simulationId)
-        if (data.status === "completed") {
-          setSimulationResults({ 
-            simulation_id: simulationId, 
-            summary: data.metadata?.summary || null 
-          })
-          setIsRunning(false)
-          clearInterval(interval)
-        } else if (data.status === "failed") {
-          setSimulationError(data.error || "Simulation failed")
-          setIsRunning(false)
-          clearInterval(interval)
-        }
-        // For "pending" or "running", continue polling
-      } catch (err: any) {
-        console.error("Polling error:", err)
-        // Optionally stop polling on error, or continue
-        setSimulationError(err.message || "Polling error")
-        setIsRunning(false)
-        clearInterval(interval)
-      }
 
-    }, 2000) // Poll every 2 seconds
-    return () => clearInterval(interval)
-
-  }, [simulationId, isRunning])
   useEffect(() => {
     if (packId) {
       getPack(packId).then(setPackData).catch(console.error)
@@ -249,6 +249,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
       setPackData(null)
     }
   }, [packId])
+
   const handleResetSimulation = () => {
     setActiveTab("selection")
     setPackId("")
@@ -258,8 +259,9 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
     setSimulationResults(null)
     setSimulationError(null)
     setSimulationId(null)
-    setIsRunning(false)
+    setIsStarting(false)
   }
+
   return (
     <div className="min-h-screen bg-background py-8 px-4">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -267,11 +269,13 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
           <h1 className="text-3xl font-bold text-foreground">Battery Simulation</h1>
           <p className="text-muted-foreground">Configure your battery components and run performance simulations</p>
         </div>
+
         {(error || simulationError) && (
           <Alert variant="destructive">
             <AlertDescription>{error || simulationError}</AlertDescription>
           </Alert>
         )}
+
         <Card className="border-border/60">
           <CardHeader className="border-b border-border/60">
             <div className="space-y-4">
@@ -282,6 +286,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
               <StepIndicator step={activeTab === "selection" ? 1 : activeTab === "setup" ? 2 : 3} totalSteps={3} />
             </div>
           </CardHeader>
+
           <CardContent className="pt-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
               <TabsList className="grid w-full grid-cols-3">
@@ -293,11 +298,12 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                   <span className="hidden sm:inline">2. Configuration</span>
                   <span className="sm:hidden">Config</span>
                 </TabsTrigger>
-                <TabsTrigger value="results" disabled={!simulationResults && !isRunning}>
+                <TabsTrigger value="results" disabled={!simulationResults}>
                   <span className="hidden sm:inline">3. Results</span>
                   <span className="sm:hidden">Results</span>
                 </TabsTrigger>
               </TabsList>
+
               <TabsContent value="selection" className="space-y-6">
                 <div className="flex justify-center ">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-3xl">
@@ -306,7 +312,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                   </div>
                 </div>
                 {cycleId && <DriveCyclePreview cycleId={cycleId} />}
-                {canProceedToConfig && <ConfigurationSummary packId={packId} cycleId={cycleId} />}
+                
                 <div className="flex justify-between pt-4">
                   <div />
                   <Button onClick={() => setActiveTab("setup")} disabled={!canProceedToConfig} className="gap-2">
@@ -315,6 +321,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                   </Button>
                 </div>
               </TabsContent>
+
               <TabsContent value="setup" className="space-y-6">
                 <SimulationSetup 
                   onConfigChange={setSimulationConfig}  
@@ -325,9 +332,9 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                   <Button variant="outline" onClick={() => setActiveTab("selection")}>
                     Back
                   </Button>
-                  <Button onClick={handleRunSimulation} disabled={!canRunSimulation} className="gap-2">
-                    {isRunning ? (
-                      <>⏳ Running...</>
+                  <Button onClick={handleRunSimulation} disabled={!canRunSimulation || isStarting} className="gap-2">
+                    {isStarting ? (
+                      <>⏳ Starting...</>
                     ) : (
                       <>
                         {canRunSimulation && "✓"}
@@ -337,26 +344,9 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                   </Button>
                 </div>
               </TabsContent>
+
               <TabsContent value="results" className="space-y-6">
-                {isRunning ? (
-                  <div className="flex flex-col items-center justify-center gap-4 py-12">
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-foreground">Running Simulation</p>
-                      <p className="text-xs text-muted-foreground">
-                        Please wait while we process your configuration...
-                      </p>
-                      {simulationId && (
-                        <p className="text-xs text-muted-foreground">
-                          ID: {simulationId}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : simulationError ? (
-                  <Alert variant="destructive">
-                    <AlertDescription>{simulationError}</AlertDescription>
-                  </Alert>
-                ) : simulationResults ? (
+                {simulationResults ? (
                   <div className="space-y-6">
                     <ResultsDashboard
                       results={simulationResults}
@@ -371,7 +361,11 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                       </Button>
                     </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-4 py-12">
+                    <p className="text-sm text-muted-foreground">No simulation results available</p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>

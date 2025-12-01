@@ -6,7 +6,6 @@ from datetime import datetime
 class CellDimensions(BaseModel):
     """Cell physical dimensions"""
     radius: Optional[float] = None
-    diameter: Optional[float] = None
     length: Optional[float] = None
     width: Optional[float] = None
     height: float

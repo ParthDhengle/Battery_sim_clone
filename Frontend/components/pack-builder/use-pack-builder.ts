@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback  } from "react"
 import { getPack, createPack, updatePack } from "@/lib/api/packs"
 import { getCells } from "@/lib/api/cells"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -81,40 +81,40 @@ export function usePackBuilder() {
   const [error, setError] = useState<string>("")
   const [packSummary, setPackSummary] = useState<PackSummary | null>(null)
   useEffect(() => {
-    async function fetchCells() {
-      try {
-        const data = await getCells()
-        setCells(data)
-        if (data.length > 0) {
-          handleSelectCell(data[0].id)
-        }
-      } catch (e: any) {
-        const errMsg =
-          e.message || "Failed to fetch cells. Check if the backend is running and connected to the database."
-        console.error("Failed to fetch cells", e)
-        setError(errMsg)
-      }
-    }
-    fetchCells()
-  }, [])
-  const handleSelectCell = (id: string) => {
-    setSelectedCellId(id)
-    const cell = cells.find((c) => c.id === id)
-    if (cell) {
-      setFormFactor(cell.formFactor)
-      setDims({
-        radius: cell.dims.radius ?? (cell.dims.diameter ? cell.dims.diameter / 2 : undefined),
-        length: cell.dims.length ?? undefined,
-        width: cell.dims.width ?? undefined,
-        height: cell.dims.height ?? undefined,
-      })
-      setCapacity(cell.capacity)
-      setColumbicEfficiency(cell.columbicEfficiency ?? cell.columbic_efficiency ?? 1.0)
-      setMCell(cell.cell_weight)
-      setCellUpperVoltage(cell.cell_upper_voltage_cutoff)
-      setCellLowerVoltage(cell.cell_lower_voltage_cutoff)
+  async function fetchCells() {
+    try {
+      const data = await getCells()
+      setCells(data)
+      // Removed auto-selection - let user choose manually
+    } catch (e: any) {
+      const errMsg =
+        e.message || "Failed to fetch cells. Check if the backend is running and connected to the database."
+      console.error("Failed to fetch cells", e)
+      setError(errMsg)
     }
   }
+  fetchCells()
+}, [])
+
+  const handleSelectCell = useCallback((id: string) => {
+  setSelectedCellId(id)
+  const cell = cells.find((c) => c.id === id)
+  if (cell) {
+    setFormFactor(cell.formFactor)
+    setDims({
+      radius: cell.dims.radius ?? undefined,
+      length: cell.dims.length ?? undefined,
+      width: cell.dims.width ?? undefined,
+      height: cell.dims.height ?? undefined,
+    })
+    setCapacity(cell.capacity)
+    setColumbicEfficiency(cell.columbicEfficiency ?? cell.columbic_efficiency ?? 1.0)
+    setMCell(cell.cell_weight)
+    setCellUpperVoltage(cell.cell_upper_voltage_cutoff)
+    setCellLowerVoltage(cell.cell_lower_voltage_cutoff)
+  }
+}, [cells])
+
   const loadPack = async () => {
     if (!packId || packId === "undefined") {
       return;
@@ -126,9 +126,9 @@ export function usePackBuilder() {
       setSelectedCellId(pack.cell_id)
       setFormFactor(pack.cell.form_factor)
       setDims({
-        radius: pack.cell.dims.radius ? pack.cell.dims.radius : undefined,
-        length: pack.cell.dims.length ? pack.cell.dims.length : undefined,
-        width: pack.cell.dims.width ? pack.cell.dims.width : undefined,
+        radius: pack.cell.dims.radius ?? undefined,
+        length: pack.cell.dims.length ?? undefined,
+        width: pack.cell.dims.width ?? undefined,
         height: pack.cell.dims.height,
       })
       setCapacity(pack.cell.capacity)
@@ -148,11 +148,8 @@ export function usePackBuilder() {
       setLabelSchema(pack.options.label_schema)
       setMaxWeight(pack.constraints.max_weight?.toString() || "10")
       setMaxVolume(pack.constraints.max_volume?.toString() || "0.01")
-      setZPitch(pack.z_pitch ? pack.z_pitch.toString() : "80")
-      setInitialTemperature(pack.initial_conditions.temperature.toString())
-      setInitialSOC((pack.initial_conditions.soc * 100).toString())
-      setInitialSOH(pack.initial_conditions.soh.toString())
-      setInitialDCIR(pack.initial_conditions.dcir_aging_factor.toString())
+      
+      
       setPackSummary(pack.summary)
     } catch (e: any) {
       const errMsg = e.message || "Failed to load pack. Check backend connection.";
@@ -162,7 +159,7 @@ export function usePackBuilder() {
     }
   }
   useEffect(() => {
-    if (packId && packId !== "undefined") { // Only load if valid packId is present (skips for creation)
+    if (packId && packId !== "undefined") {
       loadPack();
     }
   }, [packId]);

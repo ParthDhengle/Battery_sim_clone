@@ -16,7 +16,7 @@ export default function CellBuilderContent() {
   type FormData = {
     name: string
     formFactor: FormFactor
-    diameter: string
+    radius: string
     length: string
     width: string
     height: string
@@ -46,7 +46,7 @@ export default function CellBuilderContent() {
   const [formData, setFormData] = useState<FormData>({
     name: "",
     formFactor: "cylindrical",
-    diameter: "",
+    radius: "",
     length: "",
     width: "",
     height: "",
@@ -79,14 +79,14 @@ export default function CellBuilderContent() {
   }, [id])
 
   useEffect(() => {
-    const d = Number.parseFloat(formData.diameter) || 0
+    const r = Number.parseFloat(formData.radius) || 0
     const l = Number.parseFloat(formData.length) || 0
     const w = Number.parseFloat(formData.width) || 0
     const h = Number.parseFloat(formData.height) || 0
     let vol = 0
 
     if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
-      vol = Math.PI * Math.pow(d / 2, 2) * h
+      vol = Math.PI * Math.pow(r, 2) * h
     } else {
       vol = l * w * h
     }
@@ -94,7 +94,7 @@ export default function CellBuilderContent() {
     if (!formData.cell_volume || formData.cell_volume.trim() === "") {
       setFormData((prev) => ({ ...prev, cell_volume: vol.toString() }))
     }
-  }, [formData.formFactor, formData.diameter, formData.length, formData.width, formData.height])
+  }, [formData.formFactor, formData.radius, formData.length, formData.width, formData.height])
 
   const fetchCell = async (cellId: string) => {
     try {
@@ -103,7 +103,7 @@ export default function CellBuilderContent() {
         setFormData({
           name: cell.name || "",
           formFactor: cell.formFactor || "cylindrical",
-          diameter: cell.dims.diameter != null ? cell.dims.diameter.toString() : "",
+          radius: cell.dims.radius != null ? cell.dims.radius.toString() : "",
           length: cell.dims.length != null ? cell.dims.length.toString() : "",
           width: cell.dims.width != null ? cell.dims.width.toString() : "",
           height: cell.dims.height != null ? cell.dims.height.toString() : "",
@@ -170,21 +170,21 @@ export default function CellBuilderContent() {
       newErrors.name = "Cell name is required"
     }
 
-    if (!formData.cell_nominal_voltage || Number.parseFloat(formData.cell_nominal_voltage) <= 0) {
+    if (!formData.cell_nominal_voltage ) {
       newErrors.cell_nominal_voltage = "Valid nominal voltage is required"
     }
 
-    if (!formData.cell_upper_voltage_cutoff || Number.parseFloat(formData.cell_upper_voltage_cutoff) <= 0) {
+    if (!formData.cell_upper_voltage_cutoff ) {
       newErrors.cell_upper_voltage_cutoff = "Valid upper voltage cut-off is required"
     }
 
-    if (!formData.cell_lower_voltage_cutoff || Number.parseFloat(formData.cell_lower_voltage_cutoff) <= 0) {
+    if (!formData.cell_lower_voltage_cutoff) {
       newErrors.cell_lower_voltage_cutoff = "Valid lower voltage cut-off is required"
     }
 
     if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
-      if (!formData.diameter || Number.parseFloat(formData.diameter) <= 0) {
-        newErrors.diameter = "Valid diameter is required for cylindrical/coin cells"
+      if (!formData.radius || Number.parseFloat(formData.radius) <= 0) {
+        newErrors.radius = "Valid radius is required for cylindrical/coin cells"
       }
     } else if (formData.formFactor === "prismatic" || formData.formFactor === "pouch") {
       if (!formData.length || Number.parseFloat(formData.length) <= 0) {
@@ -234,7 +234,7 @@ export default function CellBuilderContent() {
   const handleSave = async () => {
     const dims: any = { height: Number.parseFloat(formData.height) }
     if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
-      dims.diameter = Number.parseFloat(formData.diameter)
+      dims.radius = Number.parseFloat(formData.radius)
     } else {
       dims.length = Number.parseFloat(formData.length)
       dims.width = Number.parseFloat(formData.width)
@@ -283,17 +283,13 @@ export default function CellBuilderContent() {
         </Alert>
       )}
       
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Battery className="w-5 h-5" />
-            {isEditing ? "Edit Cell" : "Create Cell"}
-          </CardTitle>
-          <CardDescription>
-            {currentStep === 1 ? "Step 1 of 2: Basic Parameters" : "Step 2 of 2: Advanced Parameters"}
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="pb-6 border-b mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Battery className="w-6 h-6" />
+          {isEditing ? "Edit Cell" : "Create Cell"}
+        </h2>
+      </div>
+
 
       {currentStep === 1 ? (
         <>

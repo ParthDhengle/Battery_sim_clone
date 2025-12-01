@@ -1,3 +1,7 @@
+
+
+
+
 // Updated: app/cells/page.tsx (or wherever the original Cells component is located)
 "use client"
 import { useState, useEffect } from "react"
@@ -15,7 +19,7 @@ type CellConfig = {
   id: string
   name: string
   formFactor: "cylindrical" | "prismatic" | "pouch" | "coin"
-  dims: { radius?: number; diameter?: number; length?: number; width?: number; height: number }
+  dims: { radius?: number; length?: number; width?: number; height: number }
   cell_nominal_voltage: number
   cell_upper_voltage_cutoff: number
   cell_lower_voltage_cutoff: number

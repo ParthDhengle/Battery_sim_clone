@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, HTTPException, status
 from typing import List
 from datetime import datetime
@@ -90,13 +91,30 @@ def calculate_pack_summary(pack_data: dict) -> PackSummary:
     form_factor = cell["form_factor"]
    
     if form_factor == "cylindrical":
-        radius_m = (dims.get("radius", 0) / 1000)
-        height_m = (dims.get("height", 0) / 1000)
+        radius_mm = dims.get("radius")
+        if radius_mm is None:
+            raise ValueError("Cylindrical cell must have 'radius' in dims")
+        
+        height_mm = dims.get("height")
+        if height_mm is None:
+            raise ValueError("Cylindrical cell must have 'height' in dims")
+        
+        # Convert to meters
+        radius_m = radius_mm / 1000
+        height_m = height_mm / 1000
         cell_volume_m3 = math.pi * radius_m ** 2 * height_m
-    else: # prismatic
-        length_m = (dims.get("length", 0) / 1000)
-        width_m = (dims.get("width", 0) / 1000)
-        height_m = (dims.get("height", 0) / 1000)
+    else:  # prismatic
+        length_mm = dims.get("length")
+        width_mm = dims.get("width")
+        height_mm = dims.get("height")
+        
+        if length_mm is None or width_mm is None or height_mm is None:
+            raise ValueError("Prismatic cell must have 'length', 'width', and 'height' in dims")
+        
+        # Convert to meters
+        length_m = length_mm / 1000
+        width_m = width_mm / 1000
+        height_m = height_mm / 1000
         cell_volume_m3 = length_m * width_m * height_m
    
     total_cell_volume = total_cells * cell_volume_m3
@@ -183,6 +201,7 @@ async def create_pack(pack: PackCreate):
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Error creating pack: {str(e)}") 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to create pack: {str(e)}"

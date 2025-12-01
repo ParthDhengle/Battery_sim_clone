@@ -59,8 +59,8 @@ export function ElectricalConfiguration({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="row_series_column_parallel">Column Parallel (Series Columns)</SelectItem>
-              <SelectItem value="row_parallel_column_series">Row Parallel (Series Rows)</SelectItem>
+              <SelectItem value="row_parallel_column_series">Row Parallel </SelectItem>
+              <SelectItem value="row_series_column_parallel">Column Parallel </SelectItem>
               <SelectItem value="custom">Custom Connection</SelectItem>
             </SelectContent>
           </Select>
@@ -118,6 +118,7 @@ export function ElectricalConfiguration({
               </Label>
                 <div className="relative">
                   <Input
+                    min={0}
                     id="rp"
                     type="number"
                     step="0.0001"
@@ -135,6 +136,7 @@ export function ElectricalConfiguration({
               </Label>
               <div className="relative">
               <Input
+              min={0}
                 id="rs"
                 type="number"
                 step="0.0001"

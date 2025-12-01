@@ -1,3 +1,8 @@
+
+
+
+
+
 "use client"
 import { useState } from "react"
 import type React from "react"
@@ -22,7 +27,7 @@ type ParsedPayload = any
 const expectedHeaders = [
   "name",
   "formFactor",
-  "diameter",
+  "radius",
   "length",
   "width",
   "height",
@@ -46,7 +51,7 @@ const expectedHeaders = [
 const requiredDescriptions: Record<string, { isRequired: boolean; note: string }> = {
   name: { isRequired: true, note: "required" },
   formFactor: { isRequired: true, note: "required" },
-  diameter: { isRequired: false, note: "required for cylindrical/coin" },
+  radius: { isRequired: false, note: "required for cylindrical/coin" },
   length: { isRequired: false, note: "required for prismatic/pouch" },
   width: { isRequired: false, note: "required for prismatic/pouch" },
   height: { isRequired: true, note: "required" },
@@ -70,7 +75,7 @@ const requiredDescriptions: Record<string, { isRequired: boolean; note: string }
 const exampleRow = [
   "Example Cell",
   "cylindrical",
-  "21",
+  "10.5",
   "",
   "",
   "70",
@@ -149,8 +154,8 @@ function validateRow(data: Record<string, string>): string[] {
   if (height <= 0) errs.push("height must be a positive number")
 
   if (ff === "cylindrical" || ff === "coin") {
-    const diam = parseNumSafe(data.diameter)
-    if (diam <= 0) errs.push("diameter must be a positive number for cylindrical/coin")
+    const rad = parseNumSafe(data.radius)
+    if (rad <= 0) errs.push("radius must be a positive number for cylindrical/coin")
   } else if (ff === "prismatic" || ff === "pouch") {
     const len = parseNumSafe(data.length)
     if (len <= 0) errs.push("length must be a positive number for prismatic/pouch")
@@ -166,7 +171,7 @@ function buildPayload(data: Record<string, string>, formFactor: string): ParsedP
   const dims: any = { height: parseNumSafe(data.height) }
 
   if (formFactor === "cylindrical" || formFactor === "coin") {
-    dims.diameter = parseNumSafe(data.diameter)
+    dims.radius = parseNumSafe(data.radius)
   } else {
     dims.length = parseNumSafe(data.length)
     dims.width = parseNumSafe(data.width)
@@ -473,7 +478,7 @@ export default function AddCellOptions() {
             </Table>
           </div>
           <p className="text-xs text-muted-foreground mt-4">
-            * Remove the example row before adding your data. For conditional fields (e.g., diameter), fill based on
+            * Remove the example row before adding your data. For conditional fields (e.g., radius), fill based on
             formFactor.
           </p>
         </CardContent>

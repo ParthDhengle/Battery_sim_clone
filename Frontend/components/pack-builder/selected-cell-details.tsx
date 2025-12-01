@@ -99,10 +99,10 @@ export function SelectedCellDetails({
               <Label className="text-xs">Lower Voltage (V)</Label>
               <p className="text-sm font-medium">{cellLowerVoltage}</p>
             </div>
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <Label className="text-xs">Efficiency</Label>
               <p className="text-sm font-medium">{columbicEfficiency}</p>
-            </div>
+            </div> */}
           </div>
         </div>
 
@@ -114,10 +114,10 @@ export function SelectedCellDetails({
               <Label className="text-xs">Cell Mass (g)</Label>
               <p className="text-sm font-medium">{(mCell * 1000).toFixed(2)}</p>
             </div>
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <Label className="text-xs">Jellyroll Mass (g)</Label>
               <p className="text-sm font-medium">{(mJellyroll * 1000).toFixed(2)}</p>
-            </div>
+            </div> */}
           </div>
         </div>
 

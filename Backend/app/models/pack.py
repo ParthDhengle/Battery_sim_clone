@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime
 
@@ -7,6 +7,14 @@ class CellDimensions(BaseModel):
     length: Optional[float] = None
     width: Optional[float] = None
     height: float
+    
+    @field_validator('radius', mode='before')
+    @classmethod
+    def convert_to_float(cls, v):
+        """Convert dimension values to float, handling None"""
+        if v is None:
+            return None
+        return float(v)
 
 class CellConfig(BaseModel):
     form_factor: Literal["cylindrical", "prismatic"]
