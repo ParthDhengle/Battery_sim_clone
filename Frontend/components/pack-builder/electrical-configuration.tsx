@@ -59,8 +59,8 @@ export function ElectricalConfiguration({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="row_parallel_column_series">Row Parallel </SelectItem>
-              <SelectItem value="row_series_column_parallel">Column Parallel </SelectItem>
+              <SelectItem value="row_parallel_column_series">Column Parallel</SelectItem>
+              <SelectItem value="row_series_column_parallel">Row Parallel</SelectItem>
               <SelectItem value="custom">Custom Connection</SelectItem>
             </SelectContent>
           </Select>

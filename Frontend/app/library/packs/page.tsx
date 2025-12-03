@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Battery, Download, Pencil, Trash2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { deletePack, getPacks } from "@/lib/api/packs";
+import PackDetailsView from "@/components/pack-builder/PackDetailsView";
 
 export default function Packs() {
   const [packs, setPacks] = useState<any[]>([]);
@@ -118,6 +119,7 @@ export default function Packs() {
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">
+                  <PackDetailsView pack={pack} />
                   <Link href={`/pack-builder?id=${pack._id}`}>
                     <Button variant="outline" size="sm" className="flex-1">
                       <Pencil className="w-3 h-3 mr-1" />

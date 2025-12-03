@@ -190,57 +190,47 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
   const canRunSimulation = !!(canProceedToConfig && simulationConfig)
 
   const handleRunSimulation = async () => {
-    console.log(simulationConfig)
-    if (!canRunSimulation) {
-      setError("Please complete all configuration steps before running the simulation.")
-      return
-    }
-
-    setError(null)
-    setSimulationError(null)
-    setSimulationResults(null)
-    setSimulationId(null)
-    setIsStarting(true)
-
-    try {
-      const packConfig = await getPack(packId)
-      const driveCycleCsv = await getDriveCycleCsv(cycleId)
-      const modelConfig = simulationConfig
-
-      const payload = {
-        name,
-        type: simType,
-        packConfig,
-        modelConfig,
-        driveCycleCsv,
-      }
-
-      const res = await runSimulation(payload)
-      setSimulationId(res.simulation_id)
-
-      // Immediately transition to results page (simulation runs in background)
-      setActiveTab("results")
-      setSimulationResults({ 
-        simulation_id: res.simulation_id, 
-        summary: null // Summary will be populated by ResultsDashboard
-      })
-
-      if (projectId) {
-        addSimulation(projectId, JSON.stringify({ 
-          packId, 
-          cycleId, 
-          simulationConfig, 
-          results: { simulation_id: res.simulation_id } 
-        }))
-      }
-
-      console.log("✅ Simulation started:", res.simulation_id)
-    } catch (err: any) {
-      setSimulationError(err.message || "Failed to start simulation")
-    } finally {
-      setIsStarting(false)
-    }
+  if (!canRunSimulation) {
+    setError("Please complete all configuration steps before running the simulation.")
+    return
   }
+
+  setError(null)
+  setSimulationError(null)
+  setSimulationResults(null)
+  setSimulationId(null)
+  setIsStarting(true)
+
+  try {
+    const packConfig = await getPack(packId)
+    const driveCycleCsv = await getDriveCycleCsv(cycleId)
+
+    const payload = {
+      name,
+      type: simType,
+      packConfig,
+      modelConfig: simulationConfig,
+      driveCycleCsv,
+      driveCycleSource: cycleId.endsWith(".csv")
+        ? { type: "upload", filename: cycleId }
+        : { type: "database", id: cycleId, name: "Predefined Cycle" }, // You can improve label
+    }
+    console.log("Pack : ")
+    console.log(packConfig)
+    console.log("Simulation : ")
+    console.log(simulationConfig)
+    const res = await runSimulation(payload)
+    setSimulationId(res.simulation_id)
+    setActiveTab("results")
+    setSimulationResults({ simulation_id: res.simulation_id })
+
+    console.log("Simulation started:", res.simulation_id)
+  } catch (err: any) {
+    setSimulationError(err.message || "Failed to start simulation")
+  } finally {
+    setIsStarting(false)
+  }
+}
 
   useEffect(() => {
     if (packId) {

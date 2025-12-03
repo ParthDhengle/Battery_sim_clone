@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getCells, createCell, updateCell, deleteCell } from "@/lib/api/cells"
-
+import CellDetailsView from "@/components/cell/CellDetailsView";
 import { Label } from "@/components/ui/label"
 import { Pencil, Trash2, Download, Battery, FileText } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -114,7 +114,7 @@ export default function Cells() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {cells.map((cell) => (
             <Card key={cell.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
@@ -161,6 +161,7 @@ export default function Cells() {
                 </div>
 
                 <div className="flex gap-2 pt-2">
+                  <CellDetailsView cell={cell} />
                   <Link href={`/cell-builder?id=${cell.id}`}>
                     <Button variant="outline" size="sm" className="flex-1">
                       <Pencil className="w-3 h-3 mr-1" />

@@ -79,28 +79,29 @@ export default function CellBuilderContent() {
   }, [id])
 
   useEffect(() => {
-    const r = Number.parseFloat(formData.radius) || 0
-    const l = Number.parseFloat(formData.length) || 0
-    const w = Number.parseFloat(formData.width) || 0
-    const h = Number.parseFloat(formData.height) || 0
-    let vol = 0
+  const r = Number.parseFloat(formData.radius) || 0
+  const l = Number.parseFloat(formData.length) || 0
+  const w = Number.parseFloat(formData.width) || 0
+  const h = Number.parseFloat(formData.height) || 0
 
-    if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
-      vol = Math.PI * Math.pow(r, 2) * h
-    } else {
-      vol = l * w * h
-    }
+  let vol = 0
+  if (["cylindrical", "coin"].includes(formData.formFactor)) {
+    vol = Math.PI * r * r * h
+  } else {
+    vol = l * w * h
+  }
 
-    if (!formData.cell_volume || formData.cell_volume.trim() === "") {
-      setFormData((prev) => ({ ...prev, cell_volume: vol.toString() }))
-    }
-  }, [formData.formFactor, formData.radius, formData.length, formData.width, formData.height])
+  setFormData((prev) => ({
+    ...prev,
+    cell_volume: vol > 0 ? vol.toString() : prev.cell_volume, // preserve if invalid
+  }))
+}, [formData.formFactor, formData.radius, formData.length, formData.width, formData.height])
 
   const fetchCell = async (cellId: string) => {
     try {
       const cell = await getCell(cellId)
       if (cell) {
-        setFormData({
+        const newFormData = ({
           name: cell.name || "",
           formFactor: cell.formFactor || "cylindrical",
           radius: cell.dims.radius != null ? cell.dims.radius.toString() : "",
@@ -126,11 +127,12 @@ export default function CellBuilderContent() {
               ? cell.max_discharging_current_instantaneous.toString()
               : "",
           cell_weight: cell.cell_weight != null ? cell.cell_weight.toString() : "",
-          cell_volume: cell.cell_volume != null ? cell.cell_volume.toString() : "",
           cost_per_cell: cell.cost_per_cell != null ? cell.cost_per_cell.toString() : "",
           anode_composition: cell.anode_composition || "",
           cathode_composition: cell.cathode_composition || "",
+          cell_volume:"",
         })
+        setFormData(newFormData)
         setSohFile(cell.soh_file || null)
         setIsEditing(true)
       }

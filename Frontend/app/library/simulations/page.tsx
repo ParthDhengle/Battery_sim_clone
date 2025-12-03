@@ -16,11 +16,26 @@ interface Simulation {
   type: string
   status: "completed" | "running" | "failed" | "pending" | "unknown"
   created_at: string
+  // NEW: These fields are now returned from backend
+  pack_name?: string
+  drive_cycle_name?: string
+  drive_cycle_file?: string
+
+  // Optional fallback via metadata (some old sims may still use this)
+  metadata?: {
+    name?: string
+    type?: string
+    pack_name?: string
+    drive_cycle_name?: string
+    summary?: any
+    progress?: number
+  }
   summary?: {
     end_soc?: number
     max_temp?: number
     capacity_fade?: number
   }
+  progress?: number
 }
 
 export default function Simulations() {
@@ -195,7 +210,23 @@ export default function Simulations() {
                       : "Unknown date"}
                   </span>
                 </div>
-
+                
+                {/* Metadata */}
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <span className="block">
+                    Pack: <span className="font-medium">
+                      {sim.pack_name || sim.metadata?.pack_name || "—"}
+                    </span>
+                  </span>
+                  <span className="block">
+                    Drive Cycle: <span className="font-medium">
+                      {sim.drive_cycle_name || sim.drive_cycle_file || sim.metadata?.drive_cycle_name || "—"}
+                    </span>
+                  </span>
+                  <span className="block">
+                    Created: {sim.created_at ? new Date(sim.created_at).toLocaleString() : "—"}
+                  </span>
+                </div>
                 {/* View Results Button */}
                 {sim.status === "completed" && (
                   <Button

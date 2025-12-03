@@ -1,3 +1,4 @@
+// Frontend/components/pack-builder/pack-builder.tsx
 "use client"
 import { useState, useEffect } from "react"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -5,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { AlertCircle, Battery } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { usePackBuilder } from "./use-pack-builder"
-import { useLayers } from "./use-layers"
+import { useLayers, type Layer } from "./use-layers"
 import { useVaryingCells } from "./use-varying-cells"
 import { useCustomParallelGroups } from "./use-custom-parallel-groups"
 import { PackBasicInfo } from "./pack-basic-info"
@@ -54,14 +55,6 @@ export function PackBuilder() {
     setMaxVolume,
     zPitch,
     setZPitch,
-    initialTemperature,
-    setInitialTemperature,
-    initialSOC,
-    setInitialSOC,
-    initialSOH,
-    setInitialSOH,
-    initialDCIR,
-    setInitialDCIR,
     packName,
     setPackName,
     packDescription,
@@ -72,11 +65,11 @@ export function PackBuilder() {
     setPackSummary,
     handleSelectCell,
     handleSave,
+    loadPack,
   } = usePackBuilder()
 
   const { layers, addLayer, removeLayer, updateLayer, initializeLayers } = useLayers([])
-  const { varyingCells, addVaryingCell, removeVaryingCell, updateVaryingCell, initializeVaryingCells } =
-    useVaryingCells([])
+  const { varyingCells, addVaryingCell, removeVaryingCell, updateVaryingCell } = useVaryingCells([])
   const {
     customParallelGroups,
     customConnectionError,
@@ -86,7 +79,9 @@ export function PackBuilder() {
     initializeGroups,
   } = useCustomParallelGroups([])
 
-  // Initialize default single layer when cell is selected
+  const [previewCells, setPreviewCells] = useState<any[]>([])
+
+  // Auto-add default layer when creating new pack
   useEffect(() => {
     if (layers.length === 0 && selectedCellId && !packId) {
       const minPitchX = formFactor === "cylindrical" ? 2 * (dims.radius ?? 18) : (dims.length ?? 80)
@@ -95,7 +90,47 @@ export function PackBuilder() {
     }
   }, [selectedCellId, formFactor, dims, layers.length, packId, addLayer, zPitch])
 
-  // Update pack summary on configuration changes
+  // Load layers & custom groups when editing
+  useEffect(() => {
+    if (!packId) return
+
+    const initFromPack = async () => {
+      const data = await loadPack()
+      if (!data) return
+
+      // Initialize layers
+      const loadedLayers: Layer[] = (data.layers || []).map((l: any, idx: number) => ({
+        id: idx + 1,
+        gridType: l.grid_type || "rectangular",
+        nRows: l.n_rows || 3,
+        nCols: l.n_cols || 3,
+        pitchX: l.pitch_x || 40,
+        pitchY: l.pitch_y || 40,
+        zMode: l.z_mode || "explicit",
+        zCenter: l.z_center?.toString() || "0",
+      }))
+
+      initializeLayers(loadedLayers)
+
+      // Initialize custom parallel groups
+      if (data.custom_parallel_groups?.length > 0) {
+        const groups = data.custom_parallel_groups.map((g: any, idx: number) => ({
+          id: idx + 1,
+          cellIds: g.cell_ids?.join(", ") || "",
+        }))
+        initializeGroups(groups)
+      }
+
+      // Update zPitch if saved
+      if (data.z_pitch) {
+        setZPitch(data.z_pitch.toString())
+      }
+    }
+
+    initFromPack()
+  }, [packId, loadPack, initializeLayers, initializeGroups, setZPitch])
+
+  // Update preview/summary
   useEffect(() => {
     const config = validateAndGenerateConfig({
       formFactor,
@@ -123,25 +158,14 @@ export function PackBuilder() {
       varyingCells,
       isPreview: true,
     })
-    setPreviewCells(config?.cells || [])
-    if (config?.summary) {
-      setPackSummary(config.summary)
-    } else {
-      setPackSummary(null)
-    }
-  }, [
-    formFactor,
-    dims,
-    layers,
-    zPitch,
-    allowOverlap,
-    computeNeighbors,
-    labelSchema,
-    connectionType,
-    customParallelGroups,
-  ])
 
-  const [previewCells, setPreviewCells] = useState<any[]>([])
+    setPreviewCells(config?.cells || [])
+    setPackSummary(config?.summary || null)
+  }, [
+    formFactor, dims, layers, zPitch, allowOverlap, computeNeighbors,
+    labelSchema, connectionType, customParallelGroups, mCell, capacity,
+    cellUpperVoltage, cellLowerVoltage, rP, rS
+  ])
 
   const handleSaveClick = async () => {
     const config = validateAndGenerateConfig({
@@ -169,26 +193,14 @@ export function PackBuilder() {
       maxVolume,
       varyingCells,
       selectedCellId,
-      initialTemperature,
-      initialSOC,
-      initialSOH,
-      initialDCIR,
       isPreview: false,
     })
 
-    if (config) {
-      await handleSave(config)
-    }
+    if (config) await handleSave(config)
   }
 
-  const useIndexPitch = layers.some((l) => l.zMode === "index_pitch")
-  const hasWarnings = layers.some((layer) => {
-    const total = layers.reduce(
-      (sum, l) => sum + (Number.parseInt(String(l.nRows)) || 0) * (Number.parseInt(String(l.nCols)) || 0),
-      0,
-    )
-    return total > 1000
-  })
+  const useIndexPitch = layers.some(l => l.zMode === "index_pitch")
+  const hasLargePack = layers.reduce((sum, l) => sum + (Number(l.nRows) || 0) * (Number(l.nCols) || 0), 0) > 1000
 
   return (
     <div className="space-y-6">
@@ -204,9 +216,10 @@ export function PackBuilder() {
           <Battery className="w-6 h-6" />
           {packId ? "Edit Pack" : "Create Pack"}
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">Define your battery pack geometry and electrical configuration</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Define your battery pack geometry and electrical configuration
+        </p>
       </div>
-
 
       <PackBasicInfo
         packName={packName}
@@ -274,14 +287,13 @@ export function PackBuilder() {
         setLabelSchema={setLabelSchema}
       />
 
-
       {packSummary && <PackSummaryDisplay summary={packSummary} />}
 
-      {hasWarnings && (
+      {hasLargePack && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Warning: Large pack configurations may result in longer simulation times or unrealistic setups.
+            Warning: Large packs may cause longer simulation times.
           </AlertDescription>
         </Alert>
       )}

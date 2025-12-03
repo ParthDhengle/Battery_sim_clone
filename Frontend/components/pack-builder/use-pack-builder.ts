@@ -1,5 +1,6 @@
+// Frontend/components/pack-builder/use-pack-builder.ts
 "use client"
-import { useState, useEffect, useCallback  } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getPack, createPack, updatePack } from "@/lib/api/packs"
 import { getCells } from "@/lib/api/cells"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -7,10 +8,10 @@ import { useRouter, useSearchParams } from "next/navigation"
 export interface Layer {
   id: number
   gridType: string
-  nRows: number
-  nCols: number
-  pitchX: number
-  pitchY: number
+  nRows: number | string
+  nCols: number | string
+  pitchX: number | string
+  pitchY: number | string
   zMode: "index_pitch" | "explicit"
   zCenter: string
 }
@@ -48,6 +49,7 @@ export function usePackBuilder() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const packId = searchParams.get("id")
+
   const [cells, setCells] = useState<any[]>([])
   const [selectedCellId, setSelectedCellId] = useState("")
   const [formFactor, setFormFactor] = useState<"cylindrical" | "prismatic">("cylindrical")
@@ -80,135 +82,136 @@ export function usePackBuilder() {
   const [packDescription, setPackDescription] = useState("")
   const [error, setError] = useState<string>("")
   const [packSummary, setPackSummary] = useState<PackSummary | null>(null)
+
+  // Load available cells
   useEffect(() => {
-  async function fetchCells() {
-    try {
-      const data = await getCells()
-      setCells(data)
-      // Removed auto-selection - let user choose manually
-    } catch (e: any) {
-      const errMsg =
-        e.message || "Failed to fetch cells. Check if the backend is running and connected to the database."
-      console.error("Failed to fetch cells", e)
-      setError(errMsg)
+    async function fetchCells() {
+      try {
+        const data = await getCells()
+        setCells(data)
+      } catch (e: any) {
+        setError(e.message || "Failed to load cells")
+      }
     }
-  }
-  fetchCells()
-}, [])
+    fetchCells()
+  }, [])
 
   const handleSelectCell = useCallback((id: string) => {
-  setSelectedCellId(id)
-  const cell = cells.find((c) => c.id === id)
-  if (cell) {
-    setFormFactor(cell.formFactor)
-    setDims({
-      radius: cell.dims.radius ?? undefined,
-      length: cell.dims.length ?? undefined,
-      width: cell.dims.width ?? undefined,
-      height: cell.dims.height ?? undefined,
-    })
-    setCapacity(cell.capacity)
-    setColumbicEfficiency(cell.columbicEfficiency ?? cell.columbic_efficiency ?? 1.0)
-    setMCell(cell.cell_weight)
-    setCellUpperVoltage(cell.cell_upper_voltage_cutoff)
-    setCellLowerVoltage(cell.cell_lower_voltage_cutoff)
-  }
-}, [cells])
+    setSelectedCellId(id)
+    const cell = cells.find((c) => c.id === id)
+    if (!cell) return
 
+    setFormFactor(cell.formFactor || cell.form_factor)
+    setDims({
+      radius: cell.dims?.radius,
+      length: cell.dims?.length,
+      width: cell.dims?.width,
+      height: cell.dims?.height || 70,
+    })
+    setCapacity(cell.capacity || 5)
+    setColumbicEfficiency(cell.columbicEfficiency ?? cell.columbic_efficiency ?? 1.0)
+    setMCell(cell.cell_weight || cell.m_cell || 0.067)
+    setCellUpperVoltage(cell.cell_upper_voltage_cutoff || 4.2)
+    setCellLowerVoltage(cell.cell_lower_voltage_cutoff || 2.5)
+  }, [cells])
+
+  // Load pack when editing
   const loadPack = async () => {
-    if (!packId || packId === "undefined") {
-      return;
-    }
+    if (!packId || packId === "undefined") return
+
     try {
       const pack: any = await getPack(packId)
-      setPackName(pack.name)
+
+      setPackName(pack.name || "")
       setPackDescription(pack.description || "")
       setSelectedCellId(pack.cell_id)
       setFormFactor(pack.cell.form_factor)
       setDims({
-        radius: pack.cell.dims.radius ?? undefined,
-        length: pack.cell.dims.length ?? undefined,
-        width: pack.cell.dims.width ?? undefined,
-        height: pack.cell.dims.height,
+        radius: pack.cell.dims?.radius,
+        length: pack.cell.dims?.length,
+        width: pack.cell.dims?.width,
+        height: pack.cell.dims?.height || 70,
       })
-      setCapacity(pack.cell.capacity)
-      setColumbicEfficiency(pack.cell.columbic_efficiency)
-      setMCell(pack.cell.m_cell)
-      setMJellyroll(pack.cell.m_jellyroll)
-      setCellUpperVoltage(pack.cell.cell_voltage_upper_limit)
-      setCellLowerVoltage(pack.cell.cell_voltage_lower_limit)
-      setCostPerCell(pack.cost_per_cell.toString())
+      setCapacity(pack.cell.capacity || 5)
+      setColumbicEfficiency(pack.cell.columbic_efficiency || 1.0)
+      setMCell(pack.cell.m_cell || 0.067)
+      setMJellyroll(pack.cell.m_jellyroll || 0.057)
+      setCellUpperVoltage(pack.cell.cell_voltage_upper_limit || 4.2)
+      setCellLowerVoltage(pack.cell.cell_voltage_lower_limit || 2.5)
+      setCostPerCell(pack.cost_per_cell?.toString() || "3.0")
       setConnectionType(pack.connection_type)
-      setRP(pack.r_p)
-      setRS(pack.r_s)
-      setModuleUpperVoltage(pack.voltage_limits.module_upper?.toString() || "60")
-      setModuleLowerVoltage(pack.voltage_limits.module_lower?.toString() || "40")
-      setAllowOverlap(pack.options.allow_overlap)
-      setComputeNeighbors(pack.options.compute_neighbors)
-      setLabelSchema(pack.options.label_schema)
-      setMaxWeight(pack.constraints.max_weight?.toString() || "10")
-      setMaxVolume(pack.constraints.max_volume?.toString() || "0.01")
-      
-      
-      setPackSummary(pack.summary)
+      setRP(pack.r_p || 0.001)
+      setRS(pack.r_s || 0.001)
+      setModuleUpperVoltage(pack.voltage_limits?.module_upper?.toString() || "60")
+      setModuleLowerVoltage(pack.voltage_limits?.module_lower?.toString() || "40")
+      setAllowOverlap(!!pack.options?.allow_overlap)
+      setComputeNeighbors(pack.options?.compute_neighbors !== false)
+      setLabelSchema(pack.options?.label_schema || "R{row}C{col}L{layer}")
+      setMaxWeight(pack.constraints?.max_weight?.toString() || "10")
+      setMaxVolume(pack.constraints?.max_volume?.toString() || "0.01")
+      setZPitch(pack.z_pitch?.toString() || "80")
+      setPackSummary(pack.summary || null)
+
+      // Return data needed for layer/group initialization in PackBuilder
+      return {
+        layers: pack.layers || [],
+        z_pitch: pack.z_pitch,
+        custom_parallel_groups: pack.custom_parallel_groups || [],
+      }
     } catch (e: any) {
-      const errMsg = e.message || "Failed to load pack. Check backend connection.";
-      console.error("Failed to load pack", e);
-      setError(errMsg);
-      setTimeout(() => router.push("/library/packs"), 2000); // Redirect on load failure
+      setError(e.message || "Failed to load pack")
+      setTimeout(() => router.push("/library/packs"), 2000)
+      return null
     }
   }
+
   useEffect(() => {
     if (packId && packId !== "undefined") {
-      loadPack();
+      loadPack()
     }
-  }, [packId]);
+  }, [packId])
+
   const handleSave = async (config: any) => {
-    if (!packName) {
-      setError("Please enter a pack name")
+    if (!packName.trim()) {
+      setError("Pack name is required")
       return
     }
     if (!config) {
-      setError("Invalid pack configuration")
+      setError("Invalid configuration")
       return
     }
-    const packData = {
+
+    const payload = {
       ...config,
-      name: packName,
+      name: packName.trim(),
       description: packDescription || null,
     }
+
     try {
       if (packId) {
-        await updatePack(packId, packData)
+        await updatePack(packId, payload)
       } else {
-        await createPack(packData)
+        await createPack(payload)
       }
       router.push("/library/packs")
     } catch (e: any) {
       setError(e.message || "Failed to save pack")
     }
   }
+
   return {
     packId,
     cells,
     selectedCellId,
     setSelectedCellId,
     formFactor,
-    setFormFactor,
     dims,
-    setDims,
     capacity,
-    setCapacity,
     columbicEfficiency,
-    setColumbicEfficiency,
     mCell,
-    setMCell,
     mJellyroll,
-    setMJellyroll,
     cellUpperVoltage,
-    setCellUpperVoltage,
     cellLowerVoltage,
-    setCellLowerVoltage,
     costPerCell,
     setCostPerCell,
     connectionType,
@@ -251,5 +254,6 @@ export function usePackBuilder() {
     setPackSummary,
     handleSelectCell,
     handleSave,
+    loadPack, // Expose so PackBuilder can use it
   }
 }

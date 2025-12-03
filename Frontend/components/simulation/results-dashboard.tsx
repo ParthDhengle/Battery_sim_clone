@@ -46,6 +46,57 @@ interface ResultsDashboardProps {
   onPrevious?: () => void
 }
 
+interface ReportData {
+  simulationId: string
+  packInfo: {
+    cellDetails: {
+      formFactor?: string
+      dimensions?: {
+        radius?: number
+        height?: number
+        length?: number
+        width?: number
+      }
+      capacity?: number
+      voltage?: {
+        max?: number
+        min?: number
+      }
+      mass?: number
+    }
+    packDetails: {
+      electrical: {
+        nSeries?: number
+        nParallel?: number
+        nTotal?: number
+        packNominalVoltage?: number
+        packCapacity?: number
+        packEnergyWh?: number
+      }
+      mechanical: {
+        totalPackWeight?: number
+        totalPackVolume?: number
+        energyDensityGravimetric?: number
+        energyDensityVolumetric?: number
+      }
+      commercial: {
+        totalPackCost?: number
+      }
+    }
+  }
+  driveCycleInfo: {
+    name?: string
+    duration?: number
+    frequency?: number
+  }
+  initialConditions?: any
+  simulationResults: {
+    summary?: any
+    total_points?: number
+    data?: SimulationDataPoint[]
+  }
+}
+
 export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps) {
   const [simulationData, setSimulationData] = useState<SimulationDataResponse | null>(null)
   const [maxPoints, setMaxPoints] = useState("5000")
@@ -346,148 +397,105 @@ const handleReport = async () => {
     setError("No simulation data available");
     return;
   }
-  
+
   try {
     setError(null);
-    
-    // Fetch simulation metadata from API
+
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const simResponse = await fetch(`${API_BASE}/simulations/${simulationId}`, {
-      cache: "no-store"
-    });
-    
-    if (!simResponse.ok) {
-      throw new Error("Failed to fetch simulation metadata");
-    }
-    
-    const simMetadata = await simResponse.json();
-    
-    // Fetch pack data
-    const packId = simMetadata.pack_id;
-    if (!packId) {
-      throw new Error("No pack ID found in simulation");
-    }
-    
-    const packResponse = await fetch(`${API_BASE}/packs/${packId}`, {
-      cache: "no-store"
-    });
-    
-    if (!packResponse.ok) {
-      throw new Error("Failed to fetch pack data");
-    }
-    
-    const packData = await packResponse.json();
-    
-    // Fetch cell data
-    const cellId = packData.cell_id;
-    if (!cellId) {
-      throw new Error("No cell ID found in pack");
-    }
-    
-    const cellResponse = await fetch(`${API_BASE}/cells/${cellId}`, {
-      cache: "no-store"
-    });
-    
-    if (!cellResponse.ok) {
-      throw new Error("Failed to fetch cell data");
-    }
-    
-    const cellData = await cellResponse.json();
-    
-    // Calculate pack summary if not available
-    const electrical = packData.summary?.electrical || {
-      nSeries: packData.r_s || 0,
-      nParallel: packData.r_p || 0,
-      nTotal: (packData.r_s || 0) * (packData.r_p || 0),
-      packNominalVoltage: (packData.r_s || 0) * (cellData.nominal_voltage || 3.7),
-      packCapacity: (packData.r_p || 0) * (cellData.capacity || 0),
-      packEnergyWh: (packData.r_s || 0) * (cellData.nominal_voltage || 3.7) * (packData.r_p || 0) * (cellData.capacity || 0),
-      packMaxVoltage: (packData.r_s || 0) * (cellData.upper_voltage || 4.2),
-      packMinVoltage: (packData.r_s || 0) * (cellData.lower_voltage || 2.5),
-      adjustedPackEnergyWh: (packData.r_s || 0) * (cellData.nominal_voltage || 3.7) * (packData.r_p || 0) * (cellData.capacity || 0) * (cellData.columbic_efficiency || 1.0),
+
+    // 1. Get simulation (has pack_id, initial_conditions, drive_cycle_name)
+    const simRes = await fetch(`${API_BASE}/simulations/${simulationId}`, { cache: "no-store" });
+    if (!simRes.ok) throw new Error("Failed to fetch simulation");
+    const sim = await simRes.json();
+
+    // 2. Get pack
+    const packId = sim.pack_id;
+    if (!packId) throw new Error("Pack ID not found in simulation");
+    const packRes = await fetch(`${API_BASE}/packs/${packId}`, { cache: "no-store" });
+    if (!packRes.ok) throw new Error("Failed to fetch pack");
+    const pack = await packRes.json();
+
+    // 3. Get cell
+    const cellRes = await fetch(`${API_BASE}/cells/${pack.cell_id}`, { cache: "no-store" });
+    if (!cellRes.ok) throw new Error("Failed to fetch cell");
+    const cell = await cellRes.json();
+
+    // === CORRECTLY extract initial conditions ===
+    const rawInit = sim.initial_conditions || {};
+    const defaultConditions = {
+      temperature: rawInit.temperature || 300,
+      soc: (rawInit.soc || 1.0) * 100, // stored as 0–1 → convert to %
+      soh: rawInit.soh || 1.0,
+      dcir: rawInit.dcir_aging_factor || 1.0,
     };
-    
-    const mechanical = packData.summary?.mechanical || {
-      totalCells: (packData.r_s || 0) * (packData.r_p || 0),
-      totalPackWeight: ((packData.r_s || 0) * (packData.r_p || 0) * (cellData.m_cell || 0)),
-      totalPackVolume: 0.001,
-      energyDensityGravimetric: 0,
-      energyDensityVolumetric: 0,
-    };
-    
-    const commercial = packData.summary?.commercial || {
-      totalPackCost: ((packData.r_s || 0) * (packData.r_p || 0) * (packData.cost_per_cell || 0)),
-      costPerKwh: 0,
-    };
-    
-    // Get drive cycle info from simulation metadata
-    const driveCycleName = simMetadata.drive_cycle_name || simMetadata.metadata?.drive_cycle_name || "Unknown";
-    const duration = simMetadata.duration || simMetadata.metadata?.duration || 0;
-    const frequency = simMetadata.frequency || simMetadata.metadata?.frequency || 1;
-    
-    // Get initial conditions from simulation metadata
-    const initialConditions = simMetadata.initial_conditions || packData.initial_conditions || {
-      default: {
-        temperature: 298.15,
-        soc: 100,
-        soh: 1.0,
-        dcir: 1.0,
-      }
-    };
-    
-    const reportData = {
-      simulationId: simulationId,
+
+    const varyingConditions = (rawInit.varying_conditions || []).map((v: any) => ({
+      cellIds: v.cell_ids || [],
+      temp: v.temperature || defaultConditions.temperature,
+      soc: (v.soc || 1.0) * 100,
+      soh: v.soh || 1.0,
+      dcir: v.dcir_aging_factor || 1.0,
+    }));
+
+    // Build report data
+    const reportData: ReportData = {
+      simulationId,
       packInfo: {
         cellDetails: {
-          formFactor: cellData.form_factor || "cylindrical",
+          formFactor: cell.form_factor || "cylindrical",
           dimensions: {
-            radius: cellData.radius,
-            height: cellData.height,
-            length: cellData.length,
-            width: cellData.width,
+            radius: cell.radius || 0,
+            height: cell.height || 0,
+            length: cell.length || 0,
+            width: cell.width || 0,
           },
-          capacity: cellData.capacity || 0,
-          voltage: { 
-            max: cellData.upper_voltage || 4.2, 
-            min: cellData.lower_voltage || 2.5 
-          },
-          mass: cellData.m_cell || 0,
+          capacity: cell.capacity || 0,
+          voltage: { max: cell.upper_voltage || 4.2, min: cell.lower_voltage || 2.5 },
+          mass: cell.m_cell || 0,
         },
         packDetails: {
-          electrical,
-          mechanical,
-          commercial,
+          electrical: {
+            nSeries: pack.r_s || 0,
+            nParallel: pack.r_p || 0,
+            nTotal: (pack.r_s || 0) * (pack.r_p || 0),
+            packNominalVoltage: (pack.r_s || 0) * (cell.nominal_voltage || 3.7),
+            packCapacity: (pack.r_p || 0) * (cell.capacity || 0),
+            packEnergyWh: (pack.r_s || 0) * (cell.nominal_voltage || 3.7) * (pack.r_p || 0) * (cell.capacity || 0),
+          },
+          mechanical: {
+            totalPackWeight: (pack.r_s || 0) * (pack.r_p || 0) * (cell.m_cell || 0),
+            totalPackVolume: 0.001,
+            energyDensityGravimetric: 0,
+            energyDensityVolumetric: 0,
+          },
+          commercial: {
+            totalPackCost: (pack.r_s || 0) * (pack.r_p || 0) * (pack.cost_per_cell || 0),
+          },
         },
       },
       driveCycleInfo: {
-        name: driveCycleName,
-        duration: duration,
-        frequency: frequency,
+        name: sim.drive_cycle_name || sim.drive_cycle_file || "Custom Drive Cycle",
+        duration: simulationData.data[simulationData.data.length - 1]?.time || 0,
+        frequency: 1,
       },
       initialConditions: {
-        default: {
-          temperature: initialConditions.default?.temperature || 298.15,
-          soc: initialConditions.default?.soc || 100,
-          soh: initialConditions.default?.soh || 1.0,
-          dcir: initialConditions.default?.dcir || 1.0,
-        },
-        varying: initialConditions.varying || [],
+        default: defaultConditions,
+        varying: varyingConditions.length > 0 ? varyingConditions : undefined,
       },
       simulationResults: {
-        summary: summary,
+        summary,
         total_points: simulationData.total_points,
         data: simulationData.data,
       },
     };
-    
+
     await generatePDFReport(reportData);
-    
-  } catch (err) {
-    console.error("❌ Failed to generate report:", err);
-    const errorMsg = err instanceof Error ? err.message : "Failed to generate PDF report";
-    setError(errorMsg);
+
+  } catch (err: any) {
+    console.error("PDF Generation Error:", err);
+    setError(err.message || "Failed to generate PDF report");
   }
-}
+};
 
   const handleStopSimulation = async () => {
     if (!simulationId || isStopping) return

@@ -1,10 +1,7 @@
-import React from 'react';
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
-// PDF Report Generator for Battery Pack Simulation Results
-// This component generates a comprehensive PDF report including pack info, drive cycle details,
-// initial conditions, and simulation results with charts
-
-interface ReportData {
+export interface ReportData {
   simulationId: string;
   packInfo: {
     cellDetails: {
@@ -58,524 +55,567 @@ interface ReportData {
   };
 }
 
+const ENABLE_LIVE_PREVIEW = true;
+
+let previewWindow: Window | null = null;
+let currentPreviewUrl: string | null = null;
+
+const PRIMARY_COLOR = { r: 14, g: 88, b: 165 } as const;
+const ACCENT_COLOR = { r: 92, g: 152, b: 242 } as const;
+const SUCCESS_COLOR = { r: 34, g: 197, b: 94 } as const;
+const WARNING_COLOR = { r: 251, g: 146, b: 60 } as const;
+
 export async function generatePDFReport(data: ReportData): Promise<void> {
-  // Dynamic import to avoid bundling issues
-  const { jsPDF } = await import('jspdf');
-  await import('jspdf-autotable');
-  
-  const doc = new jsPDF() as any;
-  let yPos = 20;
+  const doc = new jsPDF();
+  let yPos = 0;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
   const contentWidth = pageWidth - 2 * margin;
 
-  // Helper function to check if we need a new page
+  const addCoverPage = () => {
+    doc.setFillColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b);
+    doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+    doc.setFillColor(255, 255, 255, 0.1);
+    doc.circle(pageWidth - 30, 40, 60, "F");
+    doc.circle(40, pageHeight - 50, 80, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(40);
+    doc.setFont("helvetica", "bold");
+    const title = "BATTERY PACK";
+    doc.text(title, pageWidth / 2, 80, { align: "center" });
+
+    doc.setFontSize(36);
+    doc.text("SIMULATION REPORT", pageWidth / 2, 100, { align: "center" });
+
+    doc.setLineWidth(1);
+    doc.setDrawColor(255, 255, 255);
+    const lineY = 115;
+    doc.line(pageWidth / 2 - 50, lineY, pageWidth / 2 + 50, lineY);
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(255, 255, 255, 0.9);
+    doc.text(`Simulation ID: ${data.simulationId}`, pageWidth / 2, 140, { align: "center" });
+
+    const infoBoxY = 165;
+    const boxWidth = 150;
+    const boxHeight = 60;
+    const boxX = (pageWidth - boxWidth) / 2;
+
+    doc.setFillColor(255, 255, 255, 0.15);
+    doc.roundedRect(boxX, infoBoxY, boxWidth, boxHeight, 5, 5, "F");
+
+    doc.setFontSize(11);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Report Details", pageWidth / 2, infoBoxY + 12, { align: "center" });
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    const generateDate = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    doc.text(`Generated: ${generateDate}`, pageWidth / 2, infoBoxY + 25, { align: "center" });
+    doc.text(`Drive Cycle: ${data.driveCycleInfo.name}`, pageWidth / 2, infoBoxY + 35, { align: "center" });
+    doc.text(`Data Points: ${data.simulationResults.total_points.toLocaleString()}`, pageWidth / 2, infoBoxY + 45, {
+      align: "center",
+    });
+
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255, 0.7);
+    doc.text("YCS Battery Simulator", pageWidth / 2, pageHeight - 20, { align: "center" });
+    doc.text("Professional Simulation & Analysis Platform", pageWidth / 2, pageHeight - 13, { align: "center" });
+  };
+
+  const addHeader = (pageTitle: string) => {
+    doc.setFillColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b);
+    doc.rect(0, 0, pageWidth, 25, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text(pageTitle, margin, 15);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`ID: ${data.simulationId}`, pageWidth - margin, 15, { align: "right" });
+
+    yPos = 35;
+  };
+
+  const addFooter = (pageNum: number) => {
+    const footerY = pageHeight - 15;
+
+    doc.setDrawColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b);
+    doc.setLineWidth(0.5);
+    doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Battery Pack Simulation Report`, margin, footerY);
+    doc.text(`Page ${pageNum}`, pageWidth - margin, footerY, { align: "right" });
+  };
+
   const checkPageBreak = (requiredSpace: number) => {
-    if (yPos + requiredSpace > pageHeight - margin) {
+    if (yPos + requiredSpace > pageHeight - 30) {
+      const currentPage = (doc as any).internal.getNumberOfPages();
+      addFooter(currentPage);
       doc.addPage();
-      yPos = 20;
+      yPos = 35;
       return true;
     }
     return false;
   };
 
-  // Helper to add section header
-  const addSectionHeader = (title: string) => {
-    checkPageBreak(15);
+  const addSection = (title: string) => {
+    checkPageBreak(25);
+
+    doc.setFillColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b);
+    doc.roundedRect(margin - 5, yPos - 2, contentWidth + 10, 14, 3, 3, "F");
+
     doc.setFontSize(16);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(37, 99, 235); // Blue color
-    doc.text(title, margin, yPos);
-    yPos += 3;
-    doc.setDrawColor(37, 99, 235);
-    doc.setLineWidth(0.5);
-    doc.line(margin, yPos, pageWidth - margin, yPos);
-    yPos += 10;
-    doc.setTextColor(0, 0, 0);
-    doc.setFont(undefined, 'normal');
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(247,247,247);
+    doc.text(`${title}`, margin, yPos + 8);
+
+    yPos += 20;
   };
 
-  // ========== TITLE PAGE ==========
-  doc.setFontSize(24);
-  doc.setFont(undefined, 'bold');
-  doc.setTextColor(37, 99, 235);
-  doc.text('Battery Pack Simulation Report', pageWidth / 2, 60, { align: 'center' });
-  
-  doc.setFontSize(12);
-  doc.setTextColor(100, 100, 100);
-  doc.setFont(undefined, 'normal');
-  doc.text(`Simulation ID: ${data.simulationId}`, pageWidth / 2, 75, { align: 'center' });
-  doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, 85, { align: 'center' });
-  
-  // Add decorative line
-  doc.setDrawColor(37, 99, 235);
-  doc.setLineWidth(1);
-  doc.line(margin, 100, pageWidth - margin, 100);
-  
-  doc.addPage();
-  yPos = 20;
+  const addSubSection = (title: string) => {
+    checkPageBreak(15);
 
-  // ========== 1. PACK INFORMATION ==========
-  addSectionHeader('1. Pack Information');
-  
-  // Cell Details Subsection
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('Cell Details', margin, yPos);
-  yPos += 8;
-  
-  const cellData = [
-    ['Form Factor', data.packInfo.cellDetails.formFactor],
-    ['Capacity', `${data.packInfo.cellDetails.capacity} Ah`],
-    ['Max Voltage', `${data.packInfo.cellDetails.voltage.max} V`],
-    ['Min Voltage', `${data.packInfo.cellDetails.voltage.min} V`],
-    ['Cell Mass', `${(data.packInfo.cellDetails.mass * 1000).toFixed(2)} g`],
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(60, 60, 60);
+    doc.text(title, margin, yPos);
+
+    doc.setDrawColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b, 0.3);
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPos + 2, margin + 60, yPos + 2);
+
+    yPos += 12;
+  };
+
+  const addKeyValuePair = (key: string, value: string, indent: number = 0) => {
+    checkPageBreak(8);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(key + ":", margin + indent, yPos);
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    const keyWidth = doc.getTextWidth(key + ": ");
+    doc.text(value, margin + indent + keyWidth, yPos);
+
+    yPos += 7;
+  };
+
+  const addKpiCard = (x: number, y: number, width: number, height: number, label: string, value: string, subtext: string, color: { r: number; g: number; b: number }) => {
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(x, y, width, height, 4, 4, "F");
+
+    doc.setDrawColor(color.r, color.g, color.b, 0.3);
+    doc.setLineWidth(0.8);
+    doc.roundedRect(x, y, width, height, 4, 4, "S");
+
+    doc.setFillColor(color.r, color.g, color.b, 0.1);
+    doc.roundedRect(x, y, width, 8, 4, 4, "F");
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(color.r, color.g, color.b);
+    doc.text(label, x + width / 2, y + 6, { align: "center" });
+
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text(value, x + width / 2, y + height / 2 + 3, { align: "center" });
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(120, 120, 120);
+    doc.text(subtext, x + width / 2, y + height - 5, { align: "center" });
+  };
+
+  const addTable = (head: string[][], body: any[][], options: any = {}) => {
+    checkPageBreak(40);
+
+    autoTable(doc, {
+      head,
+      body,
+      startY: yPos,
+      theme: "grid",
+      headStyles: {
+        fillColor: [PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 10,
+        halign: "left",
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [60, 60, 60],
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252],
+      },
+      columnStyles: {
+        0: { cellWidth: contentWidth * 0.4, fontStyle: "bold", textColor: [80, 80, 80] },
+        1: { cellWidth: contentWidth * 0.6, halign: "left" },
+      },
+      margin: { left: margin, right: margin },
+      tableWidth: "auto",
+      ...options,
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+  };
+
+  const drawMiniChart = (x: number, y: number, width: number, height: number, dataPoints: number[], label: string, unit: string, color: { r: number; g: number; b: number }) => {
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.5);
+    doc.rect(x, y, width, height);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(60, 60, 60);
+    doc.text(label, x + 3, y + 7);
+
+    if (dataPoints.length === 0) return;
+
+    const chartAreaY = y + 12;
+    const chartAreaHeight = height - 20;
+    const maxVal = Math.max(...dataPoints);
+    const minVal = Math.min(...dataPoints);
+    const range = maxVal - minVal || 1;
+
+    const step = width / (dataPoints.length - 1 || 1);
+
+    doc.setDrawColor(color.r, color.g, color.b);
+    doc.setLineWidth(1.2);
+
+    for (let i = 0; i < dataPoints.length - 1; i++) {
+      const x1 = x + i * step;
+      const y1 = chartAreaY + chartAreaHeight - ((dataPoints[i] - minVal) / range) * chartAreaHeight;
+      const x2 = x + (i + 1) * step;
+      const y2 = chartAreaY + chartAreaHeight - ((dataPoints[i + 1] - minVal) / range) * chartAreaHeight;
+      doc.line(x1, y1, x2, y2);
+    }
+
+    doc.setFillColor(color.r, color.g, color.b, 0.1);
+    doc.rect(x, chartAreaY, width, chartAreaHeight, "F");
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Min: ${minVal.toFixed(2)}${unit}`, x + 3, y + height - 3);
+    doc.text(`Max: ${maxVal.toFixed(2)}${unit}`, x + width - 3, y + height - 3, { align: "right" });
+  };
+
+  addCoverPage();
+
+  doc.addPage();
+  addHeader("Executive Summary");
+
+  addSection("Key Performance Indicators");
+
+  const cardWidth = (contentWidth - 10) / 3;
+  const cardHeight = 35;
+  const cardY = yPos;
+
+  addKpiCard(
+    margin,
+    cardY,
+    cardWidth,
+    cardHeight,
+    "Final State of Charge",
+    `${(data.simulationResults.summary.end_soc * 100).toFixed(1)}%`,
+    "Remaining capacity",
+    SUCCESS_COLOR
+  );
+
+  addKpiCard(
+    margin + cardWidth + 5,
+    cardY,
+    cardWidth,
+    cardHeight,
+    "Peak Temperature",
+    `${data.simulationResults.summary.max_temp.toFixed(1)}°C`,
+    "Thermal maximum",
+    WARNING_COLOR
+  );
+
+  addKpiCard(
+    margin + 2 * (cardWidth + 5),
+    cardY,
+    cardWidth,
+    cardHeight,
+    "Capacity Degradation",
+    `${data.simulationResults.summary.capacity_fade.toFixed(3)}%`,
+    "Total fade",
+    ACCENT_COLOR
+  );
+
+  yPos = cardY + cardHeight + 20;
+
+  addSection("Performance Charts");
+
+  const simData = data.simulationResults.data;
+  const sampleSize = Math.min(100, simData.length);
+  const sampleStep = Math.floor(simData.length / sampleSize);
+
+  const voltages = simData.filter((_, i) => i % sampleStep === 0).map((d) => d.voltage || 0);
+  const currents = simData.filter((_, i) => i % sampleStep === 0).map((d) => d.current || 0);
+  const socs = simData.filter((_, i) => i % sampleStep === 0).map((d) => (d.soc || 0) * 100);
+  const temps = simData.filter((_, i) => i % sampleStep === 0).map((d) => d.temp || 25);
+
+  const chartWidth = (contentWidth - 5) / 2;
+  const chartHeight = 45;
+
+  drawMiniChart(margin, yPos, chartWidth, chartHeight, voltages, "Voltage Profile", "V", ACCENT_COLOR);
+  drawMiniChart(margin + chartWidth + 5, yPos, chartWidth, chartHeight, currents, "Current Profile", "A", PRIMARY_COLOR);
+
+  yPos += chartHeight + 10;
+
+  drawMiniChart(margin, yPos, chartWidth, chartHeight, socs, "State of Charge", "%", SUCCESS_COLOR);
+  drawMiniChart(margin + chartWidth + 5, yPos, chartWidth, chartHeight, temps, "Temperature", "°C", WARNING_COLOR);
+
+  yPos += chartHeight + 20;
+
+  doc.addPage();
+  addHeader("Battery Pack Configuration");
+
+  addSection("Cell Specifications");
+
+  const cell = data.packInfo.cellDetails;
+  const cellBody: any[][] = [
+    ["Form Factor", cell.formFactor],
+    ["Nominal Capacity", `${cell.capacity.toFixed(2)} Ah`],
+    ["Nominal Voltage", "3.7 V"],
+    ["Voltage Range", `${cell.voltage.min} V – ${cell.voltage.max} V`],
+    ["Cell Mass", `${(cell.mass * 1000).toFixed(1)} g`],
   ];
-  
-  // Add dimensions based on form factor
-  const dims = data.packInfo.cellDetails.dimensions;
-  if (data.packInfo.cellDetails.formFactor === 'cylindrical') {
-    cellData.push(['Radius', `${dims.radius} mm`]);
-    cellData.push(['Height', `${dims.height} mm`]);
+
+  if (cell.formFactor === "cylindrical") {
+    cellBody.push(["Diameter", `${(cell.dimensions.radius * 2).toFixed(1)} mm`]);
+    cellBody.push(["Height", `${cell.dimensions.height.toFixed(1)} mm`]);
   } else {
-    cellData.push(['Length', `${dims.length} mm`]);
-    cellData.push(['Width', `${dims.width} mm`]);
-    cellData.push(['Height', `${dims.height} mm`]);
+    cellBody.push(["Dimensions (L×W×H)", `${cell.dimensions.length} × ${cell.dimensions.width} × ${cell.dimensions.height} mm`]);
   }
 
-  doc.autoTable({
-    startY: yPos,
-    head: [['Property', 'Value']],
-    body: cellData,
-    theme: 'grid',
-    headStyles: { fillColor: [37, 99, 235], fontSize: 10 },
-    styles: { fontSize: 9, cellPadding: 3 },
-    margin: { left: margin, right: margin },
-  });
-  
-  yPos = doc.lastAutoTable.finalY + 10;
-  checkPageBreak(60);
+  addTable([["Parameter", "Value"]], cellBody);
 
-  // Pack Details Subsection
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('Pack Configuration', margin, yPos);
-  yPos += 8;
+  addSection("Pack Configuration");
 
   const elec = data.packInfo.packDetails.electrical;
   const mech = data.packInfo.packDetails.mechanical;
   const comm = data.packInfo.packDetails.commercial;
 
-  const packData = [
-    ['Series Cells', elec.nSeries],
-    ['Parallel Cells', elec.nParallel],
-    ['Total Cells', elec.nTotal],
-    ['Nominal Voltage', `${elec.packNominalVoltage?.toFixed(2)} V`],
-    ['Pack Capacity', `${elec.packCapacity?.toFixed(2)} Ah`],
-    ['Pack Energy', `${elec.packEnergyWh?.toFixed(2)} Wh`],
-    ['Total Weight', `${mech.totalPackWeight?.toFixed(3)} kg`],
-    ['Pack Volume', `${mech.totalPackVolume?.toFixed(6)} m³`],
-    ['Energy Density (Gravimetric)', `${mech.energyDensityGravimetric?.toFixed(2)} Wh/kg`],
-    ['Energy Density (Volumetric)', `${mech.energyDensityVolumetric?.toFixed(2)} Wh/L`],
-    ['Total Cost', `$${comm.totalPackCost?.toFixed(2)}`],
-    ['Cost per kWh', `$${comm.costPerKwh?.toFixed(2)}/kWh`],
+  const packBody = [
+    ["Configuration", `${elec.nSeries}S × ${elec.nParallel}P (Series × Parallel)`],
+    ["Total Cells", elec.nTotal.toLocaleString()],
+    ["Pack Nominal Voltage", `${elec.packNominalVoltage?.toFixed(1)} V`],
+    ["Pack Capacity", `${elec.packCapacity?.toFixed(1)} Ah`],
+    ["Total Energy", `${elec.packEnergyWh?.toFixed(0)} Wh (${(elec.packEnergyWh / 1000).toFixed(2)} kWh)`],
+    ["Specific Energy", mech.energyDensityGravimetric ? `${mech.energyDensityGravimetric.toFixed(1)} Wh/kg` : "—"],
+    ["Energy Density", mech.energyDensityVolumetric ? `${mech.energyDensityVolumetric.toFixed(0)} Wh/L` : "—"],
+    ["Total Pack Weight", `${mech.totalPackWeight?.toFixed(2)} kg`],
+    ["Estimated Cost", comm.totalPackCost ? `$${comm.totalPackCost.toFixed(0)}` : "—"],
   ];
 
-  doc.autoTable({
-    startY: yPos,
-    head: [['Property', 'Value']],
-    body: packData,
-    theme: 'grid',
-    headStyles: { fillColor: [37, 99, 235], fontSize: 10 },
-    styles: { fontSize: 9, cellPadding: 3 },
-    margin: { left: margin, right: margin },
-  });
+  addTable([["Parameter", "Value"]], packBody);
 
-  yPos = doc.lastAutoTable.finalY + 15;
+  doc.addPage();
+  addHeader("Simulation Parameters");
 
-  // ========== 2. DRIVE CYCLE INFORMATION ==========
-  checkPageBreak(50);
-  addSectionHeader('2. Drive Cycle Information');
+  addSection("Drive Cycle Information");
 
-  const cycleData = [
-    ['Drive Cycle Name', data.driveCycleInfo.name],
-    ['Total Duration', `${data.driveCycleInfo.duration} seconds`],
-    ['Simulation Frequency', `${data.driveCycleInfo.frequency} Hz`],
-  ];
+  addTable(
+    [["Parameter", "Value"]],
+    [
+      ["Drive Cycle Name", data.driveCycleInfo.name],
+      ["Total Duration", `${data.driveCycleInfo.duration.toLocaleString()} seconds (${(data.driveCycleInfo.duration / 3600).toFixed(2)} hours)`],
+      ["Time Step Frequency", `${data.driveCycleInfo.frequency} Hz`],
+    ]
+  );
 
-  doc.autoTable({
-    startY: yPos,
-    head: [['Property', 'Value']],
-    body: cycleData,
-    theme: 'grid',
-    headStyles: { fillColor: [37, 99, 235], fontSize: 10 },
-    styles: { fontSize: 9, cellPadding: 3 },
-    margin: { left: margin, right: margin },
-  });
+  addSection("Initial Cell Conditions");
 
-  yPos = doc.lastAutoTable.finalY + 15;
+  const def = data.initialConditions.default;
 
-  // ========== 3. INITIAL CELL CONDITIONS ==========
-  checkPageBreak(80);
-  addSectionHeader('3. Initial Cell Conditions');
+  addTable(
+    [["Parameter", "Value"]],
+    [
+      ["Temperature", `${def.temperature.toFixed(1)} K (${(def.temperature - 273.15).toFixed(1)}°C)`],
+      ["State of Charge (SOC)", `${def.soc}%`],
+      ["State of Health (SOH)", `${def.soh.toFixed(3)} (${(def.soh * 100).toFixed(1)}%)`],
+      ["DCIR Aging Factor", def.dcir.toFixed(2)],
+    ]
+  );
 
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('Default Conditions (All Cells)', margin, yPos);
-  yPos += 8;
-
-  const defaultConditions = [
-    ['Temperature', `${data.initialConditions.default.temperature} K`],
-    ['State of Charge (SOC)', `${data.initialConditions.default.soc}%`],
-    ['State of Health (SOH)', data.initialConditions.default.soh],
-    ['DCIR Aging Factor', data.initialConditions.default.dcir],
-  ];
-
-  doc.autoTable({
-    startY: yPos,
-    head: [['Parameter', 'Value']],
-    body: defaultConditions,
-    theme: 'grid',
-    headStyles: { fillColor: [37, 99, 235], fontSize: 10 },
-    styles: { fontSize: 9, cellPadding: 3 },
-    margin: { left: margin, right: margin },
-  });
-
-  yPos = doc.lastAutoTable.finalY + 10;
-
-  // Varying Conditions
   if (data.initialConditions.varying && data.initialConditions.varying.length > 0) {
-    checkPageBreak(60);
-    doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
-    doc.text('Cell-Specific Conditions', margin, yPos);
-    yPos += 8;
+    addSubSection("Cell-Specific Variations");
 
-    data.initialConditions.varying.forEach((condition, index) => {
-      checkPageBreak(40);
-      
+    data.initialConditions.varying.forEach((v, i) => {
+      checkPageBreak(35);
+
       doc.setFontSize(10);
-      doc.setFont(undefined, 'bold');
-      doc.text(`Condition ${index + 1}`, margin, yPos);
-      yPos += 6;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b);
+      doc.text(`Variation Group ${i + 1}`, margin, yPos);
+      yPos += 10;
 
-      const varyingData = [
-        ['Affected Cells', condition.cellIds.join(', ')],
-        ['Temperature', `${condition.temp} K`],
-        ['SOC', `${condition.soc}%`],
-        ['SOH', condition.soh],
-        ['DCIR Aging Factor', condition.dcir],
-      ];
-
-      doc.autoTable({
-        startY: yPos,
-        body: varyingData,
-        theme: 'plain',
-        styles: { fontSize: 8, cellPadding: 2 },
-        margin: { left: margin + 5, right: margin },
-        columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 50 },
-        },
-      });
-
-      yPos = doc.lastAutoTable.finalY + 8;
+      addTable(
+        [["Parameter", "Value"]],
+        [
+          ["Affected Cells", v.cellIds.join(", ")],
+          ["Temperature", `${v.temp} K (${(v.temp - 273.15).toFixed(1)}°C)`],
+          ["SOC", `${v.soc}%`],
+          ["SOH", v.soh.toFixed(3)],
+          ["DCIR Factor", v.dcir.toFixed(2)],
+        ]
+      );
     });
   }
 
-  yPos += 5;
-
-  // ========== 4. SIMULATION RESULTS ==========
   doc.addPage();
-  yPos = 20;
-  addSectionHeader('4. Simulation Results');
+  addHeader("Detailed Results");
 
-  // KPI Summary
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('Key Performance Indicators', margin, yPos);
-  yPos += 8;
+  addSection("Simulation Statistics");
 
-  const kpiData = [
-    ['Final State of Charge', `${(data.simulationResults.summary.end_soc * 100).toFixed(1)}%`],
-    ['Maximum Temperature', `${data.simulationResults.summary.max_temp.toFixed(1)}°C`],
-    ['Capacity Fade', `${data.simulationResults.summary.capacity_fade.toFixed(2)}%`],
-    ['Total Data Points', data.simulationResults.total_points.toLocaleString()],
+  const voltageData = simData.map((d) => d.voltage).filter((v): v is number => v !== undefined);
+  const currentData = simData.map((d) => d.current).filter((v): v is number => v !== undefined);
+  const socData = simData.map((d) => d.soc).filter((v): v is number => v !== undefined);
+  const tempData = simData.map((d) => d.temp).filter((v): v is number => v !== undefined);
+
+  const statsBody: any[][] = [
+    ["Total Data Points", data.simulationResults.total_points.toLocaleString()],
+    ["Voltage Range", voltageData.length ? `${Math.min(...voltageData).toFixed(2)} V – ${Math.max(...voltageData).toFixed(2)} V` : "—"],
+    ["Current Range", currentData.length ? `${Math.min(...currentData).toFixed(1)} A – ${Math.max(...currentData).toFixed(1)} A` : "—"],
+    ["SOC Range", socData.length ? `${(Math.min(...socData) * 100).toFixed(1)}% – ${(Math.max(...socData) * 100).toFixed(1)}%` : "—"],
+    ["Temperature Range", tempData.length ? `${Math.min(...tempData).toFixed(1)}°C – ${Math.max(...tempData).toFixed(1)}°C` : "—"],
   ];
 
-  doc.autoTable({
-    startY: yPos,
-    head: [['Metric', 'Value']],
-    body: kpiData,
-    theme: 'grid',
-    headStyles: { fillColor: [34, 197, 94], fontSize: 10 },
-    styles: { fontSize: 9, cellPadding: 3 },
-    margin: { left: margin, right: margin },
-  });
+  addTable([["Metric", "Value"]], statsBody);
 
-  yPos = doc.lastAutoTable.finalY + 15;
+  addSection("Performance Analysis");
 
-  // Chart Placeholders
-  checkPageBreak(100);
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('Simulation Charts', margin, yPos);
-  yPos += 8;
+  checkPageBreak(50);
 
-  doc.setFontSize(9);
-  doc.setFont(undefined, 'normal');
-  doc.setTextColor(100, 100, 100);
-  
-  // Sample data statistics
-  const voltages = data.simulationResults.data.map(d => d.voltage).filter(v => v !== undefined);
-  const currents = data.simulationResults.data.map(d => d.current).filter(c => c !== undefined);
-  const socs = data.simulationResults.data.map(d => d.soc).filter(s => s !== undefined);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
 
-  const chartStats = [
-    ['Voltage Range', voltages.length > 0 ? `${Math.min(...voltages).toFixed(2)} - ${Math.max(...voltages).toFixed(2)} V` : 'N/A'],
-    ['Current Range', currents.length > 0 ? `${Math.min(...currents).toFixed(2)} - ${Math.max(...currents).toFixed(2)} A` : 'N/A'],
-    ['SOC Range', socs.length > 0 ? `${(Math.min(...socs) * 100).toFixed(1)} - ${(Math.max(...socs) * 100).toFixed(1)}%` : 'N/A'],
+  const analysis = [
+    `The simulation processed ${data.simulationResults.total_points.toLocaleString()} data points over ${(data.driveCycleInfo.duration / 3600).toFixed(2)} hours of operation.`,
+    ``,
+    `The battery pack maintained a final state of charge of ${(data.simulationResults.summary.end_soc * 100).toFixed(1)}%, indicating ${data.simulationResults.summary.end_soc > 0.2 ? "adequate" : "low"} remaining capacity.`,
+    ``,
+    `Peak temperature reached ${data.simulationResults.summary.max_temp.toFixed(1)}°C, which is ${data.simulationResults.summary.max_temp > 45 ? "above recommended" : "within acceptable"} operating limits.`,
+    ``,
+    `Total capacity degradation of ${data.simulationResults.summary.capacity_fade.toFixed(3)}% was observed during this cycle.`,
   ];
 
-  doc.autoTable({
-    startY: yPos,
-    body: chartStats,
-    theme: 'plain',
-    styles: { fontSize: 9, cellPadding: 2 },
-    margin: { left: margin, right: margin },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 60 },
-    },
-  });
-
-  yPos = doc.lastAutoTable.finalY + 10;
-
-  // Add note about charts
-  doc.setFontSize(9);
-  doc.setTextColor(100, 100, 100);
-  doc.text(
-    'Note: Detailed interactive charts are available in the web interface.',
-    margin,
-    yPos
-  );
-  doc.text(
-    'For full data analysis, please export the CSV file.',
-    margin,
-    yPos + 5
-  );
-
-  // Footer on last page
-  yPos = pageHeight - 15;
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text(
-    `Report generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`,
-    pageWidth / 2,
-    yPos,
-    { align: 'center' }
-  );
-
-  // Save the PDF
-  doc.save(`simulation-report-${data.simulationId}.pdf`);
-}
-
-// React Component Wrapper
-export default function PDFReportGenerator() {
-  const [isGenerating, setIsGenerating] = React.useState(false);
-
-  const handleGenerateSample = async () => {
-    setIsGenerating(true);
-    
-    // Sample data for demonstration
-    const sampleData: ReportData = {
-      simulationId: 'demo-12345',
-      packInfo: {
-        cellDetails: {
-          formFactor: 'cylindrical',
-          dimensions: { radius: 21, height: 70 },
-          capacity: 5.0,
-          voltage: { max: 4.2, min: 2.5 },
-          mass: 0.07,
-        },
-        packDetails: {
-          electrical: {
-            nSeries: 96,
-            nParallel: 3,
-            nTotal: 288,
-            packNominalVoltage: 355.2,
-            packCapacity: 15.0,
-            packEnergyWh: 5328.0,
-          },
-          mechanical: {
-            totalPackWeight: 20.16,
-            totalPackVolume: 0.0156,
-            energyDensityGravimetric: 264.29,
-            energyDensityVolumetric: 341538.46,
-          },
-          commercial: {
-            totalPackCost: 864.0,
-            costPerKwh: 162.16,
-          },
-        },
-      },
-      driveCycleInfo: {
-        name: 'WLTP Class 3',
-        duration: 1800,
-        frequency: 1,
-      },
-      initialConditions: {
-        default: {
-          temperature: 298.15,
-          soc: 100,
-          soh: 1.0,
-          dcir: 1.0,
-        },
-        varying: [
-          {
-            cellIds: ['R1C1L1', 'R1C2L1'],
-            temp: 308.15,
-            soc: 80,
-            soh: 0.95,
-            dcir: 1.1,
-          },
-        ],
-      },
-      simulationResults: {
-        summary: {
-          end_soc: 0.65,
-          max_temp: 32.5,
-          capacity_fade: 2.3,
-        },
-        total_points: 1800,
-        data: Array.from({ length: 100 }, (_, i) => ({
-          time: i * 18,
-          voltage: 350 + Math.random() * 50,
-          current: -20 + Math.random() * 40,
-          soc: 1 - (i / 100) * 0.35,
-          temp: 25 + Math.random() * 7.5,
-          qgen: Math.random() * 500,
-        })),
-      },
-    };
-
-    try {
-      await generatePDFReport(sampleData);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    } finally {
-      setIsGenerating(false);
+  const lineHeight = 6;
+  analysis.forEach((line) => {
+    checkPageBreak(lineHeight);
+    if (line === "") {
+      yPos += lineHeight / 2;
+    } else {
+      const splitText = doc.splitTextToSize(line, contentWidth);
+      doc.text(splitText, margin, yPos);
+      yPos += splitText.length * lineHeight;
     }
-  };
+  });
 
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
-      <div className="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full">
-        <div className="text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-            <svg
-              className="w-8 h-8 text-blue-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </div>
-          
-          <h1 className="text-3xl font-bold text-gray-900">
-            Battery Simulation PDF Report Generator
-          </h1>
-          
-          <p className="text-gray-600">
-            Generate comprehensive PDF reports for battery pack simulation results.
-            Includes pack information, drive cycle details, initial conditions, and simulation results.
-          </p>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
-            <h3 className="font-semibold text-blue-900 mb-2">Report Includes:</h3>
-            <ul className="space-y-1 text-sm text-blue-800">
-              <li>✓ Cell and pack configuration details</li>
-              <li>✓ Drive cycle information</li>
-              <li>✓ Initial cell conditions (default & cell-specific)</li>
-              <li>✓ Simulation results with KPIs</li>
-              <li>✓ Data statistics and charts summary</li>
-            </ul>
-          </div>
-          
-          <button
-            onClick={handleGenerateSample}
-            disabled={isGenerating}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {isGenerating ? (
-              <>
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    fill="none"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                Generating PDF...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-                Generate Sample PDF Report
-              </>
-            )}
-          </button>
-          
-          <p className="text-xs text-gray-500">
-            This will download a sample PDF report with demonstration data
-          </p>
-        </div>
-        
-        <div className="mt-8 border-t pt-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Integration Instructions:</h3>
-          <div className="bg-gray-50 rounded-lg p-4 text-left">
-            <code className="text-xs text-gray-800 block whitespace-pre-wrap">
-{`// Import the function
-import { generatePDFReport } from './pdf-report-generator'
+  yPos += 10;
 
-// In your handleReport function:
-const handleReport = async () => {
-  const reportData = {
-    simulationId: simulationId,
-    packInfo: { /* your pack data */ },
-    driveCycleInfo: { /* your drive cycle data */ },
-    initialConditions: { /* your initial conditions */ },
-    simulationResults: { /* your results data */ }
+  doc.addPage();
+  addHeader("Conclusion");
+
+  addSection("Report Summary");
+
+  checkPageBreak(60);
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+
+  const conclusion = [
+    `This comprehensive battery pack simulation report provides detailed insights into the performance characteristics of a ${elec.nSeries}S${elec.nParallel}P configuration under the ${data.driveCycleInfo.name} drive cycle.`,
+    ``,
+    `The ${elec.nTotal}-cell pack demonstrated ${data.simulationResults.summary.end_soc > 0.3 ? "reliable" : "concerning"} performance with key metrics falling ${data.simulationResults.summary.max_temp < 50 && data.simulationResults.summary.capacity_fade < 1 ? "within" : "outside"} expected operational parameters.`,
+    ``,
+    `For optimal performance and longevity, it is recommended to:`,
+    `• Maintain operating temperatures below 45°C`,
+    `• Avoid deep discharge cycles (SOC < 20%)`,
+    `• Monitor capacity fade trends over extended use`,
+    `• Implement thermal management strategies if peak temperatures exceed 50°C`,
+  ];
+
+  conclusion.forEach((line) => {
+    checkPageBreak(lineHeight);
+    if (line === "") {
+      yPos += lineHeight / 2;
+    } else {
+      const splitText = doc.splitTextToSize(line, contentWidth);
+      doc.text(splitText, margin, yPos);
+      yPos += splitText.length * lineHeight;
+    }
+  });
+
+  yPos += 15;
+
+  doc.setFillColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b, 0.05);
+  doc.roundedRect(margin, yPos, contentWidth, 30, 3, 3, "F");
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(PRIMARY_COLOR.r, PRIMARY_COLOR.g, PRIMARY_COLOR.b);
+  doc.text("Report Generated By", margin + 5, yPos + 10);
+
+  doc.setFontSize(14);
+  doc.text("YCS Battery Simulator", margin + 5, yPos + 18);
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 100, 100);
+  doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), margin + 5, yPos + 25);
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 2; i <= totalPages; i++) {
+    doc.setPage(i);
+    addFooter(i - 1);
   }
-  
-  await generatePDFReport(reportData)
-}`}
-            </code>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+
+  const pdfBlob = doc.output("blob");
+  const blobUrl = URL.createObjectURL(pdfBlob);
+
+  if (ENABLE_LIVE_PREVIEW) {
+    if (previewWindow && !previewWindow.closed) {
+      previewWindow.location.href = blobUrl;
+    } else {
+      previewWindow = window.open(blobUrl, "battery-pdf-preview");
+    }
+
+    if (currentPreviewUrl) {
+      const prevUrl = currentPreviewUrl;
+      setTimeout(() => {
+        URL.revokeObjectURL(prevUrl);
+      }, 1000);
+    }
+    currentPreviewUrl = blobUrl;
+    previewWindow?.focus();
+  } else {
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = `Battery_Simulation_Report_${data.simulationId}.pdf`;
+    link.click();
+    URL.revokeObjectURL(blobUrl);
+  }
 }
