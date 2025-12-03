@@ -13,6 +13,7 @@ interface CompositionEditorProps {
   onCancel: () => void
   initialData?: any
   isEditing?: boolean
+  preventFormWrap?: boolean   // ← ADD THIS
 }
 export default function CompositionEditor({
   subcycles,
@@ -20,6 +21,7 @@ export default function CompositionEditor({
   onCancel,
   initialData,
   isEditing,
+  preventFormWrap = false,   // ← default false
 }: CompositionEditorProps) {
   const [row, setRow] = useState(
     initialData || {
@@ -66,6 +68,26 @@ export default function CompositionEditor({
     }
     onSubmit(row)
   }
+  const content = (
+    <div className="space-y-4">
+      {/* ← ALL YOUR EXISTING JSX (Select, Inputs, Triggers, etc.) */}
+      {/* ... exactly same as before ... */}
+      
+      <div className="flex gap-2 pt-4">
+        <Button type="submit" className="flex-1">
+          {isEditing ? "Update" : "Add Sub-cycle"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} className="flex-1 bg-transparent">
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+
+  if (preventFormWrap) {
+    return <Card><CardContent className="pt-6">{content}</CardContent></Card>
+  }
+  
   return (
     <Card>
       <CardContent className="pt-6">

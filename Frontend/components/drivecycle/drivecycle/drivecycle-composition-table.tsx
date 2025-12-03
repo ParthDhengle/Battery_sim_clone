@@ -47,24 +47,30 @@ export default function DrivecycleCompositionTable({
     onCompositionChange(composition.filter((c) => c.id !== id))
   }
   if (showNew) {
+  return (
+    <CompositionEditor
+      subcycles={subcycles}
+      onSubmit={handleAddComposition}
+      onCancel={() => setShowNew(false)}
+      preventFormWrap={true}   // ← ADD THIS
+    />
+  )
+}
+  if (editing) {
+  const row = composition.find((c) => c.id === editing)
+  if (row) {
     return (
-      <CompositionEditor subcycles={subcycles} onSubmit={handleAddComposition} onCancel={() => setShowNew(false)} />
+      <CompositionEditor
+        subcycles={subcycles}
+        onSubmit={(newRow) => handleEditComposition(editing, newRow)}
+        onCancel={() => setEditing(null)}
+        initialData={row}
+        isEditing
+        preventFormWrap={true}   // ← ADD THIS
+      />
     )
   }
-  if (editing) {
-    const row = composition.find((c) => c.id === editing)
-    if (row) {
-      return (
-        <CompositionEditor
-          subcycles={subcycles}
-          onSubmit={(newRow) => handleEditComposition(editing, newRow)}
-          onCancel={() => setEditing(null)}
-          initialData={row}
-          isEditing
-        />
-      )
-    }
-  }
+}
   let currentTime = 0
   return (
     <div className="space-y-4">
