@@ -20,12 +20,12 @@ interface StepEditorProps {
 export default function StepEditor({ onSubmit, onCancel, initialData, isEditing }: StepEditorProps) {
   const [step, setStep] = useState(
     initialData || {
-      duration: 5,
+      duration: 10,           // ← now user-defined
       timestep: 1,
       valueType: "current",
       value: 0,
       unit: "A",
-      repetitions: 5,
+      repetitions: 1,         // kept only for compatibility / future use
       stepType: "fixed",
       triggers: [],
       label: "",
@@ -77,10 +77,6 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
       return
     }
 
-    if (step.stepType === "fixed" && step.duration !== step.repetitions * step.timestep) {
-      alert("For fixed steps: Duration must equal Repetitions × Timestep")
-      return
-    }
 
     onSubmit(step)
   }
@@ -91,17 +87,17 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="timestep">Timestep (s) *</Label>
-              <Input
-                id="timestep"
-                type="number"
-                step="0.1"
-                value={step.timestep}
-                onChange={(e) => setStep({ ...step, timestep: Number.parseFloat(e.target.value) })}
-                required
-              />
-            </div>
-
+                <Label htmlFor="duration">Duration (s) *</Label>
+                <Input
+                  id="duration"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={step.duration}
+                  onChange={(e) => setStep({ ...step, duration: Number.parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
             <div>
               <Label htmlFor="repetitions">Repetitions *</Label>
               <Input
@@ -114,12 +110,25 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
                   setStep({
                     ...step,
                     repetitions: reps,
-                    duration: reps * step.timestep,
                   })
                 }}
                 required
               />
             </div>
+
+            <div>
+              <Label htmlFor="timestep">Timestep (s) *</Label>
+              <Input
+                id="timestep"
+                type="number"
+                step="0.1"
+                value={step.timestep}
+                onChange={(e) => setStep({ ...step, timestep: Number.parseFloat(e.target.value) })}
+                required
+              />
+            </div>
+
+            
           </div>
 
           <div className="grid grid-cols-2 gap-4">

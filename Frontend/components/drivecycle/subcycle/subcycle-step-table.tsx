@@ -6,16 +6,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Trash2, Edit2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import StepEditor from "./step-editor"
-
+import {Input} from "@/components/ui/input"
 interface Step {
   id: string
   duration: number
   timestep: number
-  valueType: "current" | "c_rate" | "voltage" | "power" | "resistance"
+  valueType: string
   value: number | string
   unit: string
   repetitions: number
-  stepType: "fixed" | "trigger_only" | "fixed_with_triggers"
+  stepType: string
   triggers: Array<{ type: string; value: any }>
   label: string
 }
@@ -41,26 +41,19 @@ export default function SubcycleStepTable({ steps, onStepsChange }: SubcycleStep
     setEditing(null)
   }
 
-  const handleDeleteStep = (id: string) => {
-    onStepsChange(steps.filter((s) => s.id !== id))
+  const handleDeleteStep = (id: string) => onStepsChange(steps.filter((s) => s.id !== id))
+
+  // Live editing of a step (so total duration updates instantly)
+  const handleLiveUpdate = (id: string, field: keyof Step, value: any) => {
+    onStepsChange(
+      steps.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+    )
   }
 
-  if (showNew) {
-    return <StepEditor onSubmit={handleAddStep} onCancel={() => setShowNew(false)} />
-  }
-
+  if (showNew) return <StepEditor onSubmit={handleAddStep} onCancel={() => setShowNew(false)} />
   if (editing) {
     const step = steps.find((s) => s.id === editing)
-    if (step) {
-      return (
-        <StepEditor
-          onSubmit={(newStep) => handleEditStep(editing, newStep)}
-          onCancel={() => setEditing(null)}
-          initialData={step}
-          isEditing
-        />
-      )
-    }
+    if (step) return <StepEditor onSubmit={(newStep) => handleEditStep(editing, newStep)} onCancel={() => setEditing(null)} initialData={step} isEditing />
   }
 
   return (
@@ -71,42 +64,70 @@ export default function SubcycleStepTable({ steps, onStepsChange }: SubcycleStep
       </Button>
 
       {steps.length === 0 ? (
-        <Card className="p-4 text-center text-muted-foreground">
+        <Card className="p-6 text-center text-muted-foreground">
           No steps defined. Add a step to start building the sub-cycle.
         </Card>
       ) : (
-        <div className="overflow-x-auto border rounded-lg">
+        /* THIS IS THE BULLETPROOF SCROLL CONTAINER */
+        <div className="w-full overflow-x-auto rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Index</TableHead>
-                <TableHead>Duration (s)</TableHead>
-                <TableHead>Timestep (s)</TableHead>
-                <TableHead>Value Type</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Repetitions</TableHead>
-                <TableHead>Step Type</TableHead>
-                <TableHead>Label</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="whitespace-nowrap">Index</TableHead>
+                <TableHead className="whitespace-nowrap">Duration (s)</TableHead>
+                <TableHead className="whitespace-nowrap">Timestep (s)</TableHead>
+                <TableHead className="whitespace-nowrap">Value Type</TableHead>
+                <TableHead className="whitespace-nowrap">Value</TableHead>
+                <TableHead className="whitespace-nowrap">Repetitions</TableHead>
+                <TableHead className="whitespace-nowrap">Step Type</TableHead>
+                <TableHead className="whitespace-nowrap">Triggers</TableHead>
+                <TableHead className="whitespace-nowrap">Label</TableHead>
+                <TableHead className="whitespace-nowrap">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {steps.map((step, index) => (
                 <TableRow key={step.id}>
                   <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>{(step.duration || step.repetitions * step.timestep).toFixed(1)}</TableCell>
+
+                  {/* Live editable duration */}
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={step.duration}
+                      className="h-8 w-20"
+                      onChange={(e) => handleLiveUpdate(step.id, "duration", Number(e.target.value) || 0)}
+                    />
+                  </TableCell>
+
                   <TableCell>{step.timestep}</TableCell>
                   <TableCell>{step.valueType}</TableCell>
+                  <TableCell>{step.value} {step.unit}</TableCell>
+
+                  {/* Live editable repetitions */}
                   <TableCell>
-                    {step.value} {step.unit}
+                    <Input
+                      type="number"
+                      min="1"
+                      value={step.repetitions}
+                      className="h-8 w-16"
+                      onChange={(e) => handleLiveUpdate(step.id, "repetitions", Number(e.target.value) || 1)}
+                    />
                   </TableCell>
-                  <TableCell>{step.repetitions}</TableCell>
+
                   <TableCell>
-                    <span className="text-xs bg-secondary text-secondary-foreground px-2 py-1 rounded">
-                      {step.stepType}
-                    </span>
+                    <span className="text-xs bg-secondary px-2 py-1 rounded">{step.stepType}</span>
                   </TableCell>
-                  <TableCell>{step.label}</TableCell>
+
+                  <TableCell className="max-w-[180px] truncate">
+                    {step.triggers.length > 0
+                      ? step.triggers.map((t: any) => `${t.type}:${t.value}`).join(" | ")
+                      : "-"}
+                  </TableCell>
+
+                  <TableCell className="max-w-[120px] truncate">{step.label || "-"}</TableCell>
+
                   <TableCell>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => setEditing(step.id)}>
