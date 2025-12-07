@@ -111,6 +111,8 @@ export function CellDataTable({
                 <TableRow>
                   <TableHead>Cell ID</TableHead>
                   <TableHead>Coordinates (X,Y)</TableHead>
+                  <TableHead>Position Type</TableHead>
+                  <TableHead>Parallel Group ID</TableHead>
                   <TableHead>Row Left</TableHead>
                   <TableHead>Row Right</TableHead>
                   <TableHead>Col Top</TableHead>
@@ -119,8 +121,6 @@ export function CellDataTable({
                   <TableHead>Diag Top Right</TableHead>
                   <TableHead>Diag Bottom Left</TableHead>
                   <TableHead>Diag Bottom Right</TableHead>
-                  <TableHead>Position Type</TableHead>
-                  <TableHead>Parallel Group ID</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -177,6 +177,8 @@ export function CellDataTable({
                     <TableRow key={pos.label}>
                       <TableCell>{pos.label}</TableCell>
                       <TableCell>{coords}</TableCell>
+                      <TableCell>{positionType}</TableCell>
+                      <TableCell>{groupId}</TableCell>
                       <TableCell>{rowLeft}</TableCell>
                       <TableCell>{rowRight}</TableCell>
                       <TableCell>{colTop}</TableCell>
@@ -185,8 +187,6 @@ export function CellDataTable({
                       <TableCell>{diagTopRight}</TableCell>
                       <TableCell>{diagBottomLeft}</TableCell>
                       <TableCell>{diagBottomRight}</TableCell>
-                      <TableCell>{positionType}</TableCell>
-                      <TableCell>{groupId}</TableCell>
                     </TableRow>
                   );
                 })}

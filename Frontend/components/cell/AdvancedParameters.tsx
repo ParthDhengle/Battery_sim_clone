@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { FileText, Info } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type Props = {
   formData: any
@@ -19,7 +20,6 @@ export default function AdvancedParameters({ formData, setFormData, sohFile, han
     setFormData({ ...formData, [field]: value })
   }
 
-  // Helper to calculate volume (used in CellBuilderContent already, but safe to reuse logic)
   return (
     <div className="space-y-6">
       {/* Electrical – Charging */}
@@ -194,22 +194,46 @@ export default function AdvancedParameters({ formData, setFormData, sohFile, han
         </CardContent>
       </Card>
 
-      {/* SOH File */}
+      {/* RC Parameter file */}
       <Card>
         <CardHeader>
-          <CardTitle>SOH File (Optional)</CardTitle>
+          <CardTitle>RC Parameter file</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Input type="file" accept=".csv,.json,.mat" onChange={handleFileUpload} />
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            <Label>Upload File</Label>
+            <Input type="file" accept=".csv,.json,.mat" onChange={handleFileUpload} />
+            {sohFile && (
+              <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
+                <FileText className="w-4 h-4" />
+                <span className="truncate max-w-md">{sohFile.name}</span>
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Upload SOH (State of Health) data file in CSV, JSON, or MAT format
+            </p>
+          </div>
+
           {sohFile && (
-            <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
-              <FileText className="w-4 h-4" />
-              <span className="truncate max-w-md">{sohFile.name}</span>
+            <div className="space-y-3">
+              <Label>RC Pair Type</Label>
+              <Select
+                value={formData.rc_pair_type || ""}
+                onValueChange={(value) => updateField("rc_pair_type", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select RC pair type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rc2">RC2 Pair</SelectItem>
+                  <SelectItem value="rc3">RC3 Pair</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                Select the RC pair configuration for the uploaded parameter file
+              </p>
             </div>
           )}
-          <p className="text-sm text-muted-foreground">
-            Upload SOH (State of Health) data file in CSV, JSON, or MAT format
-          </p>
         </CardContent>
       </Card>
     </div>

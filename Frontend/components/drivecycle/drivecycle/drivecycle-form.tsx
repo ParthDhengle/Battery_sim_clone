@@ -82,11 +82,11 @@ export default function DrivecycleForm({
           </div>
 
           <div className="flex gap-3 pt-4 border-t">
-            <Button type="submit" className="flex-1">
-              {isEditing ? "Update" : "Create"} Drive Cycle
-            </Button>
             <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
               Cancel
+            </Button>
+            <Button type="submit" className="flex-1">
+              {isEditing ? "Update" : "Create"} Drive Cycle
             </Button>
           </div>
         </form>

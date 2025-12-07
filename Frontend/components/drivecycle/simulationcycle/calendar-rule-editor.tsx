@@ -1,6 +1,6 @@
-"use client"
+// components/drivecycle/calendar/calendar-rule-editor.tsx
 
-import type React from "react"
+"use client"
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -12,10 +12,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 
 interface CalendarRuleEditorProps {
-  drivecycles: any[]
-  onSubmit: (rule: any) => void
+  drivecycles: { id: string; name: string }[]
+  onSubmit: (rule: {
+    drivecycleId: string
+    drivecycleName: string
+    months: number[]
+    daysOfWeek: string[]
+    dates: number[]
+    notes: string
+  }) => void
   onCancel: () => void
-  initialData?: any
+  initialData?: {
+    drivecycleId: string
+    drivecycleName: string
+    months: number[]
+    daysOfWeek: string[]
+    dates: number[]
+    notes: string
+  }
   isEditing?: boolean
 }
 
@@ -41,7 +55,7 @@ export default function CalendarRuleEditor({
   onSubmit,
   onCancel,
   initialData,
-  isEditing,
+  isEditing = false,
 }: CalendarRuleEditorProps) {
   const [rule, setRule] = useState(
     initialData || {
@@ -51,7 +65,7 @@ export default function CalendarRuleEditor({
       daysOfWeek: [],
       dates: [],
       notes: "",
-    },
+    }
   )
 
   const [useDate, setUseDate] = useState(!!initialData?.dates?.length)
@@ -68,12 +82,16 @@ export default function CalendarRuleEditor({
   }
 
   const handleMonthToggle = (month: number) => {
-    const newMonths = rule.months.includes(month) ? rule.months.filter((m) => m !== month) : [...rule.months, month]
+    const newMonths = rule.months.includes(month)
+      ? rule.months.filter((m) => m !== month)
+      : [...rule.months, month]
     setRule({ ...rule, months: newMonths })
   }
 
   const handleDayToggle = (day: string) => {
-    const newDays = rule.daysOfWeek.includes(day) ? rule.daysOfWeek.filter((d) => d !== day) : [...rule.daysOfWeek, day]
+    const newDays = rule.daysOfWeek.includes(day)
+      ? rule.daysOfWeek.filter((d) => d !== day)
+      : [...rule.daysOfWeek, day]
     setRule({ ...rule, daysOfWeek: newDays })
   }
 
@@ -87,6 +105,7 @@ export default function CalendarRuleEditor({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!rule.drivecycleId) {
       alert("Please select a drive cycle")
       return
@@ -100,9 +119,10 @@ export default function CalendarRuleEditor({
       return
     }
     if (useDate && rule.dates.length === 0) {
-      alert("Enter at least one date")
+      alert("Enter at least one valid date")
       return
     }
+
     onSubmit(rule)
   }
 
@@ -110,6 +130,7 @@ export default function CalendarRuleEditor({
     <Card>
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Drive Cycle */}
           <div>
             <Label htmlFor="drivecycleId">Select Drive Cycle *</Label>
             <Select value={rule.drivecycleId} onValueChange={handleSelectDrivecycle}>
@@ -126,6 +147,7 @@ export default function CalendarRuleEditor({
             </Select>
           </div>
 
+          {/* Months */}
           <div>
             <Label className="mb-3 block">Select Months *</Label>
             <div className="grid grid-cols-3 gap-3">
@@ -144,9 +166,11 @@ export default function CalendarRuleEditor({
             </div>
           </div>
 
+          {/* Days of Week OR Specific Dates */}
           <div>
             <Label className="mb-3 block">Calendar Filter *</Label>
             <div className="space-y-4">
+              {/* Days of Week */}
               <div className="flex items-center gap-3">
                 <Checkbox
                   id="useDay"
@@ -178,6 +202,7 @@ export default function CalendarRuleEditor({
                 </div>
               )}
 
+              {/* Specific Dates */}
               <div className="flex items-center gap-3">
                 <Checkbox
                   id="useDate"
@@ -197,30 +222,34 @@ export default function CalendarRuleEditor({
                   <Input
                     placeholder="e.g., 1, 15, 30"
                     onChange={handleDateInputChange}
-                    defaultValue={rule.dates.join(", ")}
+                    defaultValue={initialData?.dates.join(", ") || ""}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Enter comma-separated dates (1-31)</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Enter comma-separated dates (1-31)
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
+          {/* Notes */}
           <div>
-            <Label htmlFor="notes">Notes</Label>
+            <Label htmlFor="notes">Notes (optional)</Label>
             <Textarea
               id="notes"
               value={rule.notes}
               onChange={(e) => setRule({ ...rule, notes: e.target.value })}
-              placeholder="Optional description of this rule"
+              placeholder="Describe this rule..."
               rows={2}
             />
           </div>
 
+          {/* Buttons */}
           <div className="flex gap-2">
             <Button type="submit" className="flex-1">
               {isEditing ? "Update Rule" : "Add Rule"}
             </Button>
-            <Button type="button" variant="outline" onClick={onCancel} className="flex-1 bg-transparent">
+            <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
               Cancel
             </Button>
           </div>

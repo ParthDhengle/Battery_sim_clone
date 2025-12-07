@@ -26,6 +26,7 @@ type Pack = {
   connection_type: string;
   r_p: number;
   r_s: number;
+  z_pitch?: number | null;
   layers: Array<{
     grid_type: string;
     n_rows: number;
@@ -70,13 +71,15 @@ type Props = {
 
 export default function PackDetailsView({ pack }: Props) {
   const [open, setOpen] = useState(false);
+  console.log("Pack cells:")
+  console.log(pack.cell)
 
   const totalLayers = pack.layers.length;
   const totalCells = pack.summary?.electrical.n_total || pack.layers.reduce((s, l) => s + l.n_rows * l.n_cols, 0);
 
   const connectionLabel = {
-    row_series_column_parallel: "Rows in Series, Columns in Parallel",
-    row_parallel_column_series: "Rows in Parallel, Columns in Series",
+    row_series_column_parallel: "Rows Parallel",
+    row_parallel_column_series: "Columns Parallel",
     custom: "Custom Configuration"
   }[pack.connection_type] || pack.connection_type;
 
@@ -146,20 +149,20 @@ export default function PackDetailsView({ pack }: Props) {
                   title="Voltage"
                   value={`${pack.summary.electrical.pack_nominal_voltage.toFixed(2)} V`}
                   subtitle={`${pack.summary.electrical.pack_min_voltage.toFixed(2)}V – ${pack.summary.electrical.pack_max_voltage.toFixed(2)}V`}
-                  icon={Battery}
+                  icon={Zap}
                 />
                 <SummaryCard
-                  title="Cost"
-                  value={`$${pack.summary.commercial.total_pack_cost.toFixed(2)}`}
-                  subtitle={`$${pack.summary.commercial.cost_per_kwh.toFixed(2)}/kWh`}
-                  icon={DollarSign}
+                  title="Cell"
+                  value={pack.cell?.name|| "No cell name"}
+                  subtitle={pack.cell?.form_factor || "Unknown"}
+                  icon={Battery}
                 />
               </div>
             )}
 
             {/* Electrical Properties */}
             <Section title="Electrical Properties" icon={Zap}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
                 <DetailMetric label="Series Cells" value={pack.summary?.electrical.n_series || "-"} />
                 <DetailMetric label="Parallel Cells" value={pack.summary?.electrical.n_parallel || "-"} />
                 <DetailMetric label="Total Cells" value={pack.summary?.electrical.n_total || totalCells} />
@@ -168,7 +171,6 @@ export default function PackDetailsView({ pack }: Props) {
                 <DetailMetric label="Pack Voltage (Min)" value={`${pack.summary?.electrical.pack_min_voltage.toFixed(2) || "-"} V`} />
                 <DetailMetric label="Pack Capacity" value={`${pack.summary?.electrical.pack_capacity.toFixed(2) || "-"} Ah`} />
                 <DetailMetric label="Pack Energy" value={`${pack.summary?.electrical.pack_energy_wh.toFixed(2) || "-"} Wh`} />
-                <DetailMetric label="Energy (Adjusted)" value={`${pack.summary?.electrical.pack_energy_wh.toFixed(2) || "-"} Wh`} />
                 <DetailMetric label="R_series" value={`${(pack.r_s * 1000).toFixed(3)} mΩ`} />
                 <DetailMetric label="R_parallel" value={`${(pack.r_p * 1000).toFixed(3)} mΩ`} />
                 <DetailMetric label="Cell Voltage Upper" value={`${pack.cell.cell_voltage_upper_limit.toFixed(2)} V`} />
@@ -185,19 +187,57 @@ export default function PackDetailsView({ pack }: Props) {
                 <DetailMetric label="Pack Volume" value={`${(pack.summary?.mechanical.total_pack_volume || 0).toFixed(6)} m³`} />
                 <DetailMetric label="Energy Density (Wh/kg)" value={`${pack.summary?.mechanical.energy_density_gravimetric.toFixed(2) || "-"}`} />
                 <DetailMetric label="Energy Density (Wh/L)" value={`${pack.summary?.mechanical.energy_density_volumetric.toFixed(2) || "-"}`} />
-                <DetailMetric label="Cell Form Factor" value={pack.cell.form_factor} />
-                {pack.cell.form_factor === "cylindrical" && (
+                {pack.cell.form_factor === "cylindrical" && pack.layers[0] && (
                   <>
-                    <DetailMetric label="Cell Radius" value={`${pack.cell.dims.radius || "-"} mm`} />
-                    <DetailMetric label="Cell Length" value={`${pack.cell.dims.length || "-"} mm`} />
+                    <DetailMetric 
+                      label="Pack Length" 
+                      value={pack.cell.dims.radius 
+                        ? `${((pack.layers[0].pitch_x * (pack.layers[0].n_rows - 1)) + (2 * pack.cell.dims.radius)).toFixed(2)} mm`
+                        : "-"
+                      } 
+                    />
+                    <DetailMetric 
+                      label="Pack Width" 
+                      value={pack.cell.dims.radius
+                        ? `${((pack.layers[0].pitch_y * (pack.layers[0].n_cols - 1)) + (2 * pack.cell.dims.radius)).toFixed(2)} mm`
+                        : "-"
+                      } 
+                    />
+                    <DetailMetric 
+                      label="Pack Height"
+                      value={(pack.cell.dims.height && totalLayers > 0)
+                        ? `${(pack.cell.dims.height * totalLayers + (pack.z_pitch || 0) * (totalLayers - 1)).toFixed(2)} mm`
+                        : "-"
+                      }
+                    />
                   </>
                 )}
-                {pack.cell.form_factor === "prismatic" && (
+                {pack.cell.form_factor === "prismatic" && pack.layers[0] && (
                   <>
-                    <DetailMetric label="Cell Width" value={`${pack.cell.dims.width || "-"} mm`} />
-                    <DetailMetric label="Cell Height" value={`${pack.cell.dims.height || "-"} mm`} />
+                    <DetailMetric 
+                      label="Pack Length" 
+                      value={pack.cell.dims.width
+                        ? `${((pack.layers[0].pitch_x * (pack.layers[0].n_rows - 1)) + pack.cell.dims.width).toFixed(2)} mm`
+                        : "-"
+                      } 
+                    />
+                    <DetailMetric 
+                      label="Pack Width" 
+                      value={pack.cell.dims.length
+                        ? `${((pack.layers[0].pitch_y * (pack.layers[0].n_cols - 1)) + (pack.cell.dims.length || 0)).toFixed(2)} mm`
+                        : "-"
+                      } 
+                    />
+                    <DetailMetric 
+                      label="Pack Height"
+                      value={(pack.cell.dims.height && totalLayers > 0)
+                        ? `${(pack.cell.dims.height * totalLayers + (pack.z_pitch || 0) * (totalLayers - 1)).toFixed(2)} mm`
+                        : "-"
+                      }
+                    />
                   </>
                 )}
+
               </div>
             </Section>
 
@@ -212,8 +252,8 @@ export default function PackDetailsView({ pack }: Props) {
 
             {/* Configuration Details */}
             <Section title="Configuration Details" icon={Settings}>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <DetailMetric label="Connection Type" value={connectionLabel} wide />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <DetailMetric label="Connection Type" value={connectionLabel}  />
                 <DetailMetric label="Label Schema" value={pack.options.label_schema} />
                 <DetailMetric label="Max Weight Constraint" value={pack.constraints.max_weight ? `${pack.constraints.max_weight} kg` : "None"} />
                 <DetailMetric label="Max Volume Constraint" value={pack.constraints.max_volume ? `${pack.constraints.max_volume} m³` : "None"} />
@@ -238,7 +278,6 @@ export default function PackDetailsView({ pack }: Props) {
                     </h4>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <DetailMetric label="Grid Type" value={gridTypeLabel(layer.grid_type)} />
-                      <DetailMetric label="Connection Type" value={connectionLabel} />
                       <DetailMetric label="Grid Size" value={`${layer.n_rows} × ${layer.n_cols}`} />
                       <DetailMetric label="Pitch X" value={`${layer.pitch_x.toFixed(2)} mm`} />
                       <DetailMetric label="Pitch Y" value={`${layer.pitch_y.toFixed(2)} mm`} />

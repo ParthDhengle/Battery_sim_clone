@@ -1,0 +1,164 @@
+// components/drivecycle/subcycle/step-table.tsx
+
+"use client"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Edit2, Trash2, Plus, X } from "lucide-react"
+import StepEditor from "./step-editor"
+import { Step } from "./types"
+
+interface StepTableProps {
+  steps: Step[]
+  onStepsChange: (steps: Step[]) => void
+}
+
+export default function StepTable({ steps, onStepsChange }: StepTableProps) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showNew, setShowNew] = useState(false)
+
+  const generateId = () => `STEP_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+
+  const handleAdd = (newStep: Omit<Step, "id">) => {
+    onStepsChange([...steps, { ...newStep, id: generateId() }])
+    setShowNew(false)
+  }
+
+  const handleUpdate = (id: string, updatedStep: Omit<Step, "id">) => {
+    onStepsChange(steps.map(s => s.id === id ? { ...updatedStep, id } : s))
+    setEditingId(null)
+  }
+
+  const handleDelete = (id: string) => {
+    onStepsChange(steps.filter(s => s.id !== id))
+    if (editingId === id) setEditingId(null)
+  }
+
+  const isEditorOpen = showNew || editingId !== null
+  const editingStep = editingId ? steps.find(s => s.id === editingId) : undefined
+
+  return (
+    <div className="space-y-6">
+
+      {/* Editor Section – Only shows when adding or editing */}
+      {isEditorOpen && (
+         
+
+          <div className="p-6">
+            {showNew ? (
+              <StepEditor
+                onSubmit={handleAdd}
+                onCancel={() => setShowNew(false)}
+              />
+            ) : editingStep ? (
+              <StepEditor
+                initialData={editingStep}
+                isEditing
+                onSubmit={(data) => handleUpdate(editingId!, data)}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : null}
+          </div>
+      )}
+
+      {/* Table Section – ALWAYS visible */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Steps ({steps.length})</h3>
+          <Button
+            onClick={() => setShowNew(true)}
+            size="sm"
+            disabled={isEditorOpen} // Prevent opening multiple editors
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add Step
+          </Button>
+        </div>
+
+        {steps.length === 0 ? (
+          <Card className="p-10 text-center text-muted-foreground border-dashed">
+            <p>No steps defined yet.</p>
+            <p className="text-sm mt-2">Click "Add Step" to create your first step.</p>
+          </Card>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">No.</TableHead>
+                  <TableHead>Duration (s)</TableHead>
+                  <TableHead>Timestep (s)</TableHead>
+                  <TableHead>Value Type</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>Reps</TableHead>
+                  <TableHead>Step Type</TableHead>
+                  <TableHead>Triggers</TableHead>
+                  <TableHead>Label</TableHead>
+                  <TableHead className="w-20">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {steps.map((step, index) => (
+                  <TableRow
+                    key={step.id}
+                    className={editingId === step.id ? "bg-accent/70 text-accent-foreground font-medium" : ""}
+                  >
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell>
+                      {step.duration === 0 ? "-" : step.duration}
+                    </TableCell>
+                    <TableCell>{step.timestep}</TableCell>
+                    <TableCell className="capitalize">{step.valueType}</TableCell>
+                    <TableCell>{step.value} {step.unit}</TableCell>
+                    <TableCell>{step.repetitions}</TableCell>
+                    <TableCell>
+                      <span className="text-xs px-2 py-1 rounded bg-secondary">
+                        {step.stepType.replace(/_/g, " ")}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-[180px]">
+                      {step.triggers.length > 0 ? (
+                        <div className="space-y-1 text-xs">
+                          {step.triggers.map((t, i) => (
+                            <div key={i}>{t.type.replace(/_/g, " ")}: {t.value}</div>
+                          ))}
+                        </div>
+                      ) : "-"}
+                    </TableCell>
+                    <TableCell className="truncate max-w-[120px]">
+                      {step.label || "-"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => setEditingId(step.id)}
+                          disabled={isEditorOpen}
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => handleDelete(step.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import Link from "next/link"
+
 type Cell = {
   id: string;
   name: string;
@@ -63,11 +64,11 @@ export default function CellDetailsView({ cell }: Props) {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
-          <DialogHeader className="pb-4 border-b">
+          <DialogHeader className="pb-2 border-b">
             <div className="flex items-center justify-between gap-4 pr-8">
-              <DialogTitle className="text-3xl font-bold flex items-center gap-3">
-                <div className="bg-blue-500 p-2.5 rounded-xl shadow-lg">
-                  <Battery className="w-8 h-8 text-white" />
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                <div className="bg-blue-500 p-1.5 rounded-lg shadow-lg">
+                  <Battery className="w-5 h-5 text-white" />
                 </div>
                 {cell.name}
               </DialogTitle>
@@ -78,8 +79,8 @@ export default function CellDetailsView({ cell }: Props) {
                 </Button>
             </Link>
             </div>
-            <div className="flex items-center gap-2 mt-3">
-              <Badge variant="secondary" className="text-sm px-3 py-1.5 font-medium">
+            <div className="flex items-center gap-2 mt-1.5">
+              <Badge variant="secondary" className="text-xs px-2 py-0.5 font-medium">
                 {formFactorLabel}
               </Badge>
               {cell.soh_file && (
@@ -92,14 +93,14 @@ export default function CellDetailsView({ cell }: Props) {
           </DialogHeader>
           
           <div className="overflow-y-auto flex-1 pr-2">
-            <div className="space-y-6 py-6">
+            <div className="space-y-3 py-3">
 
               {/* === 1. Core Electrical Specs === */}
-              <section className="bg-white rounded-2xl p-6 border border-yellow-200/50 shadow-sm">
+              <section className="bg-white rounded-lg p-3 border border-yellow-200/50 shadow-sm">
 
-                <h3 className="text-xl font-bold flex items-center gap-2 mb-5">
-                  <div className="bg-yellow-500 p-2 rounded-lg shadow">
-                    <Zap className="w-5 h-5 text-white" />
+                <h3 className="text-sm font-bold flex items-center gap-1.5 mb-2">
+                  <div className="bg-yellow-500 p-1 rounded shadow">
+                    <Zap className="w-3.5 h-3.5 text-white" />
                   </div>
                   Core Electrical Parameters
                 </h3>
@@ -114,33 +115,33 @@ export default function CellDetailsView({ cell }: Props) {
               </section>
 
               {/* === 2. Physical Dimensions & Mass === */}
-              <section className="bg-white rounded-2xl p-6 border border-purple-200/50 shadow-sm">
-                <h3 className="text-xl font-bold flex items-center gap-2 mb-5">
-                  <div className="bg-purple-500 p-2 rounded-lg shadow">
-                    <Package className="w-5 h-5 text-white" />
+              <section className="bg-white rounded-lg p-3 border border-purple-200/50 shadow-sm">
+                <h3 className="text-sm font-bold flex items-center gap-1.5 mb-2">
+                  <div className="bg-purple-500 p-1 rounded shadow">
+                    <Package className="w-3.5 h-3.5 text-white" />
                   </div>
                   Physical Specifications
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <MetricCard icon={Ruler} label="Dimensions" value={formatDim()} />
                   <MetricCard icon={Weight} label="Weight" value={`${cell.cell_weight.toFixed(4)} kg`} />
-                  {hasValue(cell.cell_volume) && (
-                    <MetricCard icon={Package} label="Volume" value={`${cell.cell_volume?.toFixed(0) / 1000} m³`} />
+                  {typeof cell.cell_volume === "number" && (
+                    <MetricCard icon={Package} label="Volume" value={`${(cell.cell_volume/10000).toFixed(3)} x 10⁻⁵ m³`} />
                   )}
                 </div>
               </section>
 
               {/* === 3. Charging & Discharging === */}
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-2 gap-3">
                 {/* Charging */}
-                <section className="bg-white rounded-2xl p-6 border border-green-200/50 shadow-sm">
-                  <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
-                    <div className="bg-green-500 p-1.5 rounded-lg shadow">
-                      <Activity className="w-4 h-4 text-white" />
+                <section className="bg-white rounded-lg p-3 border border-green-200/50 shadow-sm">
+                  <h3 className="text-sm font-bold flex items-center gap-1.5 mb-2">
+                    <div className="bg-green-500 p-1 rounded shadow">
+                      <Activity className="w-3.5 h-3.5 text-white" />
                     </div>
                     Charging Parameters
                   </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <DataRow
                       label="Continuous Current"
                       value={cell.max_charging_current_continuous ? `${cell.max_charging_current_continuous} A` : "Not specified"}
@@ -160,14 +161,14 @@ export default function CellDetailsView({ cell }: Props) {
                 </section>
 
                 {/* Discharging */}
-                <section className="bg-white rounded-2xl p-6 border border-red-200/50 shadow-sm">
-                  <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
-                    <div className="bg-red-500 p-1.5 rounded-lg shadow">
-                      <Activity className="w-4 h-4 text-white" />
+                <section className="bg-white rounded-lg p-3 border border-red-200/50 shadow-sm">
+                  <h3 className="text-sm font-bold flex items-center gap-1.5 mb-2">
+                    <div className="bg-red-500 p-1 rounded shadow">
+                      <Activity className="w-3.5 h-3.5 text-white" />
                     </div>
                     Discharging Parameters
                   </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <DataRow
                       label="Continuous Current"
                       value={cell.max_discharging_current_continuous ? `${cell.max_discharging_current_continuous} A` : "Not specified"}
@@ -183,44 +184,44 @@ export default function CellDetailsView({ cell }: Props) {
               </div>
 
               {/* === 4. Chemistry === */}
-              <section className="bg-white rounded-2xl p-6 border border-cyan-200/50 shadow-sm">
-                <h3 className="text-xl font-bold flex items-center gap-2 mb-5">
-                  <div className="bg-cyan-500 p-2 rounded-lg shadow">
-                    <Beaker className="w-5 h-5 text-white" />
+              <section className="bg-white rounded-lg p-3 border border-cyan-200/50 shadow-sm">
+                <h3 className="text-sm font-bold flex items-center gap-1.5 mb-2">
+                  <div className="bg-cyan-500 p-1 rounded shadow">
+                    <Beaker className="w-3.5 h-3.5 text-white" />
                   </div>
                   Chemical Composition
                 </h3>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid md:grid-cols-2 gap-3">
                   <ChemistryCard label="Anode Material" value={cell.anode_composition || "Not specified"} />
                   <ChemistryCard label="Cathode Material" value={cell.cathode_composition || "Not specified"} />
                 </div>
               </section>
 
               {/* === 5. Commercial === */}
-              <section className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-6 border border-emerald-200/50 shadow-sm">
-                <h3 className="text-xl font-bold flex items-center gap-2 mb-5">
-                  <div className="bg-emerald-500 p-2 rounded-lg shadow">
-                    <DollarSign className="w-5 h-5 text-white" />
+              <section className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-3 border border-emerald-200/50 shadow-sm">
+                <h3 className="text-sm font-bold flex items-center gap-1.5 mb-2">
+                  <div className="bg-emerald-500 p-1 rounded shadow">
+                    <DollarSign className="w-3.5 h-3.5 text-white" />
                   </div>
                   Commercial Information
                 </h3>
-                <div className="bg-white rounded-xl p-5 border-2 border-emerald-200">
+                <div className="bg-white rounded-lg p-3 border border-emerald-200">
                   <div className="flex items-center justify-between">
-                    <span className="text-base font-semibold text-gray-700">Cost per Cell</span>
-                    <span className="text-2xl font-bold text-emerald-600">${cell.cost_per_cell.toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-gray-700">Cost per Cell</span>
+                    <span className="text-xl font-bold text-emerald-600">${cell.cost_per_cell.toFixed(2)}</span>
                   </div>
                 </div>
               </section>
 
               {cell.soh_file && (
-                <div className="bg-gradient-to-r from-green-100 to-emerald-100 rounded-2xl p-5 border border-green-300 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-green-500 p-2 rounded-lg shadow">
-                      <FileText className="w-5 h-5 text-white" />
+                <div className="bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg p-3 border border-green-300 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-green-500 p-1 rounded shadow">
+                      <FileText className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div>
-                      <div className="font-bold text-green-800">SOH Data File Attached</div>
-                      <code className="text-sm bg-white px-3 py-1 rounded mt-1 inline-block border border-green-200">
+                      <div className="font-bold text-sm text-green-800">SOH Data File Attached</div>
+                      <code className="text-xs bg-white px-2 py-0.5 rounded mt-0.5 inline-block border border-green-200">
                         {cell.soh_file.name}
                       </code>
                     </div>
@@ -230,7 +231,7 @@ export default function CellDetailsView({ cell }: Props) {
 
               {/* === 6. Metadata === */}
               {(cell.created_at || cell.updated_at) && (
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-xs text-gray-600 space-y-1.5">
+                <div className="bg-gray-50 rounded-lg p-2 border border-gray-200 text-xs text-gray-600 space-y-1">
                   {cell.created_at && (
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-700">Created:</span>
@@ -256,32 +257,32 @@ export default function CellDetailsView({ cell }: Props) {
 // Enhanced component designs
 function SpecCard({ icon: Icon, label, value, color = "text-foreground", bgColor = "bg-muted/50" }: any) {
   return (
-    <div className={`${bgColor} rounded-xl p-5 text-center border-2 shadow-sm hover:shadow-md transition-shadow`}>
-      <Icon className={`w-8 h-8 mx-auto mb-2 ${color}`} />
+    <div className={`${bgColor} rounded-lg p-3 text-center border shadow-sm hover:shadow-md transition-shadow`}>
+      <Icon className={`w-5 h-5 mx-auto mb-1 ${color}`} />
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className="text-xl font-bold mt-2">{value}</p>
+      <p className="text-base font-bold mt-1">{value}</p>
     </div>
   );
 }
 
 function MetricCard({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
   return (
-    <div className="bg-white rounded-xl p-5 border-2 border-purple-200 shadow-sm">
-      <div className="flex items-center gap-3 mb-2">
-        <Icon className="w-5 h-5 text-purple-600" />
-        <span className="text-sm font-semibold text-gray-700">{label}</span>
+    <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className="w-4 h-4 text-purple-600" />
+        <span className="text-xs font-semibold text-gray-700">{label}</span>
       </div>
-      <p className="text-lg font-bold text-gray-900">{value}</p>
+      <p className="text-sm font-bold text-gray-900">{value}</p>
     </div>
   );
 }
 
 function DataRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className={`rounded-lg p-3 border ${highlight ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100'}`}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-gray-600">{label}</span>
-        <span className={`text-base font-bold ${highlight ? 'text-gray-900' : 'text-gray-500'}`}>{value}</span>
+    <div className={`rounded p-2 border ${highlight ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-gray-600">{label}</span>
+        <span className={`text-sm font-bold ${highlight ? 'text-gray-900' : 'text-gray-500'}`}>{value}</span>
       </div>
     </div>
   );
@@ -289,9 +290,9 @@ function DataRow({ label, value, highlight }: { label: string; value: string; hi
 
 function ChemistryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white rounded-xl p-5 border-2 border-cyan-200 shadow-sm">
-      <div className="text-sm font-semibold text-gray-700 mb-2">{label}</div>
-      <p className="text-base font-bold text-gray-900">{value}</p>
+    <div className="bg-white rounded-lg p-3 border border-cyan-200 shadow-sm">
+      <div className="text-xs font-semibold text-gray-700 mb-1">{label}</div>
+      <p className="text-sm font-bold text-gray-900">{value}</p>
     </div>
   );
 }

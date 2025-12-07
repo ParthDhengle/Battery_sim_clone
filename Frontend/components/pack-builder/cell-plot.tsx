@@ -368,57 +368,135 @@ export function CellPlot({
                     </g>
                   )
                 })}
-                {/* Series Lines */}
+                {/* Series Lines with Arrows */}
                 {seriesDirection === "row" &&
                   (() => {
-                    const rowMap = new Map<number, { cx: number; cy: number; row: number }[]>();
-                    positions.forEach((pos) => {
+                    const rowMap = new Map<number, { cx: number; cy: number; row: number; idx: number }[]>();
+                    positions.forEach((pos, idx) => {
                       const cx = plotLeft + pos.x + shiftX;
                       const cy = plotBottom - (pos.y + shiftY);
                       if (!rowMap.has(pos.row)) rowMap.set(pos.row, []);
-                      rowMap.get(pos.row)!.push({ cx, cy, row: pos.row });
+                      rowMap.get(pos.row)!.push({ cx, cy, row: pos.row, idx });
                     });
-                    return Array.from(rowMap.entries()).map(([rowNum, pts]) => {
+                    return Array.from(rowMap.entries()).flatMap(([rowNum, pts]) => {
                       pts.sort((a, b) => a.cx - b.cx);
                       if (pts.length > 1) {
-                        const points = pts.map((pt) => `${pt.cx},${pt.cy}`).join(" ");
-                        return (
-                          <polyline
-                            key={`series-row-${rowNum}`}
-                            points={points}
-                            stroke="black"
-                            strokeWidth="1"
-                            fill="none"
-                          />
-                        );
+                        const elements = [];
+                        // Draw lines and arrows between consecutive cells
+                        for (let i = 0; i < pts.length - 1; i++) {
+                          const p1 = pts[i];
+                          const p2 = pts[i + 1];
+                          
+                          // Line segment
+                          elements.push(
+                            <line
+                              key={`series-row-${rowNum}-line-${i}`}
+                              x1={p1.cx}
+                              y1={p1.cy}
+                              x2={p2.cx}
+                              y2={p2.cy}
+                              stroke="black"
+                              strokeWidth="1"
+                            />
+                          );
+                          
+                          // Arrow in the middle of the segment
+                          const midX = (p1.cx + p2.cx) / 2;
+                          const midY = (p1.cy + p2.cy) / 2;
+                          const dx = p2.cx - p1.cx;
+                          const dy = p2.cy - p1.cy;
+                          const len = Math.sqrt(dx * dx + dy * dy);
+                          const arrowSize = 2.5; // Adjust this to change arrow size
+                          const arrowWidth = 2; // Adjust this to change arrow width
+                          const ux = dx / len;
+                          const uy = dy / len;
+                          const px = -uy;
+                          const py = ux;
+                          
+                          // Triangle arrow (change shape here)
+                          const tipX = midX + ux * arrowSize;
+                          const tipY = midY + uy * arrowSize;
+                          const base1X = midX - ux * arrowSize + px * arrowWidth;
+                          const base1Y = midY - uy * arrowSize + py * arrowWidth;
+                          const base2X = midX - ux * arrowSize - px * arrowWidth;
+                          const base2Y = midY - uy * arrowSize - py * arrowWidth;
+                          
+                          elements.push(
+                            <polygon
+                              key={`series-row-${rowNum}-arrow-${i}`}
+                              points={`${tipX},${tipY} ${base1X},${base1Y} ${base2X},${base2Y}`}
+                              fill="black"
+                            />
+                          );
+                        }
+                        return elements;
                       }
-                      return null;
+                      return [];
                     });
                   })()}
                 {seriesDirection === "column" &&
                   (() => {
-                    const colMap = new Map<number, { cx: number; cy: number; row: number }[]>();
-                    positions.forEach((pos) => {
+                    const colMap = new Map<number, { cx: number; cy: number; row: number; idx: number }[]>();
+                    positions.forEach((pos, idx) => {
                       const cx = plotLeft + pos.x + shiftX;
                       const cy = plotBottom - (pos.y + shiftY);
                       if (!colMap.has(pos.col)) colMap.set(pos.col, []);
-                      colMap.get(pos.col)!.push({ cx, cy, row: pos.row });
+                      colMap.get(pos.col)!.push({ cx, cy, row: pos.row, idx });
                     });
-                    return Array.from(colMap.entries()).map(([colNum, pts]) => {
+                    return Array.from(colMap.entries()).flatMap(([colNum, pts]) => {
                       pts.sort((a, b) => a.row - b.row);
                       if (pts.length > 1) {
-                        const points = pts.map((pt) => `${pt.cx},${pt.cy}`).join(" ");
-                        return (
-                          <polyline
-                            key={`series-col-${colNum}`}
-                            points={points}
-                            stroke="black"
-                            strokeWidth="1"
-                            fill="none"
-                          />
-                        );
+                        const elements = [];
+                        // Draw lines and arrows between consecutive cells
+                        for (let i = 0; i < pts.length - 1; i++) {
+                          const p1 = pts[i];
+                          const p2 = pts[i + 1];
+                          
+                          // Line segment
+                          elements.push(
+                            <line
+                              key={`series-col-${colNum}-line-${i}`}
+                              x1={p1.cx}
+                              y1={p1.cy}
+                              x2={p2.cx}
+                              y2={p2.cy}
+                              stroke="black"
+                              strokeWidth="1"
+                            />
+                          );
+                          
+                          // Arrow in the middle of the segment
+                          const midX = (p1.cx + p2.cx) / 2;
+                          const midY = (p1.cy + p2.cy) / 2;
+                          const dx = p2.cx - p1.cx;
+                          const dy = p2.cy - p1.cy;
+                          const len = Math.sqrt(dx * dx + dy * dy);
+                          const arrowSize = 2.5; // Adjust this to change arrow size
+                          const arrowWidth = 2; // Adjust this to change arrow width
+                          const ux = dx / len;
+                          const uy = dy / len;
+                          const px = -uy;
+                          const py = ux;
+                          
+                          // Triangle arrow (change shape here)
+                          const tipX = midX + ux * arrowSize;
+                          const tipY = midY + uy * arrowSize;
+                          const base1X = midX - ux * arrowSize + px * arrowWidth;
+                          const base1Y = midY - uy * arrowSize + py * arrowWidth;
+                          const base2X = midX - ux * arrowSize - px * arrowWidth;
+                          const base2Y = midY - uy * arrowSize - py * arrowWidth;
+                          
+                          elements.push(
+                            <polygon
+                              key={`series-col-${colNum}-arrow-${i}`}
+                              points={`${tipX},${tipY} ${base1X},${base1Y} ${base2X},${base2Y}`}
+                              fill="black"
+                            />
+                          );
+                        }
+                        return elements;
                       }
-                      return null;
+                      return [];
                     });
                   })()}
               </svg>

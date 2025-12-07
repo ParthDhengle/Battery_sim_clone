@@ -1,11 +1,11 @@
 "use client"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Trash2, Edit2, Download,Upload } from "lucide-react"
+import { Plus, Download, Edit2, Trash2 } from "lucide-react"
 import DrivecycleForm from "./drivecycle-form"
 import DrivecycleCompositionTable from "./drivecycle-composition-table"
-import ImportDrivecycle from "./import-drivecycle"
 
 interface DrivecycleComposition {
   id: string
@@ -16,6 +16,7 @@ interface DrivecycleComposition {
   location: string
   triggers: Array<{ type: string; value: any }>
 }
+
 interface Drivecycle {
   id: string
   name: string
@@ -23,6 +24,7 @@ interface Drivecycle {
   source: "manual" | "import"
   composition: DrivecycleComposition[]
 }
+
 interface DrivecycleBuilderProps {
   subcycles: any[]
   drivecycles: Drivecycle[]
@@ -30,26 +32,28 @@ interface DrivecycleBuilderProps {
 }
 
 function convertSecondsToHMS(totalSeconds: number) {
-  totalSeconds = Number(totalSeconds);
-  const secondsInMonth = 30 * 24 * 3600;
-  const secondsInDay = 24 * 3600;
-  const secondsInHour = 3600;
-  const secondsInMinute = 60;
-  const months = Math.floor(totalSeconds / secondsInMonth);
-  totalSeconds %= secondsInMonth;
-  const days = Math.floor(totalSeconds / secondsInDay);
-  totalSeconds %= secondsInDay;
-  const hours = Math.floor(totalSeconds / secondsInHour);
-  totalSeconds %= secondsInHour;
-  const minutes = Math.floor(totalSeconds / secondsInMinute);
-  const seconds = Math.floor(totalSeconds % secondsInMinute);
-  const parts = [];
-  if (months > 0) parts.push(`${months}mo`);
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-  parts.push(`${seconds}s`);
-  return parts.join(" ");
+  totalSeconds = Number(totalSeconds)
+  const secondsInMonth = 30 * 24 * 3600
+  const secondsInDay = 24 * 3600
+  const secondsInHour = 3600
+  const secondsInMinute = 60
+
+  const months = Math.floor(totalSeconds / secondsInMonth)
+  totalSeconds %= secondsInMonth
+  const days = Math.floor(totalSeconds / secondsInDay)
+  totalSeconds %= secondsInDay
+  const hours = Math.floor(totalSeconds / secondsInHour)
+  totalSeconds %= secondsInHour
+  const minutes = Math.floor(totalSeconds / secondsInMinute)
+  const seconds = Math.floor(totalSeconds % secondsInMinute)
+
+  const parts = []
+  if (months > 0) parts.push(`${months}mo`)
+  if (days > 0) parts.push(`${days}d`)
+  if (hours > 0) parts.push(`${hours}h`)
+  if (minutes > 0) parts.push(`${minutes}m`)
+  parts.push(`${seconds}s`)
+  return parts.join(" ")
 }
 
 function getSubcycleDuration(subcycle: any) {
@@ -98,44 +102,53 @@ const exportDrivecycleCsv = (drivecycle: Drivecycle) => {
 export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecyclesChange }: DrivecycleBuilderProps) {
   const [editingDrivecycle, setEditingDrivecycle] = useState<Drivecycle | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [showImport, setShowImport] = useState(false)
+
   const generateId = () => `DC${String(drivecycles.length + 1).padStart(3, "0")}`
-  const handleAddDrivecycle = (drivecycle: Omit<Drivecycle, "id">) => {
-    const newDrivecycle = {
+
+  const handleAddDrivecycle = (drivecycle: Omit<Drivecycle, "id" | "source">) => {
+    const newDrivecycle: Drivecycle = {
       ...drivecycle,
       id: generateId(),
+      source: "manual",
     }
     onDrivecyclesChange([...drivecycles, newDrivecycle])
     setShowForm(false)
-    setShowImport(false)
   }
-  const handleEditDrivecycle = (id: string, drivecycle: Omit<Drivecycle, "id">) => {
-    onDrivecyclesChange(drivecycles.map((dc) => (dc.id === id ? { ...drivecycle, id } : dc)))
+
+  const handleEditDrivecycle = (id: string, drivecycle: Omit<Drivecycle, "id" | "source">) => {
+    const existingDrivecycle = drivecycles.find(dc => dc.id === id)
+    onDrivecyclesChange(drivecycles.map((dc) => (
+      dc.id === id ? { ...drivecycle, id, source: existingDrivecycle?.source || "manual" } : dc
+    )))
     setEditingDrivecycle(null)
   }
+
   const handleDeleteDrivecycle = (id: string) => {
     onDrivecyclesChange(drivecycles.filter((dc) => dc.id !== id))
   }
+
   return (
     <div className="space-y-6">
-      {!showForm && !editingDrivecycle && !showImport && (
-        <>
-          <Button onClick={() => setShowForm(true)} className="w-full gap-2">
-            <Plus className="h-4 w-4" />
-            Create New Drive Cycle
-          </Button>
-          <Button onClick={() => setShowImport(true)} variant="outline" className="w-full gap-2">
-            <Upload className="h-4 w-4" />
-            Import Drive Cycle
-          </Button>
-        </>
-      )}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Drive cycle Library</h1>
+          <p className="text-muted-foreground">Combine sub-cycles to create complete drive cycles (max 86400 seconds per day)</p>
+        </div>
+        {!showForm && !editingDrivecycle && (
+          <>
+            <Button onClick={() => setShowForm(true)} size="lg" className="gap-2">
+              <Plus className="h-5 w-5" />
+              Create New Drive Cycle
+            </Button>
+          </>
+        )}
+      </div>
+
+
       {showForm && (
         <DrivecycleForm subcycles={subcycles} onSubmit={handleAddDrivecycle} onCancel={() => setShowForm(false)} />
       )}
-      {showImport && (
-        <ImportDrivecycle subcycles={subcycles} onSubmit={handleAddDrivecycle} onCancel={() => setShowImport(false)} />
-      )}
+
       {editingDrivecycle && (
         <DrivecycleForm
           subcycles={subcycles}
@@ -145,6 +158,7 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
           isEditing
         />
       )}
+
       <div className="grid gap-4">
         {drivecycles.length === 0 ? (
           <Card>
@@ -156,7 +170,7 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
           drivecycles.map((drivecycle) => {
             const duration = computeDrivecycleDuration(drivecycle, subcycles)
             return (
-              <Card key={drivecycle.id}>
+              <Card key={drivecycle.id} className="overflow-hidden">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -185,7 +199,7 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <div className="px-6 pb-6">
                   <DrivecycleCompositionTable
                     composition={drivecycle.composition}
                     onCompositionChange={(composition) =>
@@ -196,7 +210,7 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
                     }
                     subcycles={subcycles}
                   />
-                </CardContent>
+                </div>
               </Card>
             )
           })

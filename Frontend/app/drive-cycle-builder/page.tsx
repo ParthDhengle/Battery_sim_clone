@@ -36,12 +36,6 @@ export default function Home() {
 
           <TabsContent value="subcycles" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Sub-cycle Library</CardTitle>
-                <CardDescription>
-                  Create and manage individual sub-cycles that form the building blocks of drive cycles
-                </CardDescription>
-              </CardHeader>
               <CardContent>
                 <SubcycleLibrary subcycles={subcycles} onSubcyclesChange={setSubcycles} />
               </CardContent>
@@ -50,12 +44,6 @@ export default function Home() {
 
           <TabsContent value="drivecycles" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Drive Cycle Builder</CardTitle>
-                <CardDescription>
-                  Combine sub-cycles to create complete drive cycles (max 86400 seconds per day)
-                </CardDescription>
-              </CardHeader>
               <CardContent>
                 <DriveCycleBuilder
                   subcycles={subcycles}
