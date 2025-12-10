@@ -37,22 +37,28 @@ export default function SimulationCycleViewer({
     )
   }
 
-  // Flatten all steps once
+  // Flatten all steps with global index and subcycle step index
   const allSteps = useMemo(() => {
-    return simulationCycle.flatMap(day =>
-      (day.steps || []).map((step: any, index: number) => ({
-        ...step,
-        dayOfYear: day.dayOfYear,
-        drivecycleName: day.drivecycleName,
-        globalIndex: index + 1,
-      }))
-    )
+    let globalIndex = 1
+    return simulationCycle.flatMap(day => {
+      let dayStepIndex = 1
+      return (day.steps || []).map((step: any) => {
+        const enrichedStep = {
+          ...step,
+          dayOfYear: day.dayOfYear,
+          drivecycleId: day.drivecycleId,
+          drivecycleName: day.drivecycleName,
+          globalIndex: globalIndex++,
+          subcycleStepIndex: dayStepIndex++,
+          drivecycleTriggers: step.compositionTriggers || "", // if you ever add triggers at drivecycle level
+        }
+        return enrichedStep
+      })
+    })
   }, [simulationCycle])
 
-  // Compute totals ONCE
   const totalSteps = allSteps.length
   const totalDuration = allSteps.reduce((sum, step) => sum + (step.duration || 0), 0)
-
   const totalPages = Math.ceil(totalSteps / ROWS_PER_PAGE)
   const paginatedSteps = allSteps.slice(
     (currentPage - 1) * ROWS_PER_PAGE,
@@ -71,7 +77,7 @@ export default function SimulationCycleViewer({
       a.click()
       URL.revokeObjectURL(url)
     } else {
-      const csv = generateSimulationCycleCSV(simulationCycle)
+      const csv = generateSimulationCycleCSV(allSteps)
       const blob = new Blob([csv], { type: "text/csv" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -113,7 +119,7 @@ export default function SimulationCycleViewer({
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Duration</p>
-            <p className="text-2xl font-bold">{formatDuration(totalDuration)}</p>
+            <p className="text-2xl font-bold">{totalDuration} s</p>
           </CardContent>
         </Card>
       </div>
@@ -181,11 +187,11 @@ export default function SimulationCycleViewer({
         </CardContent>
       </Card>
 
-      {/* Full Table Modal */}
+      {/* Full Table Modal - Exact column order as requested */}
       {showFullTable && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowFullTable(false)}>
           <div
-            className="bg-background rounded-lg shadow-2xl max-w-7xl w-full max-h-[90vh] flex flex-col"
+            className="bg-background rounded-lg shadow-2xl max-w-[95vw] w-full max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-6 border-b">
@@ -205,29 +211,47 @@ export default function SimulationCycleViewer({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-20">Step</TableHead>
-                      <TableHead>Day</TableHead>
-                      <TableHead>Drive Cycle</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>Global Step Index</TableHead>
+                      <TableHead>Day_of_year</TableHead>
+                      <TableHead>DriveCycle_ID</TableHead>
+                      <TableHead>drive cycle trigger</TableHead>
+                      <TableHead>Subcycle_ID</TableHead>
+                      <TableHead>Subcycle Step Index</TableHead>
+                      <TableHead>Value Type</TableHead>
                       <TableHead>Value</TableHead>
                       <TableHead>Unit</TableHead>
-                      <TableHead>Duration (s)</TableHead>
+                      <TableHead>Step Type</TableHead>
+                      <TableHead>Step Duration (s)</TableHead>
+                      <TableHead>Timestep (s)</TableHead>
+                      <TableHead>Ambient Temp (°C)</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>step Trigger(s)</TableHead>
                       <TableHead>Label</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedSteps.map((step: any, i: number) => (
-                      <TableRow key={`${step.dayOfYear}-${i}`}>
-                        <TableCell className="font-mono">
-                          {(currentPage - 1) * ROWS_PER_PAGE + i + 1}
-                        </TableCell>
+                    {paginatedSteps.map((step: any) => (
+                      <TableRow key={`${step.dayOfYear}-${step.globalIndex}`}>
+                        <TableCell className="font-mono">{step.globalIndex}</TableCell>
                         <TableCell>{step.dayOfYear}</TableCell>
-                        <TableCell className="text-xs">{step.drivecycleName}</TableCell>
+                        <TableCell>{step.drivecycleId}</TableCell>
+                        <TableCell>{step.drivecycleTriggers || "-"}</TableCell>
+                        <TableCell>{step.subcycleId || "-"}</TableCell>
+                        <TableCell>{step.subcycleStepIndex}</TableCell>
                         <TableCell>{step.valueType}</TableCell>
                         <TableCell>{step.value}</TableCell>
                         <TableCell>{step.unit}</TableCell>
-                        <TableCell>{step.duration || "-"}</TableCell>
-                        <TableCell className="truncate max-w-32">{step.label || "-"}</TableCell>
+                        <TableCell>{step.stepType || "-"}</TableCell>
+                        <TableCell>{step.duration ?? "-"}</TableCell>
+                        <TableCell>{step.timestep ?? "-"}</TableCell>
+                        <TableCell>{step.ambientTemp ?? "-"}</TableCell>
+                        <TableCell>{step.location || "-"}</TableCell>
+                        <TableCell className="text-xs">
+                          {step.triggers?.length > 0
+                            ? step.triggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
+                            : "-"}
+                        </TableCell>
+                        <TableCell className="truncate max-w-40">{step.label || "-"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -242,18 +266,10 @@ export default function SimulationCycleViewer({
                   Page {currentPage} of {totalPages} • Steps {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, totalSteps)} of {totalSteps}
                 </p>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
-                    First
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                    Previous
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-                    Next
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
-                    Last
-                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>First</Button>
+                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</Button>
+                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</Button>
+                  <Button size="sm" variant="outline" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>Last</Button>
                 </div>
               </div>
             )}
@@ -271,97 +287,115 @@ function formatDuration(seconds: number): string {
   const h = Math.floor((seconds % 86400) / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = Math.floor(seconds % 60)
-
   return [y && `${y}y`, d && `${d}d`, h && `${h}h`, m && `${m}m`, s && `${s}s`]
     .filter(Boolean)
     .join(" ") || "0s"
 }
 
-// CSV Export
-function generateSimulationCycleCSV(simulationCycle: any[]) {
-  let csv = "Day of Year,Drive Cycle ID,Drive Cycle Name,Notes,Step Index,Value Type,Value,Unit,Duration (s),Label,Subcycle ID,Ambient Temp,Location\n"
-  simulationCycle.forEach(day => {
-    const base = `${day.dayOfYear},${day.drivecycleId},"${(day.drivecycleName || "").replace(/"/g, '""')}","${(day.notes || "").replace(/"/g, '""')}"`
-    if (day.steps && day.steps.length > 0) {
-      day.steps.forEach((step: any, i: number) => {
-        csv += `${base},${i + 1},${step.valueType},${step.value},${step.unit},${step.duration || ""},"${(step.label || "").replace(/"/g, '""')}",${step.subcycleId || ""},${step.ambientTemp || ""},${step.location || ""}\n`
-      })
-    } else {
-      csv += `${base},,,,,,,,\n`
-    }
-  })
-  return csv
+// Updated CSV Export - EXACT column order and labels
+function generateSimulationCycleCSV(steps: any[]) {
+  const header = [
+    "Global Step Index",
+    "Day_of_year",
+    "DriveCycle_ID",
+    "drive cycle trigger",
+    "Subcycle_ID",
+    "Subcycle Step Index",
+    "Value Type",
+    "Value",
+    "Unit",
+    "Step Type",
+    "Step Duration (s)",
+    "Timestep (s)",
+    "Ambient Temp (°C)",
+    "Location",
+    "step Trigger(s)",
+    "Label"
+  ].join(",")
+
+  const rows = steps.map(step => [
+    step.globalIndex,
+    step.dayOfYear,
+    step.drivecycleId || "",
+    step.drivecycleTriggers || "",           // currently empty unless you add drivecycle-level triggers
+    step.subcycleId || "",
+    step.subcycleStepIndex,
+    step.valueType || "",
+    step.value || "",
+    step.unit || "",
+    step.stepType || "",
+    step.duration ?? "",
+    step.timestep ?? "",
+    step.ambientTemp ?? "",
+    step.location || "",
+    step.triggers?.length > 0
+      ? step.triggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
+      : "",
+    (step.label || "").replace(/"/g, '""')
+  ].map(val => `"${val}"`).join(","))
+
+  return [header, ...rows].join("\n")
 }
 
+// generateSimulationCycle remains unchanged (already correct)
 function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], subcycles: any[]) {
-  if (calendarAssignment.length === 0 || drivecycles.length === 0) {
-    return []
-  }
+  if (calendarAssignment.length === 0 || drivecycles.length === 0) return []
 
-  // Find default rule
   const defaultRule = calendarAssignment.find(rule => rule.id === 'DEFAULT_RULE')
   const defaultDrivecycleId = defaultRule?.drivecycleId || "DC_IDLE"
-
   const simulationCycle = []
 
-  // Generate 364 days
   for (let dayOfYear = 1; dayOfYear <= 364; dayOfYear++) {
-    // Find matching calendar rule (rules are in order, later override earlier)
     let matchedRule = null
     for (const rule of calendarAssignment) {
-      // Skip default rule in matching logic
       if (rule.id === 'DEFAULT_RULE') continue
-      
       const dayOfWeek = (dayOfYear - 1) % 7
       const monthDay = ((dayOfYear - 1) % 30) + 1
       const month = Math.floor((dayOfYear - 1) / 30) + 1
-
       const monthMatch = rule.months.includes(month)
       let dayMatch = false
-
-      if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+      if (rule.daysOfWeek?.length > 0) {
         dayMatch = rule.daysOfWeek.includes(DAYS_OF_WEEK[dayOfWeek])
-      } else if (rule.dates && rule.dates.length > 0) {
+      } else if (rule.dates?.length > 0) {
         dayMatch = rule.dates.includes(monthDay)
       }
-
       if (monthMatch && dayMatch) {
         matchedRule = rule
+        break // later rules override earlier → stop at first match
       }
     }
 
-    // Use matched rule or default
     const drivecycleId = matchedRule?.drivecycleId || defaultDrivecycleId
-    const drivecycle = drivecycles.find((dc) => dc.id === drivecycleId)
+    const drivecycle = drivecycles.find((dc: any) => dc.id === drivecycleId)
 
     if (!drivecycle && drivecycleId !== "DC_IDLE") continue
 
-    // Expand steps
     const steps: any[] = []
-
     if (drivecycle && drivecycle.composition) {
-      for (const compositionRow of drivecycle.composition) {
-        const subcycle = subcycles.find((sc) => sc.id === compositionRow.subcycleId)
+      for (const comp of drivecycle.composition) {
+        const subcycle = subcycles.find((sc: any) => sc.id === comp.subcycleId)
         if (!subcycle) continue
+        const drivecycleRowTriggers = comp.triggers || []
 
-        // Repeat sub-cycle
-        for (let rep = 0; rep < compositionRow.repetitions; rep++) {
-          if (subcycle.steps) {
-            for (const step of subcycle.steps) {
-              steps.push({
-                index: steps.length + 1,
-                valueType: step.valueType,
-                value: step.value,
-                unit: step.unit,
-                duration: step.duration,                
-                stepType: step.stepType,
-                triggers: step.triggers,
-                label: step.label,
-                subcycleId: compositionRow.subcycleId,
-                ambientTemp: compositionRow.ambientTemp,
-                location: compositionRow.location,
-              })
-            }
+
+        for (let rep = 0; rep < comp.repetitions; rep++) {
+          for (const step of subcycle.steps) {
+            steps.push({
+              valueType: step.valueType,
+              value: step.value,
+              unit: step.unit,
+              duration: step.duration,
+              timestep: step.timestep || "",
+              stepType: step.stepType || "",
+              triggers: step.triggers || [],
+              label: step.label || "",
+              subcycleId: comp.subcycleId,
+              ambientTemp: comp.ambientTemp,
+              location: comp.location || "",
+              drivecycleTriggers: drivecycleRowTriggers.length > 0
+                ? drivecycleRowTriggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
+                : "",
+            })
           }
         }
       }

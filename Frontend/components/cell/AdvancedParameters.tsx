@@ -1,241 +1,186 @@
+// components/AdvancedParameters.tsx
 "use client"
 
-import type React from "react"
+import React from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FileText, Info } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import RCParameterUpload from "./RCParameterUpload"
 
 type Props = {
   formData: any
   setFormData: (data: any) => void
-  sohFile: any
-  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  sohFile: File | null
+  handleFileUpload: (file: File | null) => void
 }
 
 export default function AdvancedParameters({ formData, setFormData, sohFile, handleFileUpload }: Props) {
-  const updateField = (field: string, value: string) => {
+  const updateField = (field: string, value: any) => {
     setFormData({ ...formData, [field]: value })
   }
 
   return (
     <div className="space-y-6">
-      {/* Electrical – Charging */}
+      {/* === Electrical – Charging === */}
       <Card>
         <CardHeader>
           <CardTitle>Electrical – Charging</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-3">
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
             <Label>Cell Max Charging Current — Continuous</Label>
             <div className="relative">
               <Input
                 type="number"
-                min="0"
                 step="0.1"
+                min="0"
+                placeholder="e.g., 2.5"
                 value={formData.max_charging_current_continuous || ""}
                 onChange={(e) => updateField("max_charging_current_continuous", e.target.value)}
-                placeholder="e.g., 2.5"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-                A
-              </span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">A</span>
             </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label>Cell Max Charging Current — Instantaneous</Label>
             <div className="relative">
               <Input
                 type="number"
-                min="0"
                 step="0.1"
+                min="0"
+                placeholder="e.g., 5.0"
                 value={formData.max_charging_current_instantaneous || ""}
                 onChange={(e) => updateField("max_charging_current_instantaneous", e.target.value)}
-                placeholder="e.g., 5.0"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-                A
-              </span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">A</span>
             </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label>Cell Max Charge Voltage</Label>
             <div className="relative">
               <Input
                 type="number"
+                step="0.01"
                 min="0"
-                step="0.1"
+                placeholder="e.g., 4.2"
                 value={formData.max_charge_voltage || ""}
                 onChange={(e) => updateField("max_charge_voltage", e.target.value)}
-                placeholder="e.g., 4.2"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-                V
-              </span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">V</span>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Electrical – Discharging */}
+      {/* === Electrical – Discharging === */}
       <Card>
         <CardHeader>
           <CardTitle>Electrical – Discharging</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-3">
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
             <Label>Cell Max Discharging Current — Continuous</Label>
             <div className="relative">
               <Input
                 type="number"
-                min="0"
                 step="0.1"
+                min="0"
+                placeholder="e.g., 10.0"
                 value={formData.max_discharging_current_continuous || ""}
                 onChange={(e) => updateField("max_discharging_current_continuous", e.target.value)}
-                placeholder="e.g., 10.0"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-                A
-              </span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">A</span>
             </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label>Cell Max Discharging Current — Instantaneous</Label>
             <div className="relative">
               <Input
                 type="number"
-                min="0"
                 step="0.1"
+                min="0"
+                placeholder="e.g., 20.0"
                 value={formData.max_discharging_current_instantaneous || ""}
                 onChange={(e) => updateField("max_discharging_current_instantaneous", e.target.value)}
-                placeholder="e.g., 20.0"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-                A
-              </span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">A</span>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Performance Metrics */}
+      {/* === Performance Metrics === */}
       <Card>
         <CardHeader>
           <CardTitle>Electrical – Performance Metrics</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent>
           <Label>Coulombic Efficiency (0–1)</Label>
-          <div className="relative">
-            <Input
-              type="number"
-              min="0"
-              max="1"
-              step="0.01"
-              value={formData.columbic_efficiency || ""}
-              onChange={(e) => updateField("columbic_efficiency", e.target.value)}
-              placeholder="Default: 1.0"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-              —
-            </span>
-          </div>
+          <Input
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            placeholder="Default: 1.0"
+            value={formData.columbic_efficiency || ""}
+            onChange={(e) => updateField("columbic_efficiency", e.target.value)}
+          />
         </CardContent>
       </Card>
 
-      {/* Commercial */}
+      {/* === Commercial === */}
       <Card>
         <CardHeader>
           <CardTitle>Commercial</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent>
           <Label>Cost per Cell</Label>
           <div className="relative">
             <Input
               type="number"
               min="0"
               step="0.01"
+              placeholder="e.g., 5.50"
               value={formData.cost_per_cell || ""}
               onChange={(e) => updateField("cost_per_cell", e.target.value)}
-              placeholder="e.g., 5.50"
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
-              $
-            </span>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Chemical Composition */}
+      {/* === Chemical Composition === */}
       <Card>
         <CardHeader>
           <CardTitle>Chemical Composition</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
+        <CardContent className="space-y-6">
+          <div>
             <Label>Anode Composition</Label>
             <Input
-              type="text"
+              placeholder="e.g., Graphite, Silicon composite"
               value={formData.anode_composition || ""}
               onChange={(e) => updateField("anode_composition", e.target.value)}
-              placeholder="e.g., Graphite, Silicon composite"
             />
           </div>
-          <div className="space-y-3">
+          <div>
             <Label>Cathode Composition</Label>
             <Input
-              type="text"
+              placeholder="e.g., NCA, LFP"
               value={formData.cathode_composition || ""}
               onChange={(e) => updateField("cathode_composition", e.target.value)}
-              placeholder="e.g., NCA, LFP"
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* RC Parameter file */}
-      <Card>
-        <CardHeader>
-          <CardTitle>RC Parameter file</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <Label>Upload File</Label>
-            <Input type="file" accept=".csv,.json,.mat" onChange={handleFileUpload} />
-            {sohFile && (
-              <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
-                <FileText className="w-4 h-4" />
-                <span className="truncate max-w-md">{sohFile.name}</span>
-              </div>
-            )}
-            <p className="text-sm text-muted-foreground">
-              Upload SOH (State of Health) data file in CSV, JSON, or MAT format
-            </p>
-          </div>
-
-          {sohFile && (
-            <div className="space-y-3">
-              <Label>RC Pair Type</Label>
-              <Select
-                value={formData.rc_pair_type || ""}
-                onValueChange={(value) => updateField("rc_pair_type", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select RC pair type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="rc2">RC2 Pair</SelectItem>
-                  <SelectItem value="rc3">RC3 Pair</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-muted-foreground">
-                Select the RC pair configuration for the uploaded parameter file
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* === RC Parameter Upload (Child Component) === */}
+      <RCParameterUpload
+        formData={formData}
+        setFormData={setFormData}
+        uploadedFile={sohFile}
+        onFileChange={handleFileUpload}
+      />
     </div>
   )
 }

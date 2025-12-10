@@ -13,6 +13,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectLabel
 } from "@/components/ui/select"
 import { Trash2, Plus } from "lucide-react"
 
@@ -37,18 +38,6 @@ interface CompositionEditorProps {
   onCancel: () => void
   isEditing?: boolean
 }
-
-const triggerOptions = [
-  { label: "Cell Voltage High", value: "V_cell_high" },
-  { label: "Cell Voltage Low", value: "V_cell_low" },
-  { label: "Cell SOC High", value: "SOC_cell_high" },
-  { label: "Cell SOC Low", value: "SOC_cell_low" },
-  { label: "Cell Current High", value: "I_cell_high" },
-  { label: "Pack Voltage High", value: "V_pack_high" },
-  { label: "Pack Voltage Low", value: "V_pack_low" },
-  { label: "Pack SOC High", value: "SOC_pack_high" },
-  { label: "Pack Current High", value: "I_pack_high" },
-]
 
 export default function CompositionEditor({
   subcycles,
@@ -159,7 +148,7 @@ export default function CompositionEditor({
       </div>
 
       {/* Triggers */}
-      <div className="space-y-3">
+      <div className="space-y-4 border-t pt-4">
         <div className="flex items-center justify-between">
           <Label>Triggers (max 3)</Label>
           <Button
@@ -185,11 +174,33 @@ export default function CompositionEditor({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {triggerOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectLabel>Cell-Level Triggers</SelectLabel>
+                  <SelectItem value="V_cell_high">V Cell High</SelectItem>
+                  <SelectItem value="V_cell_low">V Cell Low</SelectItem>
+                  <SelectItem value="I_cell_high">I Cell High</SelectItem>
+                  <SelectItem value="I_cell_low">I Cell Low</SelectItem>
+                  <SelectItem value="SOC_cell_high">SOC Cell High</SelectItem>
+                  <SelectItem value="SOC_cell_low">SOC Cell Low</SelectItem>
+                  <SelectItem value="C_rate_cell_high">C-rate Cell High</SelectItem>
+                  <SelectItem value="C_rate_cell_low">C-rate Cell Low</SelectItem>
+                  <SelectItem value="P_cell_high">Power Cell High</SelectItem>
+                  <SelectItem value="P_cell_low">Power Cell Low</SelectItem>
+                </SelectGroup>
+
+                <SelectGroup>
+                  <SelectLabel>Pack-Level Triggers</SelectLabel>
+                  <SelectItem value="V_pack_high">V Pack High</SelectItem>
+                  <SelectItem value="V_pack_low">V Pack Low</SelectItem>
+                  <SelectItem value="I_pack_high">I Pack High</SelectItem>
+                  <SelectItem value="I_pack_low">I Pack Low</SelectItem>
+                  <SelectItem value="SOC_pack_high">SOC Pack High</SelectItem>
+                  <SelectItem value="SOC_pack_low">SOC Pack Low</SelectItem>
+                  <SelectItem value="C_rate_pack_high">C-rate Pack High</SelectItem>
+                  <SelectItem value="C_rate_pack_low">C-rate Pack Low</SelectItem>
+                  <SelectItem value="P_pack_high">Power Pack High</SelectItem>
+                  <SelectItem value="P_pack_low">Power Pack Low</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
 
@@ -213,7 +224,7 @@ export default function CompositionEditor({
           </div>
         ))}
       </div>
-
+      
       {/* Action Buttons */}
       <div className="flex gap-3 pt-4 border-t">
         <Button type="button" variant="outline" onClick={onCancel} className="flex-1">

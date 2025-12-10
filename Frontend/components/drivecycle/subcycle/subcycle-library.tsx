@@ -157,7 +157,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
 
       {/* Library List */}
       <div className={isEditorOpen ? "opacity-70 pointer-events-none select-none" : ""}>
-        <h2 className="text-2xl font-bold mb-6">Your Sub-cycles ({subcycles.length})</h2>
+        <h2 className="text-2xl mb-6">Your Sub-cycles ({subcycles.length})</h2>
 
         {subcycles.length === 0 ? (
           <Card className="py-16 text-center">
@@ -203,7 +203,9 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
                         <Button size="sm" variant="outline" onClick={() => exportSubcycleCsv(subcycle)}>
                           <Download className="h-4 w-4 mr-1" /> CSV
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => startEditing(subcycle)}>
+                        <Button size="sm" variant="ghost" 
+                        onClick={() => startEditing(subcycle)}
+                        disabled ={subcycle.source === "import"}  >
                           <Edit2 className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleDelete(subcycle.id)}>
@@ -253,10 +255,14 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
                                       {step.stepType.replace(/_/g, " ")}
                                     </span>
                                   </TableCell>
-                                  <TableCell className="text-xs">
-                                    {step.triggers.length > 0
-                                      ? step.triggers.map((t: any) => `${t.type.replace(/_/g, " ")}: ${t.value}`).join(" | ")
-                                      : "-"}
+                                  <TableCell className="max-w-[180px]">
+                                    {step.triggers.length > 0 ? (
+                                      <div className="space-y-1 text-xs">
+                                        {step.triggers.map((t, i) => (
+                                          <div key={i}>{t.type.replace(/_/g, " ")}: {t.value}</div>
+                                        ))}
+                                      </div>
+                                    ) : "-"}
                                   </TableCell>
                                   <TableCell className="truncate max-w-[120px]">{step.label || "-"}</TableCell>
                                 </TableRow>

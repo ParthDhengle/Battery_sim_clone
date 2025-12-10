@@ -35,6 +35,8 @@ interface StepEditorProps {
 }
 
 export default function StepEditor({ onSubmit, onCancel, initialData, isEditing = false }: StepEditorProps) {
+  
+  const MAX_TRIGGERS = 3
   const [step, setStep] = useState<Omit<Step, "id">>(
     initialData
       ? { ...initialData }
@@ -82,6 +84,8 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
   }
 
   const handleRemoveTrigger = (index: number) => {
+    if (step.triggers.length >= MAX_TRIGGERS) return // safety
+
     setStep({
       ...step,
       triggers: step.triggers.filter((_: Trigger, i: number) => i !== index),
@@ -211,8 +215,21 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
           {showTriggers && (
             <div className="space-y-4 border-t pt-4">
               <div className="flex items-center justify-between">
-                <Label>Triggers {step.stepType === "trigger_only" && "(Required)"}</Label>
-                <Button type="button" size="sm" variant="outline" onClick={handleAddTrigger} className="gap-2">
+                <div>
+                  <Label>Triggers {step.stepType === "trigger_only" && "(Required)"}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Maximum {MAX_TRIGGERS} triggers allowed • {step.triggers.length}/{MAX_TRIGGERS} used
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddTrigger}
+                  disabled={step.triggers.length >= MAX_TRIGGERS}
+                  className="gap-2"
+                >
                   <Plus className="h-3 w-3" />
                   Add Trigger
                 </Button>
@@ -220,6 +237,13 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
 
               {step.triggers.length === 0 && step.stepType === "trigger_only" && (
                 <p className="text-sm text-destructive">At least one trigger is required for Trigger Only steps</p>
+              )}
+              
+              {/* Optional warning when limit is reached */}
+              {step.triggers.length >= MAX_TRIGGERS && (
+                <p className="text-sm text-amber-600">
+                  Maximum of {MAX_TRIGGERS} triggers reached
+                </p>
               )}
 
               {step.triggers.map((trigger: Trigger, index: number) => (

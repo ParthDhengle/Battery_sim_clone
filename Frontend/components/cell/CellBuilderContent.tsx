@@ -36,7 +36,6 @@ export default function CellBuilderContent() {
     anode_composition: string
     cathode_composition: string
   }
-  type SohFile = { name: string; data: string; type: string } | null
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -67,7 +66,7 @@ export default function CellBuilderContent() {
     cathode_composition: "",
   })
 
-  const [sohFile, setSohFile] = useState<SohFile>(null)
+  const [sohFile, setSohFile] = useState<File | null>(null)
   const [error, setError] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isEditing, setIsEditing] = useState(!!id)
@@ -79,29 +78,29 @@ export default function CellBuilderContent() {
   }, [id])
 
   useEffect(() => {
-  const r = Number.parseFloat(formData.radius) || 0
-  const l = Number.parseFloat(formData.length) || 0
-  const w = Number.parseFloat(formData.width) || 0
-  const h = Number.parseFloat(formData.height) || 0
+    const r = Number.parseFloat(formData.radius) || 0
+    const l = Number.parseFloat(formData.length) || 0
+    const w = Number.parseFloat(formData.width) || 0
+    const h = Number.parseFloat(formData.height) || 0
 
-  let vol = 0
-  if (["cylindrical", "coin"].includes(formData.formFactor)) {
-    vol = Math.PI * r * r * h
-  } else {
-    vol = l * w * h
-  }
+    let vol = 0
+    if (["cylindrical", "coin"].includes(formData.formFactor)) {
+      vol = Math.PI * r * r * h
+    } else {
+      vol = l * w * h
+    }
 
-  setFormData((prev) => ({
-    ...prev,
-    cell_volume: vol > 0 ? vol.toString() : prev.cell_volume, // preserve if invalid
-  }))
-}, [formData.formFactor, formData.radius, formData.length, formData.width, formData.height])
+    setFormData((prev) => ({
+      ...prev,
+      cell_volume: vol > 0 ? vol.toString() : prev.cell_volume,
+    }))
+  }, [formData.formFactor, formData.radius, formData.length, formData.width, formData.height])
 
   const fetchCell = async (cellId: string) => {
     try {
       const cell = await getCell(cellId)
       if (cell) {
-        const newFormData = ({
+        const newFormData = {
           name: cell.name || "",
           formFactor: cell.formFactor || "cylindrical",
           radius: cell.dims.radius != null ? cell.dims.radius.toString() : "",
@@ -130,10 +129,17 @@ export default function CellBuilderContent() {
           cost_per_cell: cell.cost_per_cell != null ? cell.cost_per_cell.toString() : "",
           anode_composition: cell.anode_composition || "",
           cathode_composition: cell.cathode_composition || "",
-          cell_volume:"",
-        })
+          cell_volume: "",
+        }
         setFormData(newFormData)
-        setSohFile(cell.soh_file || null)
+        
+        // Handle soh_file conversion if needed
+        if (cell.soh_file) {
+          // If the API returns the file in a different format, convert it to File object
+          // For now, assuming it's already a File or null
+          setSohFile(cell.soh_file)
+        }
+        
         setIsEditing(true)
       }
     } catch (err) {
@@ -141,28 +147,11 @@ export default function CellBuilderContent() {
     }
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const validTypes = [".csv", ".json", ".mat"]
-    const fileExt = "." + file.name.split(".").pop()?.toLowerCase()
-    if (!validTypes.includes(fileExt)) {
-      setError(`Invalid file type. Please upload ${validTypes.join(", ")} files only.`)
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const data = event.target?.result as string
-      setSohFile({
-        name: file.name,
-        data: data,
-        type: file.type || "application/octet-stream",
-      })
+  const handleFileUpload = (file: File | null) => {
+    setSohFile(file)
+    if (file) {
       setError("")
     }
-    reader.readAsDataURL(file)
   }
 
   const validateStep1 = () => {
@@ -172,11 +161,11 @@ export default function CellBuilderContent() {
       newErrors.name = "Cell name is required"
     }
 
-    if (!formData.cell_nominal_voltage ) {
+    if (!formData.cell_nominal_voltage) {
       newErrors.cell_nominal_voltage = "Valid nominal voltage is required"
     }
 
-    if (!formData.cell_upper_voltage_cutoff ) {
+    if (!formData.cell_upper_voltage_cutoff) {
       newErrors.cell_upper_voltage_cutoff = "Valid upper voltage cut-off is required"
     }
 
@@ -223,14 +212,14 @@ export default function CellBuilderContent() {
   const handleNext = () => {
     if (validateStep1()) {
       setCurrentStep(2)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: "smooth" })
     }
   }
 
   const handleBack = () => {
     setCurrentStep(1)
     setError("")
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   const handleSave = async () => {
@@ -284,14 +273,13 @@ export default function CellBuilderContent() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       <div className="pb-6 border-b mb-6">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Battery className="w-6 h-6" />
           {isEditing ? "Edit Cell" : "Create Cell"}
         </h2>
       </div>
-
 
       {currentStep === 1 ? (
         <>
