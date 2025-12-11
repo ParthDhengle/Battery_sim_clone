@@ -14,6 +14,8 @@ type Props = {
   setFormData: (data: any) => void
   uploadedFile: File | null
   onFileChange: (file: File | null) => void
+  rcPairType: "rc2" | "rc3" | ""
+  setRcPairType: (type: "rc2" | "rc3" | "") => void
 }
 
 export default function RCParameterUpload({ formData, setFormData, uploadedFile, onFileChange }: Props) {
@@ -32,8 +34,6 @@ export default function RCParameterUpload({ formData, setFormData, uploadedFile,
   const handleRcPairChange = (value: "rc2" | "rc3") => {
     setRcPairType(value)
     updateField("rc_pair_type", value)
-    setFileError(null)
-    clearFile()
   }
 
   const clearFile = () => {

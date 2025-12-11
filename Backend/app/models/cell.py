@@ -19,8 +19,9 @@ class CellDimensions(BaseModel):
 class SOHFile(BaseModel):
     """State of Health file data"""
     name: str
-    data: str
+    path: str  # File path where it's stored locally
     type: str
+    rc_pair_type: Optional[Literal["rc2", "rc3"]] = None  # RC pair configuration
 
 
 class CellBase(BaseModel):
@@ -51,9 +52,10 @@ class CellBase(BaseModel):
     anode_composition: str = ""
     cathode_composition: str = ""
     
-    # Optional SOH file
-    soh_file: Optional[SOHFile] = None
-
+    # RC pair type (separate field for easier access)
+    rc_pair_type: Optional[Literal["rc2", "rc3"]] = None
+    rc_parameter_file_path: Optional[str] = None  # stores path like "/uploads/xxx.csv"
+    
     model_config = ConfigDict(
         populate_by_name=True,
         extra='forbid'  # Strict validation

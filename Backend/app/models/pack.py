@@ -17,6 +17,7 @@ class CellDimensions(BaseModel):
         return float(v)
 
 class CellConfig(BaseModel):
+    name: str
     form_factor: Literal["cylindrical", "prismatic"]
     dims: CellDimensions
     capacity: float
@@ -42,7 +43,6 @@ class VaryingCell(BaseModel):
     soh: float = 1.0
     dcir_aging_factor: float = 1.0
 
-# REMOVED: InitialConditions (moved to simulation)
 
 class VoltageLimits(BaseModel):
     module_upper: Optional[float] = None

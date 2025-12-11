@@ -19,7 +19,11 @@ class InitialConditions(BaseModel):
 class SimulationBase(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None
-    pack_id: Optional[str] = None
+    pack_id: Optional[str] = None          # ← Already exists (good!)
+    pack_name: Optional[str] = None         # ← ADD
+    drive_cycle_id: Optional[str] = None    # ← ADD (for DB cycles)
+    drive_cycle_name: Optional[str] = None  # ← ADD
+    drive_cycle_file: Optional[str] = None
     status: str = "pending"
     initial_conditions: Optional[InitialConditions] = None
     metadata: Dict[str, Any] = {}

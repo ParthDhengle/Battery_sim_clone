@@ -17,6 +17,7 @@ async def extract_cell_config(cell_doc: dict) -> CellConfig:
     Extract CellConfig from cell document
     """
     return CellConfig(
+        name=cell_doc.get("name", "Unknown Cell"), 
         form_factor=cell_doc["formFactor"],
         dims=CellDimensions(**cell_doc["dims"]),
         capacity=cell_doc["capacity"],
@@ -115,9 +116,8 @@ def calculate_pack_summary(pack_data: dict) -> PackSummary:
         length_m = length_mm / 1000
         width_m = width_mm / 1000
         height_m = height_mm / 1000
-        cell_volume_m3 = length_m * width_m * height_m
    
-    total_cell_volume = total_cells * cell_volume_m3
+    total_cell_volume = total_cells * cell['cell_volume']
     total_pack_weight = total_cells * cell["m_cell"]
    
     # Approximate pack volume (this is simplified - actual implementation would calculate bbox)

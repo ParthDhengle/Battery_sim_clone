@@ -13,11 +13,11 @@ import asyncio
 import concurrent.futures
 from app.models.simulation import InitialConditions, VaryingCellsCondition
 from fastapi.responses import StreamingResponse
+import json
 
 BASE_DIR = Path(__file__).parent.parent.parent
 CORE_CODE_DIR = BASE_DIR / "Core-python code"
 sys.path.append(str(CORE_CODE_DIR))
-STATIC_CSV_PATH = CORE_CODE_DIR / "simulation_results.csv"
 router = APIRouter(prefix="/simulations", tags=["simulations"])
 os.makedirs("simulations", exist_ok=True)
 
@@ -155,37 +155,35 @@ async def run_sim_background(
                 "metadata.progress": 0.0
             }}
         )
+
+        #==Simulation entry==
+        print("⚡ Running full simulation with progress tracking...")
+        normalized_pack = _normalize_pack_for_core(pack_config, initial_conditions)
         
-        if test:
-            # TEST MODE: Copy static CSV
-            if os.path.exists(STATIC_CSV_PATH):
-                shutil.copy(STATIC_CSV_PATH, csv_path)
-                print(f"✅ TEST MODE: Copied static CSV → {csv_path}")
-            else:
-                raise FileNotFoundError(f"Static test CSV not found at {STATIC_CSV_PATH}")
-        else:
-            # FULL SIMULATION MODE
-            print("⚡ Running full simulation with progress tracking...")
-            normalized_pack = _normalize_pack_for_core(pack_config, initial_conditions)
-            setup = adp.create_setup_from_configs(normalized_pack, drive_df, model_config)
-            
-            # Run simulation with progress callback
-            loop = asyncio.get_running_loop()
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                csv_path = await loop.run_in_executor(
-                    executor,
-                    aes.run_electrical_solver_with_progress,
-                    setup,
-                    csv_path,
-                    sim_id  # Pass sim_id for progress updates
-                )
-            
-            print(f"✅ Simulation complete → Output saved at {csv_path}")
+        #==main data processor==
+        setup = adp.create_setup_from_configs(normalized_pack, drive_df, model_config)
         
+        # Run simulation with progress callback
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            csv_path = await loop.run_in_executor(
+                executor,
+                aes.run_electrical_solver_with_progress,
+                setup,
+                csv_path,
+                sim_id  # Pass sim_id for progress updates
+            )
+        
+        print(f"✅ Simulation complete → Output saved at {csv_path}")
+        sim_doc = await db.simulations.find_one({"_id": ObjectId(sim_id)})
+        if not sim_doc:
+            raise ValueError("Simulation document disappeared")
         # Compute final summary
         df = pd.read_csv(csv_path)
         summary = compute_partial_summary(df)
-        
+        drive_cycle_name = sim_doc.get("drive_cycle_name") or sim_doc.get("drive_cycle_file") or "Unknown Cycle"
+        pack_name = sim_doc.get("pack_name") or "Unknown Pack"
+
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
             {"$set": {
@@ -195,6 +193,8 @@ async def run_sim_background(
                 "metadata.name": sim_name,
                 "metadata.type": sim_type,
                 "metadata.progress": 100.0,
+                "metadata.pack_name": pack_config.get("name", "Unknown Pack"),
+                "metadata.drive_cycle_name": drive_cycle_name,
                 "updated_at": datetime.utcnow()
             }}
         )
@@ -218,45 +218,75 @@ async def run_sim_background(
 # -----------------------------------------------------
 @router.post("/run", status_code=202)
 async def run_simulation(request: dict, background_tasks: BackgroundTasks, test: bool = Query(False)):
-    """Starts a simulation in the background."""
     pack_config = request.get("packConfig")
     model_config = request.get("modelConfig")
     drive_cycle_csv = request.get("driveCycleCsv")
+    drive_cycle_source = request.get("driveCycleSource") 
     initial_conditions = model_config.get("initial_conditions") if model_config else None
     sim_name = request.get("name", "Untitled Simulation")
     sim_type = request.get("type", "Generic")
-    
+
     if not pack_config or not model_config or not drive_cycle_csv:
         raise HTTPException(status_code=400, detail="Missing required configurations")
     if not initial_conditions:
         raise HTTPException(status_code=400, detail="Missing initialConditions in modelConfig")
-    
+
+    # === Extract pack info ===
+    pack_id = str(pack_config.get("_id") or pack_config.get("id"))
+    pack_name = pack_config.get("name") or "Unnamed Pack"
+
+    # === Extract drive cycle info ===
+    drive_cycle_id = None
+    drive_cycle_name = None
+    drive_cycle_file = None
+
+    if drive_cycle_source:
+        if drive_cycle_source.get("type") == "upload":
+            drive_cycle_file = drive_cycle_source.get("filename")
+            drive_cycle_name = drive_cycle_file
+        elif drive_cycle_source.get("type") == "database":
+            drive_cycle_id = drive_cycle_source.get("id")
+            drive_cycle_name = drive_cycle_source.get("name", "Database Cycle")
+    else:
+        # Fallback: guess from CSV content length + sessionStorage pattern
+        if len(drive_cycle_csv) > 200 and "Time,Current" in drive_cycle_csv[:100]:
+            guessed_name = "uploaded_drive_cycle.csv"
+            drive_cycle_file = guessed_name
+            drive_cycle_name = guessed_name
+
     try:
         drive_df = pd.read_csv(io.StringIO(drive_cycle_csv))
         if "Time" not in drive_df.columns or "Current" not in drive_df.columns:
             raise ValueError("Drive cycle CSV must contain 'Time' and 'Current' columns")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid drive cycle CSV: {e}")
-    
+
     try:
         initial_conditions_obj = InitialConditions(**initial_conditions)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid initialConditions: {e}")
-    
+
     sim_doc = {
         "status": "pending",
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
+        "pack_id": pack_id,
+        "pack_name": pack_name,
+        "drive_cycle_id": drive_cycle_id,
+        "drive_cycle_name": drive_cycle_name,
+        "drive_cycle_file": drive_cycle_file,
         "initial_conditions": initial_conditions_obj.model_dump(),
         "metadata": {
             "name": sim_name,
             "type": sim_type,
-            "progress": 0.0
+            "progress": 0.0,
+            "pack_name": pack_name,
+            "drive_cycle_name": drive_cycle_name or "Unknown Cycle",
         },
     }
     result = await db.simulations.insert_one(sim_doc)
     sim_id = str(result.inserted_id)
-    
+
     background_tasks.add_task(
         run_sim_background,
         pack_config,
@@ -268,9 +298,8 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks, test:
         test,
         initial_conditions_obj.model_dump()
     )
-    
-    return {"simulation_id": sim_id, "status": "started"}
 
+    return {"simulation_id": sim_id, "status": "started"}
 # -----------------------------------------------------
 # STOP SIMULATION ENDPOINT
 # -----------------------------------------------------
@@ -332,10 +361,12 @@ async def list_simulations():
         "type": s.get("metadata", {}).get("type", "Generic"),
         "status": s.get("status", "unknown"),
         "created_at": s.get("created_at"),
-        "summary": s.get("metadata", {}).get("summary", None),
+        "pack_name": s.get("pack_name") or s.get("metadata", {}).get("pack_name"),
+        "drive_cycle_name": s.get("drive_cycle_name") or s.get("metadata", {}).get("drive_cycle_name"),
+        "drive_cycle_file": s.get("drive_cycle_file"),
+        "summary": s.get("metadata", {}).get("summary"),
         "progress": s.get("metadata", {}).get("progress", 0.0),
     } for s in sims]
-
 # -----------------------------------------------------
 # GET SIMULATION STATUS WITH PROGRESS
 # -----------------------------------------------------

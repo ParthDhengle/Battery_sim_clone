@@ -5,19 +5,34 @@ import React from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import RCParameterUpload from "./RCParameterUpload"
+import RCParameterUpload from "./RCParameterUpload"  
 
 type Props = {
   formData: any
   setFormData: (data: any) => void
   sohFile: File | null
   handleFileUpload: (file: File | null) => void
+  uploadedFile: File | null          // Add this
+  setUploadedFile: (file: File | null) => void  // Add this
+  rcPairType: "rc2" | "rc3" | ""       // Add this
+  setRcPairType: (type: "rc2" | "rc3" | "") => void  // Add this
 }
 
-export default function AdvancedParameters({ formData, setFormData, sohFile, handleFileUpload }: Props) {
+
+export default function AdvancedParameters({
+  formData,
+  setFormData,
+  sohFile,
+  handleFileUpload,
+  uploadedFile,
+  setUploadedFile,
+  rcPairType,
+  setRcPairType
+}: Props) {
   const updateField = (field: string, value: any) => {
     setFormData({ ...formData, [field]: value })
   }
+
 
   return (
     <div className="space-y-6">
@@ -178,8 +193,10 @@ export default function AdvancedParameters({ formData, setFormData, sohFile, han
       <RCParameterUpload
         formData={formData}
         setFormData={setFormData}
-        uploadedFile={sohFile}
-        onFileChange={handleFileUpload}
+        uploadedFile={uploadedFile}
+        onFileChange={setUploadedFile}
+        rcPairType={rcPairType}
+        setRcPairType={setRcPairType}
       />
     </div>
   )

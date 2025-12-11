@@ -35,6 +35,7 @@ export default function CellBuilderContent() {
     cost_per_cell: string
     anode_composition: string
     cathode_composition: string
+    rc_pair_type: "rc2" | "rc3" | ""
   }
 
   const router = useRouter()
@@ -64,12 +65,15 @@ export default function CellBuilderContent() {
     cost_per_cell: "",
     anode_composition: "",
     cathode_composition: "",
+    rc_pair_type: "",
   })
 
   const [sohFile, setSohFile] = useState<File | null>(null)
   const [error, setError] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isEditing, setIsEditing] = useState(!!id)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [rcPairType, setRcPairType] = useState<"rc2" | "rc3" | "">("")
 
   useEffect(() => {
     if (id) {
@@ -129,6 +133,7 @@ export default function CellBuilderContent() {
           cost_per_cell: cell.cost_per_cell != null ? cell.cost_per_cell.toString() : "",
           anode_composition: cell.anode_composition || "",
           cathode_composition: cell.cathode_composition || "",
+          rc_pair_type: cell.rc_pair_type || "",
           cell_volume: "",
         }
         setFormData(newFormData)
@@ -148,10 +153,8 @@ export default function CellBuilderContent() {
   }
 
   const handleFileUpload = (file: File | null) => {
-    setSohFile(file)
-    if (file) {
-      setError("")
-    }
+    setUploadedFile(file)
+    if (file) setError("")
   }
 
   const validateStep1 = () => {
@@ -223,47 +226,89 @@ export default function CellBuilderContent() {
   }
 
   const handleSave = async () => {
-    const dims: any = { height: Number.parseFloat(formData.height) }
-    if (formData.formFactor === "cylindrical" || formData.formFactor === "coin") {
-      dims.radius = Number.parseFloat(formData.radius)
-    } else {
-      dims.length = Number.parseFloat(formData.length)
-      dims.width = Number.parseFloat(formData.width)
+  const dims: any = { height: Number.parseFloat(formData.height) }
+  if (["cylindrical", "coin"].includes(formData.formFactor)) {
+    if (!formData.radius || Number(formData.radius) <= 0) {
+      setError("Radius is required for cylindrical/coin cells")
+      return
     }
-
-    const payload = {
-      name: formData.name,
-      formFactor: formData.formFactor,
-      dims,
-      cell_nominal_voltage: Number.parseFloat(formData.cell_nominal_voltage),
-      cell_upper_voltage_cutoff: Number.parseFloat(formData.cell_upper_voltage_cutoff),
-      cell_lower_voltage_cutoff: Number.parseFloat(formData.cell_lower_voltage_cutoff),
-      capacity: Number.parseFloat(formData.capacity),
-      max_charging_current_continuous: Number.parseFloat(formData.max_charging_current_continuous) || 0,
-      max_charging_current_instantaneous: Number.parseFloat(formData.max_charging_current_instantaneous) || 0,
-      max_discharging_current_continuous: Number.parseFloat(formData.max_discharging_current_continuous) || 0,
-      max_discharging_current_instantaneous: Number.parseFloat(formData.max_discharging_current_instantaneous) || 0,
-      max_charge_voltage: Number.parseFloat(formData.max_charge_voltage),
-      columbic_efficiency: Number.parseFloat(formData.columbic_efficiency),
-      cell_weight: Number.parseFloat(formData.cell_weight),
-      cell_volume: Number.parseFloat(formData.cell_volume) || 0,
-      cost_per_cell: Number.parseFloat(formData.cost_per_cell) || 0,
-      anode_composition: formData.anode_composition,
-      cathode_composition: formData.cathode_composition,
-      soh_file: sohFile,
+    dims.radius = Number(formData.radius)
+  } else {
+    if (!formData.length || Number(formData.length) <= 0) {
+      setError("Length is required")
+      return
     }
-
-    try {
-      if (isEditing && id) {
-        await updateCell(id, payload)
-      } else {
-        await createCell(payload)
-      }
-      router.push("/library/cells")
-    } catch (err) {
-      setError("Failed to save cell")
+    if (!formData.width || Number(formData.width) <= 0) {
+      setError("Width is required")
+      return
     }
+    dims.length = Number(formData.length)
+    dims.width = Number(formData.width)
   }
+
+  const payload = new FormData()
+  payload.append("name", formData.name)
+  payload.append("formFactor", formData.formFactor)
+  payload.append("height", formData.height)
+
+  if (dims.radius) payload.append("radius", dims.radius.toString())
+  if (dims.length) payload.append("length", dims.length.toString())
+  if (dims.width) payload.append("width", dims.width.toString())
+
+  payload.append("cell_nominal_voltage", formData.cell_nominal_voltage)
+  payload.append("cell_upper_voltage_cutoff", formData.cell_upper_voltage_cutoff)
+  payload.append("cell_lower_voltage_cutoff", formData.cell_lower_voltage_cutoff)
+  payload.append("capacity", formData.capacity)
+  payload.append("cell_weight", formData.cell_weight)
+
+  // Optional fields
+  const optionalFields = [
+    "max_charging_current_continuous",
+    "max_charging_current_instantaneous",
+    "max_discharging_current_continuous",
+    "max_discharging_current_instantaneous",
+    "max_charge_voltage",
+    "columbic_efficiency",
+    "cost_per_cell",
+    "anode_composition",
+    "cathode_composition",
+    "cell_volume",
+  ]
+
+  optionalFields.forEach(field => {
+    const value = (formData as any)[field]
+    if (value !== undefined && value !== "") {
+      payload.append(field, value)
+    }
+  })
+
+  // RC File Upload
+  if (uploadedFile) {
+    if (!rcPairType) {
+      setError("Please select RC pair type (2RC or 3RC)")
+      return
+    }
+    payload.append("rc_pair_type", rcPairType)
+    payload.append("rc_parameter_file", uploadedFile)
+  }
+
+  try {
+    const url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/cells/with-rc-file`
+    const res = await fetch(url, {
+      method: "POST",
+      body: payload,
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.detail || "Failed to save cell")
+    }
+
+    router.push("/library/cells")
+  } catch (err: any) {
+    setError(err.message || "Failed to save cell")
+  }
+}
 
   return (
     <div className="space-y-6 p-6">
@@ -299,6 +344,10 @@ export default function CellBuilderContent() {
             setFormData={setFormData}
             sohFile={sohFile}
             handleFileUpload={handleFileUpload}
+            uploadedFile={uploadedFile}
+            setUploadedFile={setUploadedFile}
+            rcPairType={rcPairType}
+            setRcPairType={setRcPairType}
           />
           <div className="flex justify-between">
             <Button onClick={handleBack} variant="outline" className="min-w-32">

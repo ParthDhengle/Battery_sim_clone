@@ -5,13 +5,7 @@ import React, { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, X, Download } from "lucide-react"
-import Plotly from "plotly.js-dist-min";
-
-type Props = {
-  file: File
-  rcType: "rc2" | "rc3"
-  onClose: () => void
-}
+import Plotly from "plotly.js-dist-min"
 
 export default function RCParameterPlots({ file, rcType, onClose }: Props) {
   const [plots, setPlots] = useState<{ title: string; data: any; layout: any }[]>([])

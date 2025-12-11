@@ -4,6 +4,8 @@ from app.routers import cells, packs, simulations  # Add simulations import
 from app.config import client, db
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta
+from fastapi.staticfiles import StaticFiles
+
 
 app = FastAPI(
     title="Battery Simulation API",
@@ -26,6 +28,7 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600,
 )
+app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")
 
 # Scheduler for cleanup
 scheduler = AsyncIOScheduler()
