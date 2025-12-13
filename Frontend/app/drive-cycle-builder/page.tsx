@@ -13,7 +13,8 @@ export default function Home() {
   const [drivecycles, setDrivecycles] = useState<any[]>([])
   const [calendarAssignment, setCalendarAssignment] = useState<any[]>([])
   const [simulationCycle, setSimulationCycle] = useState<any[]>([])
-
+  
+  const [simId, setSimId] = useState<string | null>(null)
   return (
     <div className="min-h-screen bg-background">
       <header className="top-0 z-40 border-b">
@@ -22,6 +23,12 @@ export default function Home() {
           <p className="text-muted-foreground mt-1">
             Create, manage, and simulate drive cycles for battery simulations
           </p>
+             {/* Optional: Show current simulation ID for debugging */}
+          {simId && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Simulation ID: <code className="bg-muted px-2 py-1 rounded">{simId}</code>
+            </p>
+          )}
         </div>
       </header>
 
@@ -37,7 +44,11 @@ export default function Home() {
           <TabsContent value="subcycles" className="space-y-4">
             <Card>
               <CardContent>
-                <SubcycleLibrary subcycles={subcycles} onSubcyclesChange={setSubcycles} />
+                <SubcycleLibrary 
+                  subcycles={subcycles} 
+                  onSubcyclesChange={setSubcycles}
+                  simId={simId}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -49,6 +60,8 @@ export default function Home() {
                   subcycles={subcycles}
                   drivecycles={drivecycles}
                   onDrivecyclesChange={setDrivecycles}
+                  simId={simId}
+                  onSimIdCreated={setSimId}  
                 />
               </CardContent>
             </Card>
@@ -65,6 +78,7 @@ export default function Home() {
                   drivecycles={drivecycles}
                   onCalendarChange={setCalendarAssignment}
                   calendarData={calendarAssignment}
+                  simId={simId} 
                 />
               </CardContent>
             </Card>
@@ -82,6 +96,7 @@ export default function Home() {
                   drivecycles={drivecycles}
                   subcycles={subcycles}
                   onSimulationCycleGenerate={setSimulationCycle}
+                  simId={simId} 
                 />
               </CardContent>
             </Card>

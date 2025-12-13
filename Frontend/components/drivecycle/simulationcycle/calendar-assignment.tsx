@@ -10,7 +10,7 @@ import CalendarRuleTable from "./calendar-rule-table"
 import { Toggle } from "@/components/ui/toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/Label"
-
+import { saveCalendarRules } from "@/lib/api/drive-cycle"
 
 interface CalendarRule {
   id: string
@@ -27,6 +27,7 @@ interface CalendarAssignmentProps {
   drivecycles: any[]
   onCalendarChange: (rules: CalendarRule[]) => void
   calendarData: CalendarRule[]
+  simId: string | null  // NEW: from parent page
 }
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -87,8 +88,6 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
   const [editing, setEditing] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
 
-  const generateId = () => `RULE_${Date.now()}`
-
   const defaultRule = calendarData.find(r => r.id === "DEFAULT_RULE")
   const hasDefaultRule = !!defaultRule
 
@@ -110,22 +109,82 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
     }
   }, [calendarData])
 
-  const handleAddRule = (rule: Omit<CalendarRule, "id">) => {
-    onCalendarChange([...calendarData, { ...rule, id: generateId(), ruleIndex: calendarData.length + 1 }])
-    setShowNew(false)
+  const handleAddRule = async (newRule: Omit<CalendarRule, "id" | "ruleIndex">) => {
+    if (!simId) {
+      alert("Please create a drive cycle first to start a simulation.")
+      return
+    }
+
+    try {
+      // Generate temporary ID for optimistic UI update
+      const tempId = `RULE_${Date.now()}`
+      const ruleWithTempId = {
+        ...newRule,
+        id: tempId,
+        ruleIndex: calendarData.length + 1
+      }
+
+      // Optimistic local update
+      onCalendarChange([...calendarData, ruleWithTempId])
+
+      // Send to backend
+      const updatedRules = await saveCalendarRules(simId, [...calendarData, newRule])
+      
+      // Sync local state with backend response (which has real IDs)
+      onCalendarChange(updatedRules)
+
+      setShowNew(false)
+    } catch (err) {
+      alert("Failed to save rule. Please try again.")
+      // Revert optimistic update on error if needed
+    }
   }
 
-  const handleEditRule = (id: string, updated: Omit<CalendarRule, "id">) => {
-    onCalendarChange(calendarData.map(r => (r.id === id ? { ...updated, id, ruleIndex: r.ruleIndex } : r)))
-    setEditing(null)
+  const handleEditRule = async (id: string, updatedRule: Omit<CalendarRule, "id" | "ruleIndex">) => {
+    if (!simId) return
+
+    try {
+      // Optimistic update
+      const optimisticRules = calendarData.map(r => 
+        r.id === id ? { ...updatedRule, id, ruleIndex: r.ruleIndex } : r
+      )
+      onCalendarChange(optimisticRules)
+
+      // Save to backend
+      const updatedRules = await saveCalendarRules(simId, optimisticRules.map(r => ({
+        drivecycleId: r.drivecycleId,
+        drivecycleName: r.drivecycleName,
+        months: r.months,
+        daysOfWeek: r.daysOfWeek,
+        dates: r.dates,
+        notes: r.notes
+      })))
+
+      onCalendarChange(updatedRules)
+      setEditing(null)
+    } catch (err) {
+      alert("Failed to update rule.")
+    }
   }
 
-  const handleDeleteRule = (id: string) => {
+  const handleDeleteRule = async (id: string) => {
     if (id === "DEFAULT_RULE") {
       alert("Cannot delete the default rule. You can change it instead.")
       return
     }
-    onCalendarChange(calendarData.filter(r => r.id !== id))
+
+    if (!simId) return
+
+    try {
+      // Optimistic update
+      const remainingRules = calendarData.filter(r => r.id !== id)
+      onCalendarChange(remainingRules)
+
+      // Save to backend
+      await saveCalendarRules(simId, remainingRules.filter(r => r.id !== "DEFAULT_RULE"))
+    } catch (err) {
+      alert("Failed to delete rule.")
+    }
   }
 
   const handleCancel = () => {
@@ -134,8 +193,19 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
   }
 
   const isEditingMode = showNew || editing !== null
-
+  {if (!simId) {
+    return (
+      <Card>
+        <CardContent className="pt-8 text-center">
+          <p className="text-muted-foreground">
+            Create your first drive cycle to start a simulation and assign calendar rules.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }}
   return (
+    
     <div className="space-y-6">
       {/* Default Rule Card - Always visible, optional */}
       <Card className={hasDefaultRule ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-amber-400 bg-amber-50 dark:bg-amber-950/30"}>
@@ -214,19 +284,38 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
             {editing === "DEFAULT_RULE" && (
               <DefaultRuleEditor
                 drivecycles={drivecycles}
-                onSubmit={(id, name) => {
-                  const newRule = {
-                    id: "DEFAULT_RULE" as const,
-                    ruleIndex: 0,
+               onSubmit={async (id, name) => {
+                  if (!simId) {
+                    alert("Please create a drive cycle first.")
+                    return
+                  }
+
+                  const newDefaultRule = {
                     drivecycleId: id,
                     drivecycleName: name,
                     months: [],
                     daysOfWeek: [],
                     dates: [],
-                    notes: "Default drive cycle for unassigned days",
+                    notes: "Default drive cycle for unassigned days"
                   }
-                  onCalendarChange([...calendarData.filter(r => r.id !== "DEFAULT_RULE"), newRule])
-                  setEditing(null)
+
+                  try {
+                    // Remove old default, add new one
+                    const rulesWithoutDefault = calendarData.filter(r => r.id !== "DEFAULT_RULE")
+                    const updatedRules = await saveCalendarRules(simId, [...rulesWithoutDefault, newDefaultRule])
+
+                    // Include DEFAULT_RULE with proper structure in local state
+                    const localRules = updatedRules.map((r, idx) => ({
+                      ...r,
+                      id: r.id || (r.drivecycleId === id ? "DEFAULT_RULE" : `RULE_${idx}`),
+                      ruleIndex: r.id === "DEFAULT_RULE" ? 0 : idx + 1
+                    }))
+
+                    onCalendarChange(localRules)
+                    setEditing(null)
+                  } catch (err) {
+                    alert("Failed to set default rule.")
+                  }
                 }}
                 onCancel={handleCancel}
                 initialData={defaultRule}

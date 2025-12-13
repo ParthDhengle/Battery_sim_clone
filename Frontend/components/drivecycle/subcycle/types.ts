@@ -29,4 +29,5 @@ export interface Subcycle {
 export interface SubcycleLibraryProps {
   subcycles: Subcycle[]
   onSubcyclesChange: (subcycles: Subcycle[]) => void
+  simId: string | null
 }

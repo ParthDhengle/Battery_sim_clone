@@ -14,6 +14,7 @@ import ManualEditor from "./manual-editor"
 import ImportTab from "./import-tab"
 import { exportSubcycleJson, exportSubcycleCsv, convertSecondsToHMS, calculateTotalDuration } from "./utils"
 import { Subcycle, SubcycleLibraryProps } from "./types"
+import { getSubcycles, createSubcycle, updateSubcycle, deleteSubcycle } from "@/lib/api/drive-cycle"
 
 export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: SubcycleLibraryProps) {
   const [isCreating, setIsCreating] = useState(false)
@@ -23,7 +24,8 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [nameError, setNameError] = useState("")
-
+  const [globalSubcycles, setGlobalSubcycles] = useState<Subcycle[]>([])
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
     if (editingSubcycle) {
       setName(editingSubcycle.name)
@@ -34,6 +36,21 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
     }
     setNameError("")
   }, [editingSubcycle, isCreating])
+
+  useEffect(() => {
+    const fetchGlobal = async () => {
+      try {
+        setLoading(true)
+        const data = await getSubcycles()
+        setGlobalSubcycles(data)
+      } catch (err) {
+        console.error("Failed to load subcycles from backend", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchGlobal()
+  }, [])
 
   const isEditorOpen = isCreating || !!editingSubcycle
 
@@ -55,28 +72,57 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
     setNameError("")
   }
 
-  const generateId = () => `SC${String(subcycles.length + 1).padStart(3, "0")}`
-
-  const handleSave = (steps: any[], source: "manual" | "import") => {
+  const handleSave = async (steps: any[], source: "manual" | "import") => {
     if (!name.trim()) {
       setNameError("Name is required")
       return
     }
 
-    const payload = { name: name.trim(), description: description.trim(), steps }
-
-    if (editingSubcycle) {
-      onSubcyclesChange(subcycles.map(sc => sc.id === editingSubcycle.id ? { ...sc, ...payload } : sc))
-      setEditingSubcycle(null)
-    } else {
-      onSubcyclesChange([...subcycles, { id: generateId(), source, ...payload }])
+    const payload = {
+      name: name.trim(),
+      description: description.trim(),
+      source,
+      steps
     }
-    cancelEditor()
+
+    try {
+      let savedSubcycle: Subcycle
+      if (editingSubcycle) {
+        savedSubcycle = await updateSubcycle(editingSubcycle.id, payload)
+      } else {
+        savedSubcycle = await createSubcycle(payload)
+      }
+
+      // Update both global and local lists
+      setGlobalSubcycles(prev => 
+        editingSubcycle
+          ? prev.map(sc => sc.id === editingSubcycle.id ? savedSubcycle : sc)
+          : [...prev, savedSubcycle]
+      )
+
+      // Also add to current simulation's working set if not already there
+      const existsInLocal = subcycles.some(sc => sc.id === savedSubcycle.id)
+      if (!existsInLocal) {
+        onSubcyclesChange([...subcycles, savedSubcycle])
+      }
+
+      cancelEditor()
+    } catch (err: any) {
+      alert("Failed to save subcycle: " + (err.message || "Unknown error"))
+    }
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Delete this sub-cycle permanently?")) {
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this sub-cycle permanently? This cannot be undone.")) return
+
+    try {
+      await deleteSubcycle(id)
+
+      // Remove from both global and local
+      setGlobalSubcycles(prev => prev.filter(sc => sc.id !== id))
       onSubcyclesChange(subcycles.filter(sc => sc.id !== id))
+    } catch (err) {
+      alert("Failed to delete subcycle")
     }
   }
 

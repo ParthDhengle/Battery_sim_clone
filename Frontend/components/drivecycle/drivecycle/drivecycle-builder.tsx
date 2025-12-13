@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Plus, Download, Edit2, Trash2 } from "lucide-react"
 import DrivecycleForm from "./drivecycle-form"
 import DrivecycleCompositionTable from "./drivecycle-composition-table"
+import { createDriveCycle } from "@/lib/api/drive-cycle"
 
 interface DrivecycleComposition {
   id: string
@@ -29,6 +30,8 @@ interface DrivecycleBuilderProps {
   subcycles: any[]
   drivecycles: Drivecycle[]
   onDrivecyclesChange: (drivecycles: Drivecycle[]) => void
+  simId: string | null  // NEW: current simulation ID
+  onSimIdCreated: (simId: string) => void
 }
 
 function convertSecondsToHMS(totalSeconds: number) {
@@ -105,14 +108,39 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
 
   const generateId = () => `DC${String(drivecycles.length + 1).padStart(3, "0")}`
 
-  const handleAddDrivecycle = (drivecycle: Omit<Drivecycle, "id" | "source">) => {
-    const newDrivecycle: Drivecycle = {
-      ...drivecycle,
-      id: generateId(),
-      source: "manual",
+  const handleAddDrivecycle = async (drivecycleData: Omit<Drivecycle, "id" | "source">) => {
+    try {
+      // Prepare payload matching backend expectation
+      const payload = {
+        id: drivecycleData.name.replace(/\s+/g, "_").toUpperCase(), // temporary ID, backend may override
+        name: drivecycleData.name,
+        notes: drivecycleData.notes,
+        composition: drivecycleData.composition.map(row => ({
+          subcycleId: row.subcycleId,
+          repetitions: row.repetitions,
+          ambientTemp: row.ambientTemp,
+          location: row.location || "",
+          triggers: row.triggers || []
+        }))
+      }
+
+      // Call backend
+      const result = await createDriveCycle(payload, simId || undefined)
+
+      // If this was the first drive cycle → new simulation created
+      if (result.simId && !simId) {
+        onSimIdCreated(result.simId)
+      }
+
+      // Fetch updated drive cycles from backend? Or optimistically update?
+      // For now, we'll just close the form — parent will handle refresh later
+      setShowForm(false)
+
+      // Optional: show success
+      alert("Drive cycle saved successfully!")
+    } catch (err: any) {
+      alert("Failed to save drive cycle: " + (err.message || "Unknown error"))
     }
-    onDrivecyclesChange([...drivecycles, newDrivecycle])
-    setShowForm(false)
   }
 
   const handleEditDrivecycle = (id: string, drivecycle: Omit<Drivecycle, "id" | "source">) => {

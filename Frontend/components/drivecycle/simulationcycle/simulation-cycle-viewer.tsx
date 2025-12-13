@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download, ChevronDown, ChevronRight, X } from "lucide-react"
+import { generateSimulationTable } from "@/lib/api/drive-cycle"
 
 interface SimulationCycleViewerProps {
   calendarAssignment: any[]
   drivecycles: any[]
   subcycles: any[]
-  onSimulationCycleGenerate: (cycle: any[]) => void
+  simId: string | null  // NEW: from parent
+  // Remove onSimulationCycleGenerate
 }
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -23,7 +25,16 @@ export default function SimulationCycleViewer({
   onSimulationCycleGenerate,
 }: SimulationCycleViewerProps) {
   const [expanded, setExpanded] = useState<number[]>([])
+  
+  const [loading, setLoading] = useState(false)
+  const [csvUrl, setCsvUrl] = useState<string | null>(null)
+  const [stats, setStats] = useState<{
+    totalSteps?: number
+    totalDuration?: number
+    coveredDays?: number
+  }>({})
   const [showFullTable, setShowFullTable] = useState(false)
+  const [tableData, setTableData] = useState<any[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const ROWS_PER_PAGE = 100
 
@@ -36,7 +47,57 @@ export default function SimulationCycleViewer({
       prev.includes(dayOfYear) ? prev.filter(d => d !== dayOfYear) : [...prev, dayOfYear]
     )
   }
+  const handleGenerate = async () => {
+    if (!simId) {
+      alert("No simulation started. Create a drive cycle first.")
+      return
+    }
 
+    setLoading(true)
+    try {
+      const result = await generateSimulationTable(simId)
+      
+      // Backend returns { path, totalSteps, coveredDays, ... }
+      setCsvUrl(result.path)
+      setStats({
+        totalSteps: result.totalSteps,
+        totalDuration: result.totalDuration || 0,
+        coveredDays: result.coveredDays || 0
+      })
+
+      // Optional: fetch CSV content for modal preview
+      const response = await fetch(result.path)
+      const csvText = await response.text()
+      const rows = csvText.trim().split("\n").slice(1).map(line => {
+        const values = line.match(/(".*?")|([^,]+)/g)?.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"')) || []
+        return {
+          globalIndex: values[0],
+          dayOfYear: values[1],
+          drivecycleId: values[2],
+          drivecycleTriggers: values[3],
+          subcycleId: values[4],
+          subcycleStepIndex: values[5],
+          valueType: values[6],
+          value: values[7],
+          unit: values[8],
+          stepType: values[9],
+          duration: values[10],
+          timestep: values[11],
+          ambientTemp: values[12],
+          location: values[13],
+          triggers: values[14],
+          label: values[15]
+        }
+      })
+      setTableData(rows)
+      
+      alert("Simulation table generated successfully!")
+    } catch (err) {
+      alert("Failed to generate simulation table")
+    } finally {
+      setLoading(false)
+    }
+  }
   // Flatten all steps with global index and subcycle step index
   const allSteps = useMemo(() => {
     let globalIndex = 1
