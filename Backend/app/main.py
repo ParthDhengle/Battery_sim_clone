@@ -1,6 +1,6 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.routers import cells, packs, simulations  # Add simulations import
+from app.routers import cells, packs, simulations
+from app.routers.drive_cycle import subcycles, manager # Add manager import
+from app.config import client, db
 from app.config import client, db
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta
@@ -65,7 +65,9 @@ async def shutdown_event():
 # Include routers AFTER middleware
 app.include_router(cells.router)
 app.include_router(packs.router)
-app.include_router(simulations.router)  # Add simulations router
+app.include_router(simulations.router)
+app.include_router(subcycles.router)
+app.include_router(manager.router) # Add manager router
 
 @app.get("/")
 async def root():

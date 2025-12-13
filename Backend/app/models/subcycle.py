@@ -9,7 +9,8 @@ TRIGGER_TYPES = [
     "P_cell_high", "P_cell_low",
     "V_pack_high", "V_pack_low", "I_pack_high", "I_pack_low",
     "SOC_pack_high", "SOC_pack_low", "C_rate_pack_high", "C_rate_pack_low",
-    "P_pack_high", "P_pack_low"
+    "P_pack_high", "P_pack_low",
+    "time_elapsed" # Added common trigger
 ]
 
 class Trigger(BaseModel):
@@ -27,7 +28,7 @@ class Step(BaseModel):
     duration: float = Field(..., gt=0, description="Duration in seconds (required for fixed steps)")
     timestep: float = Field(..., gt=0, description="Timestep in seconds for data logging")
     valueType: str = Field(..., regex="^(current|c_rate|voltage|power|resistance)$")
-    value: str = Field(..., description="Target value (can be positive or negative)")
+    value: float = Field(..., description="Target value (can be positive or negative)") # Changed to float
     unit: str = Field(..., description="Unit corresponding to valueType (A, C, V, W, Ω)")
     repetitions: int = Field(..., ge=1, description="Number of times to repeat this step")
     stepType: str = Field(..., regex="^(fixed|fixed_with_triggers|trigger_only)$")
@@ -56,13 +57,14 @@ class SubcycleCreate(SubcycleBase):
         for step in steps:
             if step.stepType == "trigger_only" and len(step.triggers) == 0:
                 raise ValueError("trigger_only steps must have at least one trigger")
-            if step.stepType in ["fixed", "fixed_with_triggers"] and step.duration <= 0:
-                raise ValueError("fixed steps must have duration > 0")
+            # For fixed_with_triggers, we might allow 0 triggers if it just behaves like fixed, but better strict.
+            # However, 'fixed' needs duration.
         return steps
 
 class Subcycle(SubcycleBase):
     id: str = Field(..., alias="_id")
     createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
 
     class Config:
         from_attributes = True

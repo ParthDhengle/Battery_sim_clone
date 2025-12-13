@@ -9,8 +9,8 @@ import { Plus, AlertTriangle, Check } from "lucide-react"
 import CalendarRuleTable from "./calendar-rule-table"
 import { Toggle } from "@/components/ui/toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/Label"
-import { saveCalendarRules } from "@/lib/api/drive-cycle"
+import { Label } from "@/components/ui/label"
+import { saveCalendarAssignments } from "@/lib/api/drive-cycle"
 
 interface CalendarRule {
   id: string
@@ -84,7 +84,7 @@ function getOccupiedSelections(existingRules: CalendarRule[], excludeRuleId?: st
   return { occupiedByMonth, allOccupiedDays }
 }
 
-export default function CalendarAssignment({ drivecycles, onCalendarChange, calendarData }: CalendarAssignmentProps) {
+export default function CalendarAssignment({ drivecycles, onCalendarChange, calendarData, simId }: CalendarAssignmentProps) {
   const [editing, setEditing] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
 
@@ -128,10 +128,10 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
       onCalendarChange([...calendarData, ruleWithTempId])
 
       // Send to backend
-      const updatedRules = await saveCalendarRules(simId, [...calendarData, newRule])
-      
+      const updatedRules = await saveCalendarAssignments(simId, [...calendarData, newRule])
+
       // Sync local state with backend response (which has real IDs)
-      onCalendarChange(updatedRules)
+      onCalendarChange(updatedRules.calendar_assignments || updatedRules)
 
       setShowNew(false)
     } catch (err) {
@@ -145,13 +145,14 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
 
     try {
       // Optimistic update
-      const optimisticRules = calendarData.map(r => 
+      const optimisticRules = calendarData.map(r =>
         r.id === id ? { ...updatedRule, id, ruleIndex: r.ruleIndex } : r
       )
       onCalendarChange(optimisticRules)
 
       // Save to backend
-      const updatedRules = await saveCalendarRules(simId, optimisticRules.map(r => ({
+      const result = await saveCalendarAssignments(simId, optimisticRules.map(r => ({
+        id: r.id,
         drivecycleId: r.drivecycleId,
         drivecycleName: r.drivecycleName,
         months: r.months,
@@ -160,7 +161,7 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
         notes: r.notes
       })))
 
-      onCalendarChange(updatedRules)
+      onCalendarChange(result.calendar_assignments)
       setEditing(null)
     } catch (err) {
       alert("Failed to update rule.")
@@ -181,7 +182,8 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
       onCalendarChange(remainingRules)
 
       // Save to backend
-      await saveCalendarRules(simId, remainingRules.filter(r => r.id !== "DEFAULT_RULE"))
+      const result = await saveCalendarAssignments(simId, remainingRules.filter(r => r.id !== "DEFAULT_RULE"))
+      onCalendarChange(result.calendar_assignments)
     } catch (err) {
       alert("Failed to delete rule.")
     }
@@ -193,7 +195,7 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
   }
 
   const isEditingMode = showNew || editing !== null
-  {if (!simId) {
+  if (!simId) {
     return (
       <Card>
         <CardContent className="pt-8 text-center">
@@ -203,9 +205,10 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
         </CardContent>
       </Card>
     )
-  }}
+  }
+
   return (
-    
+
     <div className="space-y-6">
       {/* Default Rule Card - Always visible, optional */}
       <Card className={hasDefaultRule ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-amber-400 bg-amber-50 dark:bg-amber-950/30"}>
@@ -284,7 +287,7 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
             {editing === "DEFAULT_RULE" && (
               <DefaultRuleEditor
                 drivecycles={drivecycles}
-               onSubmit={async (id, name) => {
+                onSubmit={async (id, name) => {
                   if (!simId) {
                     alert("Please create a drive cycle first.")
                     return
@@ -302,10 +305,11 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
                   try {
                     // Remove old default, add new one
                     const rulesWithoutDefault = calendarData.filter(r => r.id !== "DEFAULT_RULE")
-                    const updatedRules = await saveCalendarRules(simId, [...rulesWithoutDefault, newDefaultRule])
+                    const result = await saveCalendarAssignments(simId, [...rulesWithoutDefault, newDefaultRule])
+                    const updatedRules = result.calendar_assignments || []
 
                     // Include DEFAULT_RULE with proper structure in local state
-                    const localRules = updatedRules.map((r, idx) => ({
+                    const localRules = updatedRules.map((r: any, idx: number) => ({
                       ...r,
                       id: r.id || (r.drivecycleId === id ? "DEFAULT_RULE" : `RULE_${idx}`),
                       ruleIndex: r.id === "DEFAULT_RULE" ? 0 : idx + 1
@@ -443,7 +447,7 @@ function SmartCalendarRuleEditor({
   // Check if a specific day of week is available for selected months
   const isDayOfWeekAvailable = (day: string): boolean => {
     if (rule.months.length === 0) return true
-    
+
     return rule.months.every((month: number) => {
       const occupied = occupiedSelections.occupiedByMonth.get(month)
       return !occupied?.has(day)
@@ -453,7 +457,7 @@ function SmartCalendarRuleEditor({
   // Check if a specific date is available for selected months
   const isDateAvailable = (date: number): boolean => {
     if (rule.months.length === 0) return true
-    
+
     return rule.months.every((month: number) => {
       const occupied = occupiedSelections.occupiedByMonth.get(month)
       return !occupied?.has(date)
@@ -463,22 +467,22 @@ function SmartCalendarRuleEditor({
   // Get available dates for the selected months
   const getAvailableDateRanges = (): string => {
     if (rule.months.length === 0) return "Select months first"
-    
+
     const availableDates: number[] = []
     for (let date = 1; date <= 31; date++) {
       if (isDateAvailable(date)) {
         availableDates.push(date)
       }
     }
-    
+
     if (availableDates.length === 0) return "No dates available"
     if (availableDates.length === 31) return "All dates available (1-31)"
-    
+
     // Show ranges
     const ranges: string[] = []
     let start = availableDates[0]
     let end = availableDates[0]
-    
+
     for (let i = 1; i < availableDates.length; i++) {
       if (availableDates[i] === end + 1) {
         end = availableDates[i]
@@ -489,7 +493,7 @@ function SmartCalendarRuleEditor({
       }
     }
     ranges.push(start === end ? `${start}` : `${start}-${end}`)
-    
+
     return `Available: ${ranges.join(", ")}`
   }
 
@@ -505,13 +509,13 @@ function SmartCalendarRuleEditor({
   }
 
   const handleMonthToggle = (month: number) => {
-    const newMonths = rule.months.includes(month) 
-      ? rule.months.filter((m: number) => m !== month) 
+    const newMonths = rule.months.includes(month)
+      ? rule.months.filter((m: number) => m !== month)
       : [...rule.months, month]
-    
+
     // Clear selections that might become invalid with new month selection
-    setRule({ 
-      ...rule, 
+    setRule({
+      ...rule,
       months: newMonths,
       daysOfWeek: rule.daysOfWeek.filter((day: string) => {
         return newMonths.every((m: number) => {
@@ -530,9 +534,9 @@ function SmartCalendarRuleEditor({
 
   const handleDayToggle = (day: string) => {
     if (!isDayOfWeekAvailable(day)) return
-    
-    const newDays = rule.daysOfWeek.includes(day) 
-      ? rule.daysOfWeek.filter((d: string) => d !== day) 
+
+    const newDays = rule.daysOfWeek.includes(day)
+      ? rule.daysOfWeek.filter((d: string) => d !== day)
       : [...rule.daysOfWeek, day]
     setRule({ ...rule, daysOfWeek: newDays })
   }
@@ -571,24 +575,24 @@ function SmartCalendarRuleEditor({
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-          
-          <Label htmlFor="drivecycleId" className="text-sm font-medium">
-            Select Drive Cycle *
-          </Label>
 
-          <Select value={rule.drivecycleId} onValueChange={handleSelectDrivecycle}>
-            <SelectTrigger id="drivecycleId" className="w-full mt-2">
-              <SelectValue placeholder="Choose a drive cycle" />
-            </SelectTrigger>
+            <Label htmlFor="drivecycleId" className="text-sm font-medium">
+              Select Drive Cycle *
+            </Label>
 
-            <SelectContent>
-              {drivecycles.map((dc) => (
-                <SelectItem key={dc.id} value={dc.id}>
-                  {dc.id} - {dc.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select value={rule.drivecycleId} onValueChange={handleSelectDrivecycle}>
+              <SelectTrigger id="drivecycleId" className="w-full mt-2">
+                <SelectValue placeholder="Choose a drive cycle" />
+              </SelectTrigger>
+
+              <SelectContent>
+                {drivecycles.map((dc) => (
+                  <SelectItem key={dc.id} value={dc.id}>
+                    {dc.id} - {dc.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
 
@@ -615,87 +619,87 @@ function SmartCalendarRuleEditor({
 
 
           <div>
-  <Label className="text-sm font-medium mb-3 block">Calendar Filter *</Label>
+            <Label className="text-sm font-medium mb-3 block">Calendar Filter *</Label>
 
-  <div className="space-y-4">
+            <div className="space-y-4">
 
-    {/* Radio: Days of Week */}
-    <div className="flex items-center gap-3">
-      <input
-        type="radio"
-        id="useDay"
-        checked={!useDate}
-        onChange={() => {
-          setUseDate(false)
-          setRule({ ...rule, dates: [] })
-        }}
-        className="cursor-pointer"
-      />
-      <Label htmlFor="useDay" className="text-sm cursor-pointer">
-        Days of Week
-      </Label>
-    </div>
+              {/* Radio: Days of Week */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="useDay"
+                  checked={!useDate}
+                  onChange={() => {
+                    setUseDate(false)
+                    setRule({ ...rule, dates: [] })
+                  }}
+                  className="cursor-pointer"
+                />
+                <Label htmlFor="useDay" className="text-sm cursor-pointer">
+                  Days of Week
+                </Label>
+              </div>
 
-    {/* BUTTON UI — Days of Week */}
-    {!useDate && (
-  <div className="grid grid-cols-4 gap-3 pl-6">
-    {DAYS_OF_WEEK.map((day) => {
-      const isAvailable = isDayOfWeekAvailable(day)
-      const isSelected = rule.daysOfWeek.includes(day)
+              {/* BUTTON UI — Days of Week */}
+              {!useDate && (
+                <div className="grid grid-cols-4 gap-3 pl-6">
+                  {DAYS_OF_WEEK.map((day) => {
+                    const isAvailable = isDayOfWeekAvailable(day)
+                    const isSelected = rule.daysOfWeek.includes(day)
 
-      return (
-        <Toggle
-          key={day}
-          pressed={isSelected}
-          onPressedChange={() => isAvailable && handleDayToggle(day)}
-          disabled={!isAvailable}
-          className={`
+                    return (
+                      <Toggle
+                        key={day}
+                        pressed={isSelected}
+                        onPressedChange={() => isAvailable && handleDayToggle(day)}
+                        disabled={!isAvailable}
+                        className={`
             w-full justify-center py-2 text-sm
             ${!isAvailable ? "opacity-50 cursor-not-allowed line-through" : ""}
           `}
-        >
-          {day}
-        </Toggle>
-      )
-    })}
-  </div>
-)}
+                      >
+                        {day}
+                      </Toggle>
+                    )
+                  })}
+                </div>
+              )}
 
 
-    {/* Radio: Specific Dates */}
-    <div className="flex items-center gap-3">
-      <input
-        type="radio"
-        id="useDate"
-        checked={useDate}
-        onChange={() => {
-          setUseDate(true)
-          setRule({ ...rule, daysOfWeek: [] })
-        }}
-        className="cursor-pointer"
-      />
-      <Label htmlFor="useDate" className="text-sm cursor-pointer">
-        Specific Dates
-      </Label>
-    </div>
+              {/* Radio: Specific Dates */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="useDate"
+                  checked={useDate}
+                  onChange={() => {
+                    setUseDate(true)
+                    setRule({ ...rule, daysOfWeek: [] })
+                  }}
+                  className="cursor-pointer"
+                />
+                <Label htmlFor="useDate" className="text-sm cursor-pointer">
+                  Specific Dates
+                </Label>
+              </div>
 
-    {/* Date Input */}
-    {useDate && (
-      <div className="pl-6 space-y-2">
-        <input
-          type="text"
-          placeholder="e.g., 1, 15, 30"
-          onChange={handleDateInputChange}
-          defaultValue={rule.dates.join(", ")}
-          className="w-full p-2 border rounded-md bg-background"
-        />
-        <p className="text-xs text-muted-foreground">
-          {getAvailableDateRanges()}
-        </p>
-      </div>
-    )}
-  </div>
-</div>
+              {/* Date Input */}
+              {useDate && (
+                <div className="pl-6 space-y-2">
+                  <input
+                    type="text"
+                    placeholder="e.g., 1, 15, 30"
+                    onChange={handleDateInputChange}
+                    defaultValue={rule.dates.join(", ")}
+                    className="w-full p-2 border rounded-md bg-background"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {getAvailableDateRanges()}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
 
           <div>

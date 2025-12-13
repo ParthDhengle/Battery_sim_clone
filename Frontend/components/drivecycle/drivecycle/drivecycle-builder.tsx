@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Plus, Download, Edit2, Trash2 } from "lucide-react"
 import DrivecycleForm from "./drivecycle-form"
 import DrivecycleCompositionTable from "./drivecycle-composition-table"
-import { createDriveCycle } from "@/lib/api/drive-cycle"
+import { createSimulationCycle, saveDriveCycles } from "@/lib/api/drive-cycle"
 
 interface DrivecycleComposition {
   id: string
@@ -102,7 +102,7 @@ const exportDrivecycleCsv = (drivecycle: Drivecycle) => {
   URL.revokeObjectURL(url)
 }
 
-export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecyclesChange }: DrivecycleBuilderProps) {
+export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecyclesChange, simId, onSimIdCreated }: DrivecycleBuilderProps) {
   const [editingDrivecycle, setEditingDrivecycle] = useState<Drivecycle | null>(null)
   const [showForm, setShowForm] = useState(false)
 
@@ -110,34 +110,31 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
 
   const handleAddDrivecycle = async (drivecycleData: Omit<Drivecycle, "id" | "source">) => {
     try {
-      // Prepare payload matching backend expectation
-      const payload = {
-        id: drivecycleData.name.replace(/\s+/g, "_").toUpperCase(), // temporary ID, backend may override
-        name: drivecycleData.name,
-        notes: drivecycleData.notes,
-        composition: drivecycleData.composition.map(row => ({
-          subcycleId: row.subcycleId,
-          repetitions: row.repetitions,
-          ambientTemp: row.ambientTemp,
-          location: row.location || "",
-          triggers: row.triggers || []
-        }))
+      const newDriveCycle: Drivecycle = {
+        id: drivecycleData.name.replace(/\s+/g, "_").toUpperCase(),
+        source: "manual",
+        ...drivecycleData
       }
 
-      // Call backend
-      const result = await createDriveCycle(payload, simId || undefined)
+      const updatedList = [...drivecycles, newDriveCycle]
 
-      // If this was the first drive cycle → new simulation created
-      if (result.simId && !simId) {
-        onSimIdCreated(result.simId)
+      // 1. Ensure Simulation ID exists
+      let currentSimId = simId
+      if (!currentSimId) {
+        const sim = await createSimulationCycle({ description: "New Simulation" }) // Create initial sim
+        currentSimId = sim._id
+        onSimIdCreated(currentSimId!)
       }
 
-      // Fetch updated drive cycles from backend? Or optimistically update?
-      // For now, we'll just close the form — parent will handle refresh later
+      // 2. Save ALL drive cycles to backend
+      if (currentSimId) {
+        await saveDriveCycles(currentSimId, updatedList)
+      }
+
+      // 3. Update local state
+      onDrivecyclesChange(updatedList)
       setShowForm(false)
-
-      // Optional: show success
-      alert("Drive cycle saved successfully!")
+      // alert("Drive cycle saved successfully!")
     } catch (err: any) {
       alert("Failed to save drive cycle: " + (err.message || "Unknown error"))
     }
