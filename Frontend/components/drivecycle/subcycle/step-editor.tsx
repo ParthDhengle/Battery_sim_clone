@@ -168,7 +168,7 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
               </div>
             </div>
           )}
-
+          
           {/* Timestep - Always visible */}
           <div>
             <Label htmlFor="timestep">Timestep (s) *</Label>
@@ -193,7 +193,7 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="current">Current (A)</SelectItem>
-                  <SelectItem value="c_rate">C-Rate (C)</SelectItem>
+                  <SelectItem value="c_rate">C-Rate (1/Hr)</SelectItem>
                   <SelectItem value="voltage">Voltage (V)</SelectItem>
                   <SelectItem value="power">Power (W)</SelectItem>
                   <SelectItem value="resistance">Resistance (Ω)</SelectItem>
@@ -238,7 +238,7 @@ export default function StepEditor({ onSubmit, onCancel, initialData, isEditing 
               {step.triggers.length === 0 && step.stepType === "trigger_only" && (
                 <p className="text-sm text-destructive">At least one trigger is required for Trigger Only steps</p>
               )}
-              
+
               {/* Optional warning when limit is reached */}
               {step.triggers.length >= MAX_TRIGGERS && (
                 <p className="text-sm text-amber-600">

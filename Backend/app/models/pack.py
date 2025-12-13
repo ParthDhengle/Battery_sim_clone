@@ -26,6 +26,7 @@ class CellConfig(BaseModel):
     m_jellyroll: float
     cell_voltage_upper_limit: float
     cell_voltage_lower_limit: float
+    cell_volume: float
 
 class LayerConfig(BaseModel):
     grid_type: str

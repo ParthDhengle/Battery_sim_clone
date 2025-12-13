@@ -1,4 +1,3 @@
-# Testing_backend/busbar_connections.py
 def define_busbar_connections(cells, layers, connection_type):
     parallel_groups = []
     layer_group_ranges = []
@@ -33,6 +32,7 @@ def define_busbar_connections(cells, layers, connection_type):
                     parallel_groups.append(cell['parallel_group'])
         layer_group_ranges.append((layer_group_start, layer_group_start + num_groups_layer - 1))
         group_offset = layer_group_ranges[-1][1]
+    
     # Connect layers in series
     for l in range(1, len(layers)):
         prev_last_group = layer_group_ranges[l-1][1]

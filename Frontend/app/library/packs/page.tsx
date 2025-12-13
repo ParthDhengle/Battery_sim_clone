@@ -18,6 +18,7 @@ import PackDetailsView from "@/components/pack-builder/PackDetailsView";
 export default function Packs() {
   const [packs, setPacks] = useState<any[]>([]);
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);  // ← NEW
 
   useEffect(() => {
     loadPacks();
@@ -25,11 +26,15 @@ export default function Packs() {
 
   const loadPacks = async () => {
     try {
+      setIsLoading(true);  // ← Start loading
       const data = await getPacks();
       setPacks(data);
+      setError("");
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Failed to load packs");
       setPacks([]);
+    } finally {
+      setIsLoading(false);  // ← Always stop
     }
   };
 
@@ -78,8 +83,14 @@ export default function Packs() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
-      {packs.length === 0 ? (
+      
+      {isLoading ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-center py-12">Loading packs...</p>
+          </CardContent>
+        </Card>
+      ) : packs.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Saved Packs</CardTitle>

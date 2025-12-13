@@ -74,7 +74,7 @@ def create_setup_from_configs(pack: dict, drive_df: pd.DataFrame, sim: dict):
         varying_DCIRs if varying_DCIRs else None
     )
     
-    freq=sim['simulation_frequency']
+    time_gap=sim['simulation_frequency']
   
     cells, parallel_groups = define_busbar_connections(cells, layers, connection_type)
     print(f"Defined {len(parallel_groups)} parallel groups based on connection type '{connection_type}'.")
@@ -111,5 +111,5 @@ def create_setup_from_configs(pack: dict, drive_df: pd.DataFrame, sim: dict):
         'BatteryData_SOH2': BatteryData_SOH2,
         'BatteryData_SOH3': BatteryData_SOH3,
 
-        'Frequency':freq
+        'Frequency':time_gap
     }

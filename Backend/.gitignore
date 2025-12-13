@@ -11,3 +11,6 @@ BatteryData_SOH1.json
 .env
 simulations/
 *.pyc
+
+keeps/
+uploads/

@@ -196,9 +196,6 @@ def init_geometry(pack):
         'formFactor': form_factor,
     }
 
-    print(f"Initialized {len(cells)} cells across {len(layers)} layers.")
-    #_plot_cell_distribution(cells)
-
     return cells
 
 def _plot_cell_distribution(cells):

@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, X, Download } from "lucide-react"
 import Plotly from "plotly.js-dist-min"
 
+interface Props {
+  file: File
+  rcType: "rc2" | "rc3"
+  onClose: () => void
+}
+
 export default function RCParameterPlots({ file, rcType, onClose }: Props) {
   const [plots, setPlots] = useState<{ title: string; data: any; layout: any }[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -28,6 +34,7 @@ export default function RCParameterPlots({ file, rcType, onClose }: Props) {
       const modes = ["CHARGE", "DISCHARGE"]
       const generatedPlots: { title: string; data: any; layout: any }[] = []
 
+      // Professional color palette - deep, sophisticated colors
       const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
 
       for (const mode of modes) {
@@ -63,36 +70,85 @@ export default function RCParameterPlots({ file, rcType, onClose }: Props) {
             y: tempData[temp].val,
             mode: 'lines+markers',
             name: `${temp}°C`,
-            line: { color: colors[i % colors.length], width: 2 },
-            marker: { size: 6, color: colors[i % colors.length] }
+            line: { 
+              color: colors[i % colors.length], 
+              width: 2.5,
+              shape: 'spline', // Smooth curved lines
+              smoothing: 1.3
+            },
+            marker: { 
+              size: 7, 
+              color: colors[i % colors.length],
+              line: {
+                color: '#ffffff',
+                width: 1.5
+              }
+            },
+            hovertemplate: '<b>%{fullData.name}</b><br>' +
+                          'SOC: %{x:.1f}%<br>' +
+                          variable.toUpperCase() + ': %{y:.4f}<br>' +
+                          '<extra></extra>'
           }))
 
           const layout = {
             title: {
               text: `${mode} – ${variable.toUpperCase()} vs SOC`,
-              font: { size: 16, weight: 600 }
+              font: { 
+                size: 17, 
+                family: 'Inter, system-ui, sans-serif',
+                color: '#1f2937',
+                weight: 600
+              },
+              pad: { t: 10 }
             },
             xaxis: {
-              title: 'SOC (%)',
+              title: {
+                text: 'State of Charge (%)',
+                font: { size: 13, family: 'Inter, system-ui, sans-serif', color: '#4b5563' }
+              },
               gridcolor: '#e5e7eb',
-              showgrid: true
+              gridwidth: 1,
+              showgrid: true,
+              zeroline: false,
+              showline: true,
+              linecolor: '#d1d5db',
+              linewidth: 1.5,
+              tickfont: { size: 11, color: '#6b7280' }
             },
             yaxis: {
-              title: variable.toUpperCase(),
+              title: {
+                text: variable.toUpperCase(),
+                font: { size: 13, family: 'Inter, system-ui, sans-serif', color: '#4b5563' }
+              },
               gridcolor: '#e5e7eb',
-              showgrid: true
+              gridwidth: 1,
+              showgrid: true,
+              zeroline: false,
+              showline: true,
+              linecolor: '#d1d5db',
+              linewidth: 1.5,
+              tickfont: { size: 11, color: '#6b7280' }
             },
             showlegend: true,
             legend: {
               x: 1.02,
               y: 1,
               xanchor: 'left',
-              yanchor: 'top'
+              yanchor: 'top',
+              font: { size: 11, family: 'Inter, system-ui, sans-serif' },
+              bgcolor: 'rgba(255, 255, 255, 0.9)',
+              bordercolor: '#e5e7eb',
+              borderwidth: 1
             },
             margin: { l: 60, r: 120, t: 50, b: 50 },
             paper_bgcolor: '#ffffff',
-            plot_bgcolor: '#ffffff',
-            hovermode: 'closest'
+            plot_bgcolor: '#fafafa',
+            hovermode: 'closest',
+            hoverlabel: {
+              bgcolor: '#1f2937',
+              font: { size: 12, family: 'Inter, system-ui, sans-serif', color: '#ffffff' },
+              bordercolor: '#374151'
+            }
           }
 
           generatedPlots.push({

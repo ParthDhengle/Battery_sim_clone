@@ -1,18 +1,12 @@
-
-
-
-
-// Updated: app/cells/page.tsx (or wherever the original Cells component is located)
 "use client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { getCells, createCell, updateCell, deleteCell } from "@/lib/api/cells"
-import CellDetailsView from "@/components/cell/CellDetailsView";
-import { Label } from "@/components/ui/label"
-import { Pencil, Trash2, Download, Battery, FileText } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { getCells, deleteCell } from "@/lib/api/cells"
+import CellDetailsView from "@/components/cell/CellDetailsView"
+import { Pencil, Trash2, Download, Battery, FileText, Zap } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type CellConfig = {
@@ -35,13 +29,15 @@ type CellConfig = {
   cost_per_cell: number
   anode_composition: string
   cathode_composition: string
-  soh_file?: { name: string; data: string; type: string }
+  rc_pair_type?: "rc2" | "rc3" | null
+  rc_parameter_file_path?: string | null
   created_at: string
 }
 
 export default function Cells() {
   const [cells, setCells] = useState<CellConfig[]>([])
   const [error, setError] = useState("")
+  const [isLoading, setIsLoading] = useState(true)  // ← NEW
 
   useEffect(() => {
     fetchCells()
@@ -49,11 +45,15 @@ export default function Cells() {
 
   const fetchCells = async () => {
     try {
+      setIsLoading(true)  // ← Start loading
       const data = await getCells()
       setCells(data)
+      setError("")
     } catch (err) {
       console.error(err)
       setError("Failed to fetch cells")
+    } finally {
+      setIsLoading(false)  // ← Always stop loading
     }
   }
 
@@ -102,7 +102,14 @@ export default function Cells() {
         </Alert>
       )}
 
-      {cells.length === 0 ? (
+      {/* ← NEW: Loading State */}
+      {isLoading ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-center py-12">Loading cells...</p>
+          </CardContent>
+        </Card>
+      ) : cells.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Saved Cells</CardTitle>
@@ -127,6 +134,7 @@ export default function Cells() {
                     ? "Cylindrical"
                     : cell.formFactor.charAt(0).toUpperCase() + cell.formFactor.slice(1)}
                 </CardDescription>
+                
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -152,12 +160,21 @@ export default function Cells() {
                       {cell.cell_lower_voltage_cutoff}V - {cell.cell_upper_voltage_cutoff}V
                     </p>
                   </div>
-                  {cell.soh_file && (
-                    <div className="col-span-2 flex items-center gap-2 text-green-600">
+
+                  {/* RC File Indicator */}
+                  {cell.rc_parameter_file_path ? (
+                    <div className="col-span-2 flex items-center gap-2 text-green-600 text-xs">
                       <FileText className="w-4 h-4" />
-                      <span className="text-xs truncate">{cell.soh_file.name}</span>
+                      <span className="truncate max-w-[180px]">
+                        RC parameters uploaded ({cell.rc_pair_type})
+                      </span>
                     </div>
-                  )}
+                  ) : cell.rc_pair_type ? (
+                    <div className="col-span-2 text-amber-600 text-xs flex items-center gap-1">
+                      Warning: RC type set but no file uploaded
+                    </div>
+                  ) : null}
+
                 </div>
 
                 <div className="flex gap-2 pt-2">

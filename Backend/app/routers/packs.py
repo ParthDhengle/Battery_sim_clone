@@ -25,7 +25,8 @@ async def extract_cell_config(cell_doc: dict) -> CellConfig:
         m_cell=cell_doc["cell_weight"],
         m_jellyroll=cell_doc["cell_weight"] * 0.85,  # Assuming 85% of cell mass is jellyroll; adjust as needed
         cell_voltage_upper_limit=cell_doc["cell_upper_voltage_cutoff"],
-        cell_voltage_lower_limit=cell_doc["cell_lower_voltage_cutoff"]
+        cell_voltage_lower_limit=cell_doc["cell_lower_voltage_cutoff"],
+        cell_volume=cell_doc.get("cell_volume", 0.0)
     )
 
 def calculate_pack_summary(pack_data: dict) -> PackSummary:

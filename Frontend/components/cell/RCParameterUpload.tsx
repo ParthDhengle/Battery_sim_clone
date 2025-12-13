@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FileText, Info, Download, AlertCircle, Upload, X, Loader2, CheckCircle2, Image } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import RCParameterPlots from "./RCParameterPlots"
+
 type Props = {
   formData: any
   setFormData: (data: any) => void
@@ -18,10 +19,16 @@ type Props = {
   setRcPairType: (type: "rc2" | "rc3" | "") => void
 }
 
-export default function RCParameterUpload({ formData, setFormData, uploadedFile, onFileChange }: Props) {
-  const [rcPairType, setRcPairType] = useState<"rc2" | "rc3" | "">(
-    formData.rc_pair_type || ""
-  )
+export default function RCParameterUpload({ 
+  formData, 
+  setFormData, 
+  uploadedFile, 
+  onFileChange,
+  rcPairType,      // Use prop directly
+  setRcPairType    // Use prop directly
+}: Props) {
+  // REMOVED: const [rcPairType, setRcPairType] = useState<"rc2" | "rc3" | "">(...)
+  
   const [fileError, setFileError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [showPlots, setShowPlots] = useState(false)
@@ -32,8 +39,9 @@ export default function RCParameterUpload({ formData, setFormData, uploadedFile,
   }
 
   const handleRcPairChange = (value: "rc2" | "rc3") => {
-    setRcPairType(value)
+    setRcPairType(value)  // This now updates parent state
     updateField("rc_pair_type", value)
+    console.log("✅ RC Pair Type selected:", value)  // Debug log
   }
 
   const clearFile = () => {
@@ -127,7 +135,7 @@ export default function RCParameterUpload({ formData, setFormData, uploadedFile,
 
     if (errors.length > 0) return errors.join("\n\n")
 
-    // SOC validation logic (same as original)
+    // SOC validation
     const socErrors: string[] = []
     let referenceSocValues: number[] | null = null
 
@@ -197,6 +205,7 @@ export default function RCParameterUpload({ formData, setFormData, uploadedFile,
 
       updateField("rc_parameter_file", file)
       onFileChange(file)
+      console.log("✅ File uploaded successfully:", file.name)  // Debug log
     } catch (err: any) {
       setFileError(err.message)
       updateField("rc_parameter_file", null)
