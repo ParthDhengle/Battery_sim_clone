@@ -31,6 +31,32 @@ async def get_simulation_cycle(id: str):
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     return sim
 
+@router.put("/{id}/subcycles", response_model=SimulationCycle)
+async def update_simulation_subcycles(id: str, subcycle_ids: List[str] = Body(..., embed=True)):
+    """
+    Update the list of subcycles available in this simulation.
+    Validates that all subcycle IDs exist.
+    """
+    # 1. Validate subcycle IDs exist
+    count = await db.subcycles.count_documents({"_id": {"$in": subcycle_ids}})
+    if count != len(set(subcycle_ids)):
+         raise HTTPException(status_code=400, detail="One or more Subcycle IDs are invalid")
+
+    # 2. Update
+    result = await db.simulation_cycles.find_one_and_update(
+        {"_id": id},
+        {
+            "$set": {
+                "subcycle_ids": subcycle_ids,
+                "updated_at": datetime.utcnow()
+            }
+        },
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Simulation Cycle not found")
+    return result
+
 @router.put("/{id}/drive-cycles", response_model=SimulationCycle)
 async def update_drive_cycles(id: str, definitions: List[DriveCycleDefinition]):
     """

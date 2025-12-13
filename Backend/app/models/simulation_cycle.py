@@ -13,7 +13,9 @@ class DriveCycleDefinition(BaseModel):
         return v
 
 class SimulationCycleBase(BaseModel):
+    name: Optional[str] = "New Simulation"
     description: Optional[str] = None
+    subcycle_ids: List[str] = Field(default=[], description="List of Subcycle IDs available in this simulation")
     drive_cycles_metadata: List[DriveCycleDefinition] = Field(default=[], description="Definitions of composite drive cycles")
     calendar_assignments: List[Dict[str, Any]] = Field(default=[], description="List of Calendar Rules")
     simulation_table_path: Optional[str] = Field(default=None, description="Path to generated CSV file")

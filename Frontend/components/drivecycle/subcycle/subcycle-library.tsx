@@ -14,10 +14,12 @@ import ManualEditor from "./manual-editor"
 import ImportTab from "./import-tab"
 import { exportSubcycleJson, exportSubcycleCsv, convertSecondsToHMS, calculateTotalDuration } from "./utils"
 import { Subcycle, SubcycleLibraryProps } from "./types"
-import { getSubcycles, createSubcycle, updateSubcycle, deleteSubcycle } from "@/lib/api/drive-cycle"
+import { updateSimulationSubcycles } from "@/lib/api/drive-cycle"
+import { Checkbox } from "@/components/ui/checkbox"
 
-export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: SubcycleLibraryProps) {
+export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }: SubcycleLibraryProps) {
   const [isCreating, setIsCreating] = useState(false)
+  const [isAddingExisting, setIsAddingExisting] = useState(false)
   const [editingSubcycle, setEditingSubcycle] = useState<Subcycle | null>(null)
   const [viewingTableId, setViewingTableId] = useState<string | null>(null)
 
@@ -25,7 +27,9 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
   const [description, setDescription] = useState("")
   const [nameError, setNameError] = useState("")
   const [globalSubcycles, setGlobalSubcycles] = useState<Subcycle[]>([])
+  const [selectedToAdd, setSelectedToAdd] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+
   useEffect(() => {
     if (editingSubcycle) {
       setName(editingSubcycle.name)
@@ -55,8 +59,16 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
   const isEditorOpen = isCreating || !!editingSubcycle
 
   const startCreating = () => {
+    setIsAddingExisting(false)
     setIsCreating(true)
     setEditingSubcycle(null)
+  }
+
+  const startAdding = () => {
+    setIsCreating(false)
+    setEditingSubcycle(null)
+    setIsAddingExisting(true)
+    setSelectedToAdd([])
   }
 
   const startEditing = (subcycle: Subcycle) => {
@@ -66,10 +78,31 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
 
   const cancelEditor = () => {
     setIsCreating(false)
+    setIsAddingExisting(false)
     setEditingSubcycle(null)
     setName("")
     setDescription("")
     setNameError("")
+  }
+
+  const handleAddExisting = async () => {
+    if (!simId || selectedToAdd.length === 0) return
+
+    try {
+      // Current IDs + New IDs
+      const currentIds = subcycles.map(s => s.id)
+      const newIds = Array.from(new Set([...currentIds, ...selectedToAdd]))
+
+      await updateSimulationSubcycles(simId, newIds)
+
+      // Update local state
+      const addedSubcycles = globalSubcycles.filter(s => selectedToAdd.includes(s.id))
+      onSubcyclesChange([...subcycles, ...addedSubcycles])
+
+      cancelEditor()
+    } catch (err) {
+      alert("Failed to add subcycles")
+    }
   }
 
   const handleSave = async (steps: any[], source: "manual" | "import") => {
@@ -93,17 +126,21 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
         savedSubcycle = await createSubcycle(payload)
       }
 
-      // Update both global and local lists
-      setGlobalSubcycles(prev => 
+      // Update global list
+      setGlobalSubcycles(prev =>
         editingSubcycle
           ? prev.map(sc => sc.id === editingSubcycle.id ? savedSubcycle : sc)
           : [...prev, savedSubcycle]
       )
 
-      // Also add to current simulation's working set if not already there
-      const existsInLocal = subcycles.some(sc => sc.id === savedSubcycle.id)
-      if (!existsInLocal) {
+      // Add to current simulation context automatically if new
+      if (simId && !editingSubcycle) {
+        const currentIds = subcycles.map(s => s.id)
+        await updateSimulationSubcycles(simId, [...currentIds, savedSubcycle.id])
         onSubcyclesChange([...subcycles, savedSubcycle])
+      } else if (editingSubcycle) {
+        // Provide instant update in local view
+        onSubcyclesChange(subcycles.map(s => s.id === savedSubcycle.id ? savedSubcycle : s))
       }
 
       cancelEditor()
@@ -113,24 +150,18 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this sub-cycle permanently? This cannot be undone.")) return
+    if (!simId) return
+    if (!confirm("Remove this sub-cycle from CURRENT simulation? (It will remain in the database)")) return
 
     try {
-      await deleteSubcycle(id)
-
-      // Remove from both global and local
-      setGlobalSubcycles(prev => prev.filter(sc => sc.id !== id))
-      onSubcyclesChange(subcycles.filter(sc => sc.id !== id))
+      // Just remove from simulation context, don't delete from DB
+      const newIds = subcycles.filter(s => s.id !== id).map(s => s.id)
+      await updateSimulationSubcycles(simId, newIds)
+      onSubcyclesChange(subcycles.filter(s => s.id !== id))
     } catch (err) {
-      alert("Failed to delete subcycle")
+      alert("Failed to remove subcycle")
     }
   }
-
-  const viewingSubcycle = viewingTableId ? subcycles.find(sc => sc.id === viewingTableId) : null
-
-  useEffect(() => {
-    if (viewingTableId && !viewingSubcycle) setViewingTableId(null)
-  }, [viewingTableId, viewingSubcycle])
 
   return (
     <div className="space-y-8">
@@ -139,15 +170,55 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Sub-cycle Library</h1>
-          <p className="text-muted-foreground">Create and manage reusable drive cycle segments</p>
+          <p className="text-muted-foreground">Manage sub-cycles for current simulation</p>
         </div>
-        {!isEditorOpen && (
-          <Button onClick={startCreating} size="lg" className="gap-2">
-            <Plus className="h-5 w-5" />
-            Create New Sub-cycle
-          </Button>
+        {!isEditorOpen && !isAddingExisting && (
+          <div className="flex gap-2">
+            <Button onClick={startAdding} variant="outline" size="lg" className="gap-2">
+              <Plus className="h-5 w-5" /> Add From Library
+            </Button>
+            <Button onClick={startCreating} size="lg" className="gap-2">
+              <Plus className="h-5 w-5" /> Create New
+            </Button>
+          </div>
         )}
       </div>
+
+      {/* Add Existing Modal */}
+      {isAddingExisting && (
+        <Card className="border-2 border-primary/30 bg-primary/2 shadow-xl">
+          <CardHeader>
+            <h2 className="text-2xl font-bold">Add Sub-cycles from Global Library</h2>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="max-h-[300px] overflow-y-auto border rounded-md p-2 bg-background space-y-2">
+              {globalSubcycles.filter(g => !subcycles.find(l => l.id === g.id)).map(sc => (
+                <div key={sc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded">
+                  <Checkbox
+                    id={sc.id}
+                    checked={selectedToAdd.includes(sc.id)}
+                    onCheckedChange={(checked) => {
+                      if (checked) setSelectedToAdd([...selectedToAdd, sc.id])
+                      else setSelectedToAdd(selectedToAdd.filter(id => id !== sc.id))
+                    }}
+                  />
+                  <label htmlFor={sc.id} className="flex-1 cursor-pointer">
+                    <div className="font-medium">{sc.name} <span className="text-xs text-muted-foreground ml-2">({sc.id})</span></div>
+                    <div className="text-xs text-muted-foreground">{sc.description || "No description"} • {sc.steps.length} steps</div>
+                  </label>
+                </div>
+              ))}
+              {globalSubcycles.filter(g => !subcycles.find(l => l.id === g.id)).length === 0 && (
+                <p className="text-muted-foreground text-center py-4">No other subcycles available.</p>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={cancelEditor}>Cancel</Button>
+              <Button onClick={handleAddExisting} disabled={selectedToAdd.length === 0}>Add Selected</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Editor */}
       {isEditorOpen && (
@@ -249,9 +320,9 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange }: Subcyc
                         <Button size="sm" variant="outline" onClick={() => exportSubcycleCsv(subcycle)}>
                           <Download className="h-4 w-4 mr-1" /> CSV
                         </Button>
-                        <Button size="sm" variant="ghost" 
-                        onClick={() => startEditing(subcycle)}
-                        disabled ={subcycle.source === "import"}  >
+                        <Button size="sm" variant="ghost"
+                          onClick={() => startEditing(subcycle)}
+                          disabled={subcycle.source === "import"}  >
                           <Edit2 className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleDelete(subcycle.id)}>

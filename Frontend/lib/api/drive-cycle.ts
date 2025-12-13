@@ -78,6 +78,16 @@ export const createSimulationCycle = async (data: any = {}): Promise<any> => {
   return res.json();
 }
 
+export const updateSimulationSubcycles = async (simId: string, subcycleIds: string[]): Promise<any> => {
+  const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/subcycles`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subcycle_ids: subcycleIds })
+  });
+  if (!res.ok) throw new Error("Failed to update simulation subcycles");
+  return res.json();
+}
+
 export const saveDriveCycles = async (simId: string, definitions: any[]): Promise<any> => {
   // Transform frontend Drivecycle structure to backend DriveCycleDefinition if needed
   // Backend expects: { name: string, subcycle_ids: string[] }
