@@ -1,7 +1,5 @@
-// components/drivecycle/calendar/calendar-assignment.tsx
-
+// FILE: Frontend/components/drivecycle/simulationcycle/calendar-assignment.tsx
 "use client"
-
 import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,7 +9,6 @@ import { Toggle } from "@/components/ui/toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { saveCalendarAssignments } from "@/lib/api/drive-cycle"
-
 interface CalendarRule {
   id: string
   ruleIndex: number
@@ -22,40 +19,32 @@ interface CalendarRule {
   dates: number[]
   notes: string
 }
-
 interface CalendarAssignmentProps {
   drivecycles: any[]
   onCalendarChange: (rules: CalendarRule[]) => void
   calendarData: CalendarRule[]
-  simId: string | null  // NEW: from parent page
+  simId: string
 }
-
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
 // Helper: which days does a rule cover?
 function getDaysCoveredByRule(rule: Partial<CalendarRule>): Set<number> {
   const days = new Set<number>()
   if (!rule.months || rule.months.length === 0) return days
-
   for (let dayOfYear = 1; dayOfYear <= 364; dayOfYear++) {
     const dayOfWeek = (dayOfYear - 1) % 7
     const monthDay = ((dayOfYear - 1) % 30) + 1
     const month = Math.floor((dayOfYear - 1) / 30) + 1
-
     const monthMatch = rule.months.includes(month)
     let dayMatch = false
-
     if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
       dayMatch = rule.daysOfWeek.includes(DAYS_OF_WEEK[dayOfWeek])
     } else if (rule.dates && rule.dates.length > 0) {
       dayMatch = rule.dates.includes(monthDay)
     }
-
     if (monthMatch && dayMatch) days.add(dayOfYear)
   }
   return days
 }
-
 // Helper: find occupied months/days/dates
 function getOccupiedSelections(existingRules: CalendarRule[], excludeRuleId?: string): {
   occupiedByMonth: Map<number, Set<string | number>>
@@ -63,15 +52,11 @@ function getOccupiedSelections(existingRules: CalendarRule[], excludeRuleId?: st
 } {
   const occupiedByMonth = new Map<number, Set<string | number>>()
   const allOccupiedDays = new Set<number>()
-
   for (let month = 1; month <= 12; month++) occupiedByMonth.set(month, new Set())
-
   existingRules.forEach(rule => {
     if (excludeRuleId && rule.id === excludeRuleId) return
-
     const coveredDays = getDaysCoveredByRule(rule)
     coveredDays.forEach(day => allOccupiedDays.add(day))
-
     rule.months.forEach(month => {
       if (rule.daysOfWeek?.length) {
         rule.daysOfWeek.forEach(day => occupiedByMonth.get(month)?.add(day))
@@ -80,24 +65,19 @@ function getOccupiedSelections(existingRules: CalendarRule[], excludeRuleId?: st
       }
     })
   })
-
   return { occupiedByMonth, allOccupiedDays }
 }
-
 export default function CalendarAssignment({ drivecycles, onCalendarChange, calendarData, simId }: CalendarAssignmentProps) {
   const [editing, setEditing] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
-
   const defaultRule = calendarData.find(r => r.id === "DEFAULT_RULE")
   const hasDefaultRule = !!defaultRule
-
   // MOCK IDLE DRIVE CYCLE (fallback)
   const MOCK_IDLE_DRIVECYCLE = {
     id: "DC_IDLE",
     name: "Idle / No Operation",
     composition: [] // no steps → rest day
   }
-
   // Coverage stats (includes default rule coverage)
   const coverageStats = useMemo(() => {
     const covered = new Set<number>()
@@ -108,13 +88,7 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
       totalDays: 364
     }
   }, [calendarData])
-
   const handleAddRule = async (newRule: Omit<CalendarRule, "id" | "ruleIndex">) => {
-    if (!simId) {
-      alert("Please create a drive cycle first to start a simulation.")
-      return
-    }
-
     try {
       // Generate temporary ID for optimistic UI update
       const tempId = `RULE_${Date.now()}`
@@ -123,33 +97,25 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
         id: tempId,
         ruleIndex: calendarData.length + 1
       }
-
       // Optimistic local update
       onCalendarChange([...calendarData, ruleWithTempId])
-
       // Send to backend
       const updatedRules = await saveCalendarAssignments(simId, [...calendarData, newRule])
-
       // Sync local state with backend response (which has real IDs)
       onCalendarChange(updatedRules.calendar_assignments || updatedRules)
-
       setShowNew(false)
     } catch (err) {
       alert("Failed to save rule. Please try again.")
       // Revert optimistic update on error if needed
     }
   }
-
   const handleEditRule = async (id: string, updatedRule: Omit<CalendarRule, "id" | "ruleIndex">) => {
-    if (!simId) return
-
     try {
       // Optimistic update
       const optimisticRules = calendarData.map(r =>
         r.id === id ? { ...updatedRule, id, ruleIndex: r.ruleIndex } : r
       )
       onCalendarChange(optimisticRules)
-
       // Save to backend
       const result = await saveCalendarAssignments(simId, optimisticRules.map(r => ({
         id: r.id,
@@ -160,27 +126,21 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
         dates: r.dates,
         notes: r.notes
       })))
-
       onCalendarChange(result.calendar_assignments)
       setEditing(null)
     } catch (err) {
       alert("Failed to update rule.")
     }
   }
-
   const handleDeleteRule = async (id: string) => {
     if (id === "DEFAULT_RULE") {
       alert("Cannot delete the default rule. You can change it instead.")
       return
     }
-
-    if (!simId) return
-
     try {
       // Optimistic update
       const remainingRules = calendarData.filter(r => r.id !== id)
       onCalendarChange(remainingRules)
-
       // Save to backend
       const result = await saveCalendarAssignments(simId, remainingRules.filter(r => r.id !== "DEFAULT_RULE"))
       onCalendarChange(result.calendar_assignments)
@@ -188,27 +148,12 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
       alert("Failed to delete rule.")
     }
   }
-
   const handleCancel = () => {
     setShowNew(false)
     setEditing(null)
   }
-
   const isEditingMode = showNew || editing !== null
-  if (!simId) {
-    return (
-      <Card>
-        <CardContent className="pt-8 text-center">
-          <p className="text-muted-foreground">
-            Create your first drive cycle to start a simulation and assign calendar rules.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
-
     <div className="space-y-6">
       {/* Default Rule Card - Always visible, optional */}
       <Card className={hasDefaultRule ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-amber-400 bg-amber-50 dark:bg-amber-950/30"}>
@@ -248,19 +193,16 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
           </div>
         </CardContent>
       </Card>
-
       {/* Coverage Stats */}
       <div className="grid grid-cols-3 gap-4">
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Days Assigned</p><p className="text-2xl font-bold">{coverageStats.coveredDays}</p></CardContent></Card>
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Days Unassigned</p><p className="text-2xl font-bold">{coverageStats.uncoveredDays}</p></CardContent></Card>
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Coverage</p><p className="text-2xl font-bold">{((coverageStats.coveredDays / 364) * 100).toFixed(1)}%</p></CardContent></Card>
       </div>
-
       {/* Add Rule Button */}
       <Button onClick={() => setShowNew(true)} className="w-full gap-2">
         <Plus className="h-4 w-4" /> Add Calendar Rule
       </Button>
-
       {/* Layout: Editor (left) + Table (right) */}
       <div className="grid grid-cols-1 gap-6">
         {/* Editor */}
@@ -288,11 +230,6 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
               <DefaultRuleEditor
                 drivecycles={drivecycles}
                 onSubmit={async (id, name) => {
-                  if (!simId) {
-                    alert("Please create a drive cycle first.")
-                    return
-                  }
-
                   const newDefaultRule = {
                     drivecycleId: id,
                     drivecycleName: name,
@@ -301,20 +238,17 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
                     dates: [],
                     notes: "Default drive cycle for unassigned days"
                   }
-
                   try {
                     // Remove old default, add new one
                     const rulesWithoutDefault = calendarData.filter(r => r.id !== "DEFAULT_RULE")
                     const result = await saveCalendarAssignments(simId, [...rulesWithoutDefault, newDefaultRule])
                     const updatedRules = result.calendar_assignments || []
-
                     // Include DEFAULT_RULE with proper structure in local state
                     const localRules = updatedRules.map((r: any, idx: number) => ({
                       ...r,
                       id: r.id || (r.drivecycleId === id ? "DEFAULT_RULE" : `RULE_${idx}`),
                       ruleIndex: r.id === "DEFAULT_RULE" ? 0 : idx + 1
                     }))
-
                     onCalendarChange(localRules)
                     setEditing(null)
                   } catch (err) {
@@ -328,7 +262,6 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
             )}
           </div>
         )}
-
         {/* Table - Always visible */}
         <div >
           {calendarData.filter(r => r.id !== "DEFAULT_RULE").length === 0 ? (
@@ -346,7 +279,6 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
           )}
         </div>
       </div>
-
       {/* Info */}
       <Card className="bg-secondary/30">
         <CardContent className="pt-6">
@@ -362,7 +294,6 @@ export default function CalendarAssignment({ drivecycles, onCalendarChange, cale
     </div>
   )
 }
-
 // Default Rule Editor
 function DefaultRuleEditor({ drivecycles, onSubmit, onCancel, initialData, isEditing }: {
   drivecycles: any[], onSubmit: (id: string, name: string) => void, onCancel: () => void,
@@ -375,7 +306,6 @@ function DefaultRuleEditor({ drivecycles, onSubmit, onCancel, initialData, isEdi
     const dc = drivecycles.find(d => d.id === value)
     if (dc) onSubmit(dc.id, dc.name)
   }
-
   return (
     <Card className="border-2 border-primary">
       <CardContent className="pt-6">
@@ -396,8 +326,6 @@ function DefaultRuleEditor({ drivecycles, onSubmit, onCancel, initialData, isEdi
     </Card>
   )
 }
-
-
 // Smart editor component with disabled selections
 function SmartCalendarRuleEditor({
   drivecycles,
@@ -424,9 +352,7 @@ function SmartCalendarRuleEditor({
       notes: "",
     },
   )
-
   const [useDate, setUseDate] = useState(!!initialData?.dates?.length)
-
   const MONTHS = [
     { value: 1, Label: "January" },
     { value: 2, Label: "February" },
@@ -441,48 +367,38 @@ function SmartCalendarRuleEditor({
     { value: 11, Label: "November" },
     { value: 12, Label: "December" },
   ]
-
   const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
   // Check if a specific day of week is available for selected months
   const isDayOfWeekAvailable = (day: string): boolean => {
     if (rule.months.length === 0) return true
-
     return rule.months.every((month: number) => {
       const occupied = occupiedSelections.occupiedByMonth.get(month)
       return !occupied?.has(day)
     })
   }
-
   // Check if a specific date is available for selected months
   const isDateAvailable = (date: number): boolean => {
     if (rule.months.length === 0) return true
-
     return rule.months.every((month: number) => {
       const occupied = occupiedSelections.occupiedByMonth.get(month)
       return !occupied?.has(date)
     })
   }
-
   // Get available dates for the selected months
   const getAvailableDateRanges = (): string => {
     if (rule.months.length === 0) return "Select months first"
-
     const availableDates: number[] = []
     for (let date = 1; date <= 31; date++) {
       if (isDateAvailable(date)) {
         availableDates.push(date)
       }
     }
-
     if (availableDates.length === 0) return "No dates available"
     if (availableDates.length === 31) return "All dates available (1-31)"
-
     // Show ranges
     const ranges: string[] = []
     let start = availableDates[0]
     let end = availableDates[0]
-
     for (let i = 1; i < availableDates.length; i++) {
       if (availableDates[i] === end + 1) {
         end = availableDates[i]
@@ -493,10 +409,8 @@ function SmartCalendarRuleEditor({
       }
     }
     ranges.push(start === end ? `${start}` : `${start}-${end}`)
-
     return `Available: ${ranges.join(", ")}`
   }
-
   const handleSelectDrivecycle = (drivecycleId: string) => {
     const drivecycle = drivecycles.find((dc) => dc.id === drivecycleId)
     if (drivecycle) {
@@ -507,12 +421,10 @@ function SmartCalendarRuleEditor({
       })
     }
   }
-
   const handleMonthToggle = (month: number) => {
     const newMonths = rule.months.includes(month)
       ? rule.months.filter((m: number) => m !== month)
       : [...rule.months, month]
-
     // Clear selections that might become invalid with new month selection
     setRule({
       ...rule,
@@ -531,16 +443,13 @@ function SmartCalendarRuleEditor({
       })
     })
   }
-
   const handleDayToggle = (day: string) => {
     if (!isDayOfWeekAvailable(day)) return
-
     const newDays = rule.daysOfWeek.includes(day)
       ? rule.daysOfWeek.filter((d: string) => d !== day)
       : [...rule.daysOfWeek, day]
     setRule({ ...rule, daysOfWeek: newDays })
   }
-
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const dates = e.target.value
       .split(",")
@@ -548,7 +457,6 @@ function SmartCalendarRuleEditor({
       .filter((d: number) => !isNaN(d) && d >= 1 && d <= 31 && isDateAvailable(d))
     setRule({ ...rule, dates })
   }
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!rule.drivecycleId) {
@@ -569,22 +477,18 @@ function SmartCalendarRuleEditor({
     }
     onSubmit(rule)
   }
-
   return (
     <Card>
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-
             <Label htmlFor="drivecycleId" className="text-sm font-medium">
               Select Drive Cycle *
             </Label>
-
             <Select value={rule.drivecycleId} onValueChange={handleSelectDrivecycle}>
               <SelectTrigger id="drivecycleId" className="w-full mt-2">
                 <SelectValue placeholder="Choose a drive cycle" />
               </SelectTrigger>
-
               <SelectContent>
                 {drivecycles.map((dc) => (
                   <SelectItem key={dc.id} value={dc.id}>
@@ -594,15 +498,11 @@ function SmartCalendarRuleEditor({
               </SelectContent>
             </Select>
           </div>
-
-
           <div>
             <Label className="text-sm font-medium mb-3 block">Select Months *</Label>
-
             <div className="grid grid-cols-3 gap-3">
               {MONTHS.map((month) => {
                 const isSelected = rule.months.includes(month.value);
-
                 return (
                   <Toggle
                     key={month.value}
@@ -616,13 +516,9 @@ function SmartCalendarRuleEditor({
               })}
             </div>
           </div>
-
-
           <div>
             <Label className="text-sm font-medium mb-3 block">Calendar Filter *</Label>
-
             <div className="space-y-4">
-
               {/* Radio: Days of Week */}
               <div className="flex items-center gap-3">
                 <input
@@ -639,14 +535,12 @@ function SmartCalendarRuleEditor({
                   Days of Week
                 </Label>
               </div>
-
               {/* BUTTON UI — Days of Week */}
               {!useDate && (
                 <div className="grid grid-cols-4 gap-3 pl-6">
                   {DAYS_OF_WEEK.map((day) => {
                     const isAvailable = isDayOfWeekAvailable(day)
                     const isSelected = rule.daysOfWeek.includes(day)
-
                     return (
                       <Toggle
                         key={day}
@@ -664,8 +558,6 @@ function SmartCalendarRuleEditor({
                   })}
                 </div>
               )}
-
-
               {/* Radio: Specific Dates */}
               <div className="flex items-center gap-3">
                 <input
@@ -682,7 +574,6 @@ function SmartCalendarRuleEditor({
                   Specific Dates
                 </Label>
               </div>
-
               {/* Date Input */}
               {useDate && (
                 <div className="pl-6 space-y-2">
@@ -700,8 +591,6 @@ function SmartCalendarRuleEditor({
               )}
             </div>
           </div>
-
-
           <div>
             <Label htmlFor="notes" className="text-sm font-medium">Notes</Label>
             <textarea
@@ -713,7 +602,6 @@ function SmartCalendarRuleEditor({
               className="w-full mt-2 p-2 border rounded-md bg-background"
             />
           </div>
-
           <div className="flex gap-2">
             <Button type="submit" className="flex-1">
               {isEditing ? "Update Rule" : "Add Rule"}

@@ -1,13 +1,12 @@
+// FILE: Frontend/components/drivecycle/drivecycle/drivecycle-builder.tsx
 "use client"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Download, Edit2, Trash2 } from "lucide-react"
 import DrivecycleForm from "./drivecycle-form"
 import DrivecycleCompositionTable from "./drivecycle-composition-table"
-import { createSimulationCycle, saveDriveCycles } from "@/lib/api/drive-cycle"
-
+import { saveDriveCycles } from "@/lib/api/drive-cycle"
 interface DrivecycleComposition {
   id: string
   subcycleId: string
@@ -17,7 +16,6 @@ interface DrivecycleComposition {
   location: string
   triggers: Array<{ type: string; value: any }>
 }
-
 interface Drivecycle {
   id: string
   name: string
@@ -25,22 +23,18 @@ interface Drivecycle {
   source: "manual" | "import"
   composition: DrivecycleComposition[]
 }
-
 interface DrivecycleBuilderProps {
   subcycles: any[]
   drivecycles: Drivecycle[]
   onDrivecyclesChange: (drivecycles: Drivecycle[]) => void
-  simId: string | null  // NEW: current simulation ID
-  onSimIdCreated: (simId: string) => void
+  simId: string
 }
-
 function convertSecondsToHMS(totalSeconds: number) {
   totalSeconds = Number(totalSeconds)
   const secondsInMonth = 30 * 24 * 3600
   const secondsInDay = 24 * 3600
   const secondsInHour = 3600
   const secondsInMinute = 60
-
   const months = Math.floor(totalSeconds / secondsInMonth)
   totalSeconds %= secondsInMonth
   const days = Math.floor(totalSeconds / secondsInDay)
@@ -49,7 +43,6 @@ function convertSecondsToHMS(totalSeconds: number) {
   totalSeconds %= secondsInHour
   const minutes = Math.floor(totalSeconds / secondsInMinute)
   const seconds = Math.floor(totalSeconds % secondsInMinute)
-
   const parts = []
   if (months > 0) parts.push(`${months}mo`)
   if (days > 0) parts.push(`${days}d`)
@@ -58,18 +51,15 @@ function convertSecondsToHMS(totalSeconds: number) {
   parts.push(`${seconds}s`)
   return parts.join(" ")
 }
-
 function getSubcycleDuration(subcycle: any) {
   return subcycle.steps.reduce((sum: number, s: any) => sum + (s.duration * s.repetitions), 0)
 }
-
 function computeDrivecycleDuration(dc: Drivecycle, subcycles: any[]) {
   return dc.composition.reduce((sum: number, row: DrivecycleComposition) => {
     const sub = subcycles.find((s: any) => s.id === row.subcycleId)
     return sum + (sub ? getSubcycleDuration(sub) * row.repetitions : 0)
   }, 0)
 }
-
 const exportDrivecycleJson = (drivecycle: Drivecycle) => {
   const data = JSON.stringify(drivecycle, null, 2)
   const blob = new Blob([data], { type: "application/json" })
@@ -80,7 +70,6 @@ const exportDrivecycleJson = (drivecycle: Drivecycle) => {
   a.click()
   URL.revokeObjectURL(url)
 }
-
 const exportDrivecycleCsv = (drivecycle: Drivecycle) => {
   if (drivecycle.composition.length === 0) return
   const headers = ["Subcycle_ID", "Subcycle_Name", "Repetitions", "Ambient_Temp", "Location", "Triggers"]
@@ -101,13 +90,10 @@ const exportDrivecycleCsv = (drivecycle: Drivecycle) => {
   a.click()
   URL.revokeObjectURL(url)
 }
-
-export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecyclesChange, simId, onSimIdCreated }: DrivecycleBuilderProps) {
+export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecyclesChange, simId }: DrivecycleBuilderProps) {
   const [editingDrivecycle, setEditingDrivecycle] = useState<Drivecycle | null>(null)
   const [showForm, setShowForm] = useState(false)
-
   const generateId = () => `DC${String(drivecycles.length + 1).padStart(3, "0")}`
-
   const handleAddDrivecycle = async (drivecycleData: Omit<Drivecycle, "id" | "source">) => {
     try {
       const newDriveCycle: Drivecycle = {
@@ -115,31 +101,16 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
         source: "manual",
         ...drivecycleData
       }
-
       const updatedList = [...drivecycles, newDriveCycle]
-
-      // 1. Ensure Simulation ID exists
-      let currentSimId = simId
-      if (!currentSimId) {
-        const sim = await createSimulationCycle({ description: "New Simulation" }) // Create initial sim
-        currentSimId = sim._id
-        onSimIdCreated(currentSimId!)
-      }
-
-      // 2. Save ALL drive cycles to backend
-      if (currentSimId) {
-        await saveDriveCycles(currentSimId, updatedList)
-      }
-
-      // 3. Update local state
+      // Save ALL drive cycles to backend
+      await saveDriveCycles(simId, updatedList)
+      // Update local state
       onDrivecyclesChange(updatedList)
       setShowForm(false)
-      // alert("Drive cycle saved successfully!")
     } catch (err: any) {
       alert("Failed to save drive cycle: " + (err.message || "Unknown error"))
     }
   }
-
   const handleEditDrivecycle = (id: string, drivecycle: Omit<Drivecycle, "id" | "source">) => {
     const existingDrivecycle = drivecycles.find(dc => dc.id === id)
     onDrivecyclesChange(drivecycles.map((dc) => (
@@ -147,11 +118,9 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
     )))
     setEditingDrivecycle(null)
   }
-
   const handleDeleteDrivecycle = (id: string) => {
     onDrivecyclesChange(drivecycles.filter((dc) => dc.id !== id))
   }
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -168,12 +137,9 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
           </>
         )}
       </div>
-
-
       {showForm && (
         <DrivecycleForm subcycles={subcycles} onSubmit={handleAddDrivecycle} onCancel={() => setShowForm(false)} />
       )}
-
       {editingDrivecycle && (
         <DrivecycleForm
           subcycles={subcycles}
@@ -183,7 +149,6 @@ export default function DriveCycleBuilder({ subcycles, drivecycles, onDrivecycle
           isEditing
         />
       )}
-
       <div className="grid gap-4">
         {drivecycles.length === 0 ? (
           <Card>

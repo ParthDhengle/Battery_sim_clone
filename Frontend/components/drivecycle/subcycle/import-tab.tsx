@@ -1,85 +1,70 @@
-// components/drivecycle/subcycle/import-tab.tsx
-
+// FILE: Frontend/components/drivecycle/subcycle/import-tab.tsx (updated for better CSV parsing)
 "use client"
-import { useState} from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Upload } from "lucide-react"
 import { Step } from "./types"
-
 interface ImportTabProps {
   onSave: (data: { steps: Step[] }) => void
   onCancel: () => void
 }
-
 export default function ImportTab({ onSave, onCancel }: ImportTabProps) {
   const [file, setFile] = useState<File | null>(null)
-
   const handleImport = () => {
-    if (!file ) return alert("file required")
-
+    if (!file) return alert("File required")
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string
         const lines = text.trim().split("\n")
-        
         if (lines.length < 3) throw new Error("CSV must have at least 2 data rows (header + 2 rows minimum)")
-
-        // Parse headers - case insensitive
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase())
-        const timeIdx = headers.findIndex(h => h === "time")
-        const currentIdx = headers.findIndex(h => h === "current")
-
+        // Parse headers - case insensitive, handle quotes
+        const headers = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+        const timeIdx = headers.findIndex(h => h.includes("time"))
+        const currentIdx = headers.findIndex(h => h.includes("current"))
         if (timeIdx === -1 || currentIdx === -1) {
           throw new Error("CSV must contain 'Time' and 'Current' columns")
         }
-
         // Parse data rows
         const dataRows = lines.slice(1).map((line, i) => {
-          const vals = line.split(",").map(v => v.trim())
+          const vals = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''))
           const time = parseFloat(vals[timeIdx])
           const current = parseFloat(vals[currentIdx])
-
           if (isNaN(time)) throw new Error(`Invalid Time value at row ${i + 2}`)
           if (isNaN(current)) throw new Error(`Invalid Current value at row ${i + 2}`)
-
           return { time, current }
         })
-
-        // Validate: Check if times are in ascending order
+        // Validate ascending times
         for (let i = 1; i < dataRows.length; i++) {
           if (dataRows[i].time <= dataRows[i - 1].time) {
             throw new Error(`Time values must be in ascending order. Error at row ${i + 2}`)
           }
         }
-
-        // Validate: Check if last time is less than 24 hours (86400 seconds)
+        // Duration < 86400s
         const lastTime = dataRows[dataRows.length - 1].time
         if (lastTime >= 86400) {
           throw new Error(`Total duration must be less than 24 hours (86400 seconds). Current: ${lastTime}s`)
         }
-
-        // Convert to steps (ignore last row as per requirement)
+        // Convert to steps (ignore last row)
         const steps: Step[] = []
         for (let i = 0; i < dataRows.length - 1; i++) {
           const duration = dataRows[i + 1].time - dataRows[i].time
-          
           steps.push({
-            id: `STEP_${Date.now()}_${i}`,
-            duration: duration,
-            timestep: duration,
+            id: `IMPORT_STEP_${Date.now()}_${i}`,
+            duration,
+            timestep: duration / 10 || 1, // Default to 10% of duration if too small
             valueType: "current",
             value: dataRows[i].current.toString(),
             unit: "A",
             repetitions: 1,
             stepType: "fixed",
-            label: "-",
+            label: `Imported Step ${i + 1}`,
             triggers: [],
           })
         }
-
+        if (steps.length === 0) throw new Error("No valid steps generated from CSV")
         onSave({ steps })
       } catch (err: any) {
         alert("Import failed: " + err.message)
@@ -87,7 +72,6 @@ export default function ImportTab({ onSave, onCancel }: ImportTabProps) {
     }
     reader.readAsText(file)
   }
-
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -98,9 +82,9 @@ export default function ImportTab({ onSave, onCancel }: ImportTabProps) {
             <li>• Time values must be in ascending order</li>
             <li>• Total duration must be less than 24 hours (86400 seconds)</li>
             <li>• Last row will be ignored for duration calculation</li>
+            <li>• Handles quoted fields and commas in values</li>
           </ul>
         </div>
-
         <label className="block">
           <input
             type="file"
@@ -118,7 +102,6 @@ export default function ImportTab({ onSave, onCancel }: ImportTabProps) {
           </div>
         </label>
       </div>
-
       <div className="flex gap-3">
         <Button variant="outline" onClick={onCancel} className="flex-1">
           Cancel
@@ -126,7 +109,6 @@ export default function ImportTab({ onSave, onCancel }: ImportTabProps) {
         <Button onClick={handleImport} disabled={!file} className="flex-1">
           Import & Save
         </Button>
-        
       </div>
     </div>
   )

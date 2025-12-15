@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field, validator
+# FILE: Backend/app/models/subcycle.py
+from pydantic import BaseModel, Field, validator, field_validator
 from typing import List, Optional
 from datetime import datetime
 
@@ -27,11 +28,11 @@ class Step(BaseModel):
     id: Optional[str] = None
     duration: float = Field(..., gt=0, description="Duration in seconds (required for fixed steps)")
     timestep: float = Field(..., gt=0, description="Timestep in seconds for data logging")
-    valueType: str = Field(..., regex="^(current|c_rate|voltage|power|resistance)$")
-    value: float = Field(..., description="Target value (can be positive or negative)") # Changed to float
+    valueType: str = Field(..., pattern="^(current|c_rate|voltage|power|resistance)$")
+    value: float = Field(..., description="Target value (can be positive or negative)")
     unit: str = Field(..., description="Unit corresponding to valueType (A, C, V, W, Ω)")
     repetitions: int = Field(..., ge=1, description="Number of times to repeat this step")
-    stepType: str = Field(..., regex="^(fixed|fixed_with_triggers|trigger_only)$")
+    stepType: str = Field(..., pattern="^(fixed|fixed_with_triggers|trigger_only)$")
     triggers: List[Trigger] = Field(default=[], description="Triggers for this step (max 3)")
     label: str = Field(default="", description="Optional label for the step")
 
@@ -41,7 +42,7 @@ class Step(BaseModel):
 class SubcycleBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Unique name of the sub-cycle")
     description: Optional[str] = Field(default="", max_length=500)
-    source: str = Field(..., regex="^(manual|import)$", description="How the sub-cycle was created")
+    source: str = Field(..., pattern="^(manual|import)$", description="How the sub-cycle was created")
     steps: List[Step] = Field(default=[], description="List of steps in the sub-cycle")
 
 class SubcycleCreate(SubcycleBase):
@@ -57,8 +58,6 @@ class SubcycleCreate(SubcycleBase):
         for step in steps:
             if step.stepType == "trigger_only" and len(step.triggers) == 0:
                 raise ValueError("trigger_only steps must have at least one trigger")
-            # For fixed_with_triggers, we might allow 0 triggers if it just behaves like fixed, but better strict.
-            # However, 'fixed' needs duration.
         return steps
 
 class Subcycle(SubcycleBase):

@@ -1,18 +1,17 @@
+# FILE: Backend/app/main.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.routers import cells, packs, simulations
-from app.routers.drive_cycle import subcycles, manager # Add manager import
-from app.config import client, db
+from app.routers.drive_cycle import subcycles, manager  # Add manager import
 from app.config import client, db
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta
 from fastapi.staticfiles import StaticFiles
-
-
 app = FastAPI(
     title="Battery Simulation API",
     description="API for managing battery cell and pack configurations",
     version="1.0.0"
 )
-
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
@@ -29,46 +28,40 @@ app.add_middleware(
     max_age=3600,
 )
 app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")
-
 # Scheduler for cleanup
 scheduler = AsyncIOScheduler()
-
 async def cleanup_deleted():
     """Delete cells and packs that have been soft-deleted for more than 30 days"""
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    
+   
     cells_result = await db.cells.delete_many({
         "deleted_at": {"$lt": thirty_days_ago, "$ne": None}
     })
-    
+   
     packs_result = await db.packs.delete_many({
         "deleted_at": {"$lt": thirty_days_ago, "$ne": None}
     })
-    
+   
     print(f"Cleaned up {cells_result.deleted_count} old deleted cells")
     print(f"Cleaned up {packs_result.deleted_count} old deleted packs")
-
 @app.on_event("startup")
 async def startup_event():
     """Initialize scheduler on startup"""
     scheduler.add_job(cleanup_deleted, 'interval', days=1)
     scheduler.start()
     print("✅ API started successfully")
-
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     client.close()
     scheduler.shutdown()
     print("✅ Application shutdown complete")
-
 # Include routers AFTER middleware
 app.include_router(cells.router)
 app.include_router(packs.router)
 app.include_router(simulations.router)
 app.include_router(subcycles.router)
 app.include_router(manager.router) # Add manager router
-
 @app.get("/")
 async def root():
     return {
@@ -82,7 +75,6 @@ async def root():
             "docs": "/docs"
         }
     }
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

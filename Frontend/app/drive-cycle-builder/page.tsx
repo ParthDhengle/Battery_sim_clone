@@ -1,5 +1,5 @@
+// FILE: Frontend/app/drive-cycle-builder/page.tsx
 "use client"
-
 import { useState } from "react"
 import SubcycleLibrary from "@/components/drivecycle/subcycle/subcycle-library"
 import DriveCycleBuilder from "@/components/drivecycle/drivecycle/drivecycle-builder"
@@ -11,32 +11,28 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createSimulationCycle } from "@/lib/api/drive-cycle"
-
 export default function Home() {
   const [subcycles, setSubcycles] = useState<any[]>([])
   const [drivecycles, setDrivecycles] = useState<any[]>([])
   const [calendarAssignment, setCalendarAssignment] = useState<any[]>([])
   const [simulationCycle, setSimulationCycle] = useState<any[]>([])
-
   const [simId, setSimId] = useState<string | null>(null)
   const [simName, setSimName] = useState("")
   const [simDesc, setSimDesc] = useState("")
   const [isCreatingSim, setIsCreatingSim] = useState(false)
-
   const handleCreateSimulation = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!simName) return
     setIsCreatingSim(true)
     try {
       const sim = await createSimulationCycle({ name: simName, description: simDesc })
-      setSimId(sim._id)
+      setSimId(sim.id)
     } catch (err) {
       alert("Failed to create simulation")
     } finally {
       setIsCreatingSim(false)
     }
   }
-
   // Initial Setup View
   if (!simId) {
     return (
@@ -77,7 +73,6 @@ export default function Home() {
       </div>
     )
   }
-
   return (
     <div className="min-h-screen bg-background">
       <header className="top-0 z-40 border-b bg-card shadow-sm">
@@ -90,7 +85,6 @@ export default function Home() {
               <code className="text-xs bg-muted px-1 rounded ml-2 text-muted-foreground">{simId}</code>
             </div>
           </div>
-
           <Button variant="outline" size="sm" onClick={() => {
             if (confirm("Exit current simulation? Unsaved changes may be lost.")) {
               setSimId(null);
@@ -102,7 +96,6 @@ export default function Home() {
           </Button>
         </div>
       </header>
-
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="subcycles" className="w-full">
           <TabsList className="grid w-full grid-cols-4 mb-8">
@@ -111,7 +104,6 @@ export default function Home() {
             <TabsTrigger value="calendar">3. Calendar</TabsTrigger>
             <TabsTrigger value="simulation">4. Simulation</TabsTrigger>
           </TabsList>
-
           <TabsContent value="subcycles" className="space-y-4">
             <Card>
               <CardContent>
@@ -123,23 +115,18 @@ export default function Home() {
               </CardContent>
             </Card>
           </TabsContent>
-
           <TabsContent value="drivecycles" className="space-y-4">
             <Card>
               <CardContent>
                 <DriveCycleBuilder
-                  subcycles={subcycles} // These are now filtered by SimContext inside SubcycleLibrary? No, SubcycleLibrary manages them. We need to lift state up properly or let SubcycleLibrary fetch.
-                  // Actually, SubcycleLibrary should probably just expose the *selected* subcycles to the parent, or parent fetches them.
-                  // For now, let's assume SubcycleLibrary passes up the "Simulation Subcycles".
+                  subcycles={subcycles}
                   drivecycles={drivecycles}
                   onDrivecyclesChange={setDrivecycles}
                   simId={simId}
-                  onSimIdCreated={setSimId} // Not needed anymore as we create Sim first, but keeping for compatibility if interface requires
                 />
               </CardContent>
             </Card>
           </TabsContent>
-
           <TabsContent value="calendar" className="space-y-4">
             <Card>
               <CardHeader>
@@ -156,7 +143,6 @@ export default function Home() {
               </CardContent>
             </Card>
           </TabsContent>
-
           <TabsContent value="simulation" className="space-y-4">
             <Card>
               <CardHeader>
@@ -168,7 +154,6 @@ export default function Home() {
                   calendarAssignment={calendarAssignment}
                   drivecycles={drivecycles}
                   subcycles={subcycles}
-                  onSimulationCycleGenerate={setSimulationCycle}
                   simId={simId}
                 />
               </CardContent>

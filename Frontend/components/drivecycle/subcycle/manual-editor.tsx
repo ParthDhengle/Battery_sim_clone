@@ -1,7 +1,5 @@
-// components/drivecycle/subcycle/manual-editor.tsx
-
+// FILE: Frontend/components/drivecycle/subcycle/manual-editor.tsx (minor fix for trigger-only duration display)
 "use client"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,16 +7,15 @@ import { Label } from "@/components/ui/label"
 import StepTable from "./step-table"
 import { calculateTotalDuration, convertSecondsToHMS } from "./utils"
 import { Step, Subcycle } from "./types"
-
 interface ManualEditorProps {
   initialData?: Subcycle | null
   onSave: (data: { steps: Step[] }) => void
   onCancel: () => void
 }
-
 export default function ManualEditor({ initialData, onSave, onCancel }: ManualEditorProps) {
   const [steps, setSteps] = useState<Step[]>(initialData?.steps || [])
-
+  const hasTriggerOnly = steps.some(s => s.stepType === "trigger_only")
+  const totalDuration = calculateTotalDuration(steps)
   return (
     <div className="space-y-6">
       <div className="border-t pt-6">
@@ -27,15 +24,14 @@ export default function ManualEditor({ initialData, onSave, onCancel }: ManualEd
           <p className="text-sm font-medium">
             Total Duration:{" "}
             <span className="text-lg font-bold ml-2">
-              {steps.some(s => s.stepType === "trigger_only")
+              {hasTriggerOnly
                 ? <span className="text-amber-600">Dynamic (trigger-only steps)</span>
-                : convertSecondsToHMS(calculateTotalDuration(steps))}
+                : convertSecondsToHMS(totalDuration)}
             </span>
           </p>
         </div>
         <StepTable steps={steps} onStepsChange={setSteps} />
       </div>
-
       <div className="flex gap-3 pt-4">
         <Button variant="outline" onClick={onCancel} className="flex-1">
           Cancel

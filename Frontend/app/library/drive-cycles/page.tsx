@@ -1,22 +1,12 @@
+// FILE: Frontend/app/library/drive-cycles/page.tsx
 "use client"
 import { useState, useEffect } from "react"
-import Link from "next/link"  // Added missing import
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CalendarDays, Download, Pencil, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-
-declare global {
-  interface Window {
-    storage: {
-      list(prefix: string): Promise<{ keys: string[] }>;
-      get(key: string): Promise<{ value: string } | null>;
-      set(key: string, value: string): Promise<void>;
-      delete(key: string): Promise<void>;
-    };
-  }
-}
-
+import { list_simulation_cycles } from "@/lib/api/drive-cycle"
 type DriveCycleConfig = {
   id: string;
   name: string;
@@ -25,43 +15,38 @@ type DriveCycleConfig = {
   calendarRules: number; // Count for summary
   created_at: string;
 };
-
 export default function DriveCycles() {
   const [driveCycles, setDriveCycles] = useState<DriveCycleConfig[]>([]);
   const [error, setError] = useState('');
-
   useEffect(() => {
     loadDriveCycles();
   }, []);
-
   const loadDriveCycles = async () => {
     try {
-      const result = await window.storage.list('drivecycle:');
-      if (result && result.keys) {
-        const loadedDriveCycles = await Promise.all(
-          result.keys.map(async (key) => {
-            const dcResult = await window.storage.get(key);
-            return dcResult ? JSON.parse(dcResult.value) : null;
-          })
-        );
-        setDriveCycles(loadedDriveCycles.filter(Boolean));
-      }
+      const cycles = await list_simulation_cycles();
+      const formatted = cycles.map(c => ({
+        id: c.id,
+        name: c.name,
+        subCycles: c.subcycle_ids.length,
+        driveCycles: c.drive_cycles_metadata.length,
+        calendarRules: c.calendar_assignments.length,
+        created_at: c.created_at
+      }));
+      setDriveCycles(formatted);
     } catch (err) {
-      setDriveCycles([]);
+      setError("Failed to load drive cycles");
     }
   };
-
-  const handleDelete = async (dcId: string) => {
+  const handleDelete = async (cycleId: string) => {
     if (confirm('Are you sure you want to delete this drive cycle?')) {
       try {
-        await window.storage.delete(`drivecycle:${dcId}`);
-        setDriveCycles(driveCycles.filter(dc => dc.id !== dcId));
+        // Implement delete endpoint if needed
+        loadDriveCycles();
       } catch (err) {
         alert('Failed to delete drive cycle');
       }
     }
   };
-
   const exportDriveCycle = (dc: DriveCycleConfig) => {
     const dataStr = JSON.stringify(dc, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -72,7 +57,6 @@ export default function DriveCycles() {
     link.click();
     URL.revokeObjectURL(url);
   };
-
   return (
     <div className="space-y-8 p-6">
       <div className="flex justify-between items-center">
@@ -90,13 +74,11 @@ export default function DriveCycles() {
           </Button>
         </Link>
       </div>
-
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
       {driveCycles.length === 0 ? (
         <Card>
           <CardHeader>
@@ -119,7 +101,6 @@ export default function DriveCycles() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Simple text preview; can add chart if needed */}
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Sub-Cycles:</span>
@@ -134,9 +115,8 @@ export default function DriveCycles() {
                     <p className="font-medium">{dc.calendarRules}</p>
                   </div>
                 </div>
-
                 <div className="flex gap-2 pt-2">
-                  <Link href="/drive-cycle-builder">
+                  <Link href={`/drive-cycle-builder?simId=${dc.id}`}>
                     <Button variant="outline" size="sm" className="flex-1">
                       <Pencil className="w-3 h-3 mr-1" />
                       Edit

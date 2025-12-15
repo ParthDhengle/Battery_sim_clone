@@ -1,31 +1,25 @@
-// components/drivecycle/simulationcycle/simulation-cycle-viewer.tsx
+// FILE: Frontend/components/drivecycle/simulationcycle/simulation-cycle-viewer.tsx
 "use client"
-
 import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download, ChevronDown, ChevronRight, X } from "lucide-react"
 import { generateSimulationTable } from "@/lib/api/drive-cycle"
-
 interface SimulationCycleViewerProps {
   calendarAssignment: any[]
   drivecycles: any[]
   subcycles: any[]
-  simId: string | null  // NEW: from parent
-  // Remove onSimulationCycleGenerate
+  simId: string
 }
-
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
 export default function SimulationCycleViewer({
   calendarAssignment,
   drivecycles,
   subcycles,
-  onSimulationCycleGenerate,
+  simId,
 }: SimulationCycleViewerProps) {
   const [expanded, setExpanded] = useState<number[]>([])
-  
   const [loading, setLoading] = useState(false)
   const [csvUrl, setCsvUrl] = useState<string | null>(null)
   const [stats, setStats] = useState<{
@@ -37,35 +31,25 @@ export default function SimulationCycleViewer({
   const [tableData, setTableData] = useState<any[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const ROWS_PER_PAGE = 100
-
   const simulationCycle = useMemo(() => {
     return generateSimulationCycle(calendarAssignment, drivecycles, subcycles)
   }, [calendarAssignment, drivecycles, subcycles])
-
   const toggleExpanded = (dayOfYear: number) => {
     setExpanded(prev =>
       prev.includes(dayOfYear) ? prev.filter(d => d !== dayOfYear) : [...prev, dayOfYear]
     )
   }
   const handleGenerate = async () => {
-    if (!simId) {
-      alert("No simulation started. Create a drive cycle first.")
-      return
-    }
-
     setLoading(true)
     try {
       const result = await generateSimulationTable(simId)
-      
-      // Backend returns { path, totalSteps, coveredDays, ... }
       setCsvUrl(result.path)
       setStats({
         totalSteps: result.totalSteps,
         totalDuration: result.totalDuration || 0,
         coveredDays: result.coveredDays || 0
       })
-
-      // Optional: fetch CSV content for modal preview
+      // Fetch CSV content for preview
       const response = await fetch(result.path)
       const csvText = await response.text()
       const rows = csvText.trim().split("\n").slice(1).map(line => {
@@ -90,7 +74,6 @@ export default function SimulationCycleViewer({
         }
       })
       setTableData(rows)
-      
       alert("Simulation table generated successfully!")
     } catch (err) {
       alert("Failed to generate simulation table")
@@ -117,7 +100,6 @@ export default function SimulationCycleViewer({
       })
     })
   }, [simulationCycle])
-
   const totalSteps = allSteps.length
   const totalDuration = allSteps.reduce((sum, step) => sum + (step.duration || 0), 0)
   const totalPages = Math.ceil(totalSteps / ROWS_PER_PAGE)
@@ -125,9 +107,7 @@ export default function SimulationCycleViewer({
     (currentPage - 1) * ROWS_PER_PAGE,
     currentPage * ROWS_PER_PAGE
   )
-
   const handleExport = (format: "json" | "csv") => {
-    onSimulationCycleGenerate(simulationCycle)
     if (format === "json") {
       const json = JSON.stringify(simulationCycle, null, 2)
       const blob = new Blob([json], { type: "application/json" })
@@ -148,7 +128,6 @@ export default function SimulationCycleViewer({
       URL.revokeObjectURL(url)
     }
   }
-
   if (simulationCycle.length === 0) {
     return (
       <Card>
@@ -160,7 +139,6 @@ export default function SimulationCycleViewer({
       </Card>
     )
   }
-
   return (
     <div className="space-y-6">
       {/* Stats */}
@@ -184,7 +162,6 @@ export default function SimulationCycleViewer({
           </CardContent>
         </Card>
       </div>
-
       {/* Export & View Full */}
       <div className="flex gap-3">
         <Button onClick={() => handleExport("json")} className="gap-2">
@@ -193,11 +170,20 @@ export default function SimulationCycleViewer({
         <Button onClick={() => handleExport("csv")} variant="outline" className="gap-2">
           <Download className="h-4 w-4" /> Export CSV
         </Button>
+        <Button onClick={handleGenerate} disabled={loading} variant="secondary">
+          {loading ? "Generating..." : "Generate & Save Table"}
+        </Button>
         <Button onClick={() => { setShowFullTable(true); setCurrentPage(1) }} variant="secondary">
           View Full Table ({totalSteps.toLocaleString()} steps)
         </Button>
       </div>
-
+      {csvUrl && (
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-sm text-muted-foreground">Generated File: <a href={csvUrl} className="text-blue-500 underline">{csvUrl}</a></p>
+          </CardContent>
+        </Card>
+      )}
       {/* Preview - First 20 Days */}
       <Card>
         <CardHeader>
@@ -222,7 +208,6 @@ export default function SimulationCycleViewer({
                   </div>
                   {expanded.includes(day.dayOfYear) ? <ChevronDown /> : <ChevronRight />}
                 </button>
-
                 {expanded.includes(day.dayOfYear) && day.steps && (
                   <div className="border-t bg-muted/20 p-4">
                     <div className="text-xs text-muted-foreground mb-2">
@@ -247,7 +232,6 @@ export default function SimulationCycleViewer({
           </div>
         </CardContent>
       </Card>
-
       {/* Full Table Modal - Exact column order as requested */}
       {showFullTable && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowFullTable(false)}>
@@ -266,7 +250,6 @@ export default function SimulationCycleViewer({
                 <X className="h-5 w-5" />
               </Button>
             </div>
-
             <div className="flex-1 overflow-auto p-6">
               <div className="overflow-x-auto rounded-lg border bg-card">
                 <Table>
@@ -286,6 +269,7 @@ export default function SimulationCycleViewer({
                       <TableHead>Timestep (s)</TableHead>
                       <TableHead>Ambient Temp (°C)</TableHead>
                       <TableHead>Location</TableHead>
+                      
                       <TableHead>step Trigger(s)</TableHead>
                       <TableHead>Label</TableHead>
                     </TableRow>
@@ -319,7 +303,6 @@ export default function SimulationCycleViewer({
                 </Table>
               </div>
             </div>
-
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between p-6 border-t bg-muted/30">
@@ -340,7 +323,6 @@ export default function SimulationCycleViewer({
     </div>
   )
 }
-
 // Helper: Format duration
 function formatDuration(seconds: number): string {
   const y = Math.floor(seconds / (365 * 86400))
@@ -352,7 +334,6 @@ function formatDuration(seconds: number): string {
     .filter(Boolean)
     .join(" ") || "0s"
 }
-
 // Updated CSV Export - EXACT column order and labels
 function generateSimulationCycleCSV(steps: any[]) {
   const header = [
@@ -373,12 +354,11 @@ function generateSimulationCycleCSV(steps: any[]) {
     "step Trigger(s)",
     "Label"
   ].join(",")
-
   const rows = steps.map(step => [
     step.globalIndex,
     step.dayOfYear,
     step.drivecycleId || "",
-    step.drivecycleTriggers || "",           // currently empty unless you add drivecycle-level triggers
+    step.drivecycleTriggers || "",
     step.subcycleId || "",
     step.subcycleStepIndex,
     step.valueType || "",
@@ -394,18 +374,14 @@ function generateSimulationCycleCSV(steps: any[]) {
       : "",
     (step.label || "").replace(/"/g, '""')
   ].map(val => `"${val}"`).join(","))
-
   return [header, ...rows].join("\n")
 }
-
 // generateSimulationCycle remains unchanged (already correct)
 function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], subcycles: any[]) {
   if (calendarAssignment.length === 0 || drivecycles.length === 0) return []
-
   const defaultRule = calendarAssignment.find(rule => rule.id === 'DEFAULT_RULE')
   const defaultDrivecycleId = defaultRule?.drivecycleId || "DC_IDLE"
   const simulationCycle = []
-
   for (let dayOfYear = 1; dayOfYear <= 364; dayOfYear++) {
     let matchedRule = null
     for (const rule of calendarAssignment) {
@@ -425,20 +401,15 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
         break // later rules override earlier → stop at first match
       }
     }
-
     const drivecycleId = matchedRule?.drivecycleId || defaultDrivecycleId
     const drivecycle = drivecycles.find((dc: any) => dc.id === drivecycleId)
-
     if (!drivecycle && drivecycleId !== "DC_IDLE") continue
-
     const steps: any[] = []
     if (drivecycle && drivecycle.composition) {
       for (const comp of drivecycle.composition) {
         const subcycle = subcycles.find((sc: any) => sc.id === comp.subcycleId)
         if (!subcycle) continue
         const drivecycleRowTriggers = comp.triggers || []
-
-
         for (let rep = 0; rep < comp.repetitions; rep++) {
           for (const step of subcycle.steps) {
             steps.push({
@@ -461,7 +432,6 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
         }
       }
     }
-
     simulationCycle.push({
       dayOfYear,
       drivecycleId,
@@ -470,6 +440,5 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
       steps,
     })
   }
-
   return simulationCycle
 }
