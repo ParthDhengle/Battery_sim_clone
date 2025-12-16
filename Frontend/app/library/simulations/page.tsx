@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Zap, Plus, TrendingDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { getAllSimulations } from "@/lib/api/simulations"  // ✅ import your utility function
+import { getAllSimulations } from "@/lib/api/simulations"  //   import your utility function
 
 interface Simulation {
   _id: string
@@ -44,7 +44,7 @@ export default function Simulations() {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  // ✅ Fetch all simulations from backend
+  //   Fetch all simulations from backend
   const loadSimulations = async () => {
     try {
       setIsLoading(true)

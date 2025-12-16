@@ -34,7 +34,7 @@ const buttonVariants = cva(
   }
 );
 
-// ✅ FIXED: forwardRef added here
+//   FIXED: forwardRef added here
 const Button = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button"> &
@@ -52,6 +52,6 @@ const Button = React.forwardRef<
   );
 });
 
-Button.displayName = "Button"; // ✅ Always set a displayName when using forwardRef
+Button.displayName = "Button"; //   Always set a displayName when using forwardRef
 
 export { Button, buttonVariants };

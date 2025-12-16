@@ -146,7 +146,7 @@ async def create_cell(
                 with open(file_path, "wb") as buffer:
                     buffer.write(content)
                 
-                print(f"✅ File saved successfully")
+                print(f"  File saved successfully")
             except Exception as file_err:
                 print(f"❌ File save error: {file_err}")
                 raise HTTPException(500, detail=f"Failed to save file: {str(file_err)}")
@@ -185,10 +185,10 @@ async def create_cell(
         # Insert into database
         print(f"💾 Inserting into database...")
         result = await db.cells.insert_one(data)
-        print(f"✅ Inserted with ID: {result.inserted_id}")
+        print(f"  Inserted with ID: {result.inserted_id}")
         
         created = await db.cells.find_one({"_id": result.inserted_id})
-        print(f"✅ Cell created successfully")
+        print(f"  Cell created successfully")
         print("=" * 80)
         
         return serialize_cell(created)

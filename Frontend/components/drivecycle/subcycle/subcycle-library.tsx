@@ -1,4 +1,8 @@
-// FILE: Frontend/components/drivecycle/subcycle/subcycle-library.tsx
+// Updated FILE: Frontend/components/drivecycle/subcycle/subcycle-library.tsx
+// Only the handleSave function is modified for robustness in handling create response.
+// This ensures the subcycle ID is always a valid string before updating the simulation.
+// The double-fetch is now mandatory after create to guarantee consistency and avoid adding invalid IDs.
+
 "use client"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -15,7 +19,6 @@ import { Subcycle, SubcycleLibraryProps, Step, Trigger } from "./types"
 import { updateSimulationSubcycles, getSubcycles, createSubcycle, updateSubcycle, getSubcycle } from "@/lib/api/drive-cycle"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-
 export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }: SubcycleLibraryProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [isAddingExisting, setIsAddingExisting] = useState(false)
@@ -29,7 +32,6 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false) // Separate saving state for UX
-
   useEffect(() => {
     if (editingSubcycle) {
       setName(editingSubcycle.name)
@@ -40,7 +42,6 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     }
     setNameError("")
   }, [editingSubcycle, isCreating])
-
   useEffect(() => {
     const fetchGlobal = async () => {
       try {
@@ -57,27 +58,22 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     }
     if (simId) fetchGlobal()
   }, [simId])
-
   const isEditorOpen = isCreating || !!editingSubcycle
-
   const startCreating = () => {
     setIsAddingExisting(false)
     setIsCreating(true)
     setEditingSubcycle(null)
   }
-
   const startAdding = () => {
     setIsCreating(false)
     setEditingSubcycle(null)
     setIsAddingExisting(true)
     setSelectedToAdd([])
   }
-
   const startEditing = (subcycle: Subcycle) => {
     setEditingSubcycle(subcycle)
     setIsCreating(false)
   }
-
   const cancelEditor = () => {
     setIsCreating(false)
     setIsAddingExisting(false)
@@ -86,7 +82,6 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     setDescription("")
     setNameError("")
   }
-
   const handleAddExisting = async () => {
     if (!simId || selectedToAdd.length === 0) return
     try {
@@ -106,7 +101,6 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setLoading(false)
     }
   }
-
   const handleSave = async (steps: Step[], source: "manual" | "import") => {
     // Pre-validate name uniqueness (frontend-side)
     const trimmedName = name.trim()
@@ -123,7 +117,6 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setNameError("A subcycle with this name already exists. Please choose a unique name.")
       return
     }
-
     const payload = {
       name: trimmedName,
       description: description.trim(),
@@ -142,15 +135,17 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
         )
         onSubcyclesChange(subcycles.map(s => s.id === savedSubcycle.id ? savedSubcycle : s))
       } else {
-        savedSubcycle = await createSubcycle(payload) // Types match now
-        // Only fetch if creation succeeded (avoids undefined ID)
-        if (savedSubcycle && savedSubcycle.id) {
-          savedSubcycle = await getSubcycle(savedSubcycle.id)
+        // Updated logic: Always fetch after create to ensure full, consistent data and valid ID
+        const createdSubcycle = await createSubcycle(payload)
+        if (!createdSubcycle || !createdSubcycle.id || typeof createdSubcycle.id !== 'string') {
+          throw new Error("Failed to create subcycle: invalid or missing ID in server response")
         }
+        savedSubcycle = await getSubcycle(createdSubcycle.id)
         setGlobalSubcycles(prev => [...prev, savedSubcycle])
         if (simId) {
-          const currentIds = subcycles.map(s => s.id)
-          await updateSimulationSubcycles(simId, [...currentIds, savedSubcycle.id])
+          const currentIds = subcycles.map(s => s.id).filter(id => typeof id === 'string') // Safety filter
+          const newIds = [...currentIds, savedSubcycle.id]
+          await updateSimulationSubcycles(simId, newIds)
           onSubcyclesChange([...subcycles, savedSubcycle])
         }
       }
@@ -169,7 +164,6 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setSaving(false)
     }
   }
-
   const handleDelete = async (id: string) => {
     if (!simId) return
     if (!confirm("Remove this sub-cycle from CURRENT simulation? (It will remain in the database)")) return
@@ -184,11 +178,9 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setLoading(false)
     }
   }
-
   if (loading && !globalSubcycles.length) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin mr-2" /> Loading subcycles...</div>
   }
- 
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -333,8 +325,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-3">
-                          <span className="font-mono text-xl font-semibold">{subcycle.id}</span>
-                          <h3 className="text-xl font-semibold"> - {subcycle.name}</h3>
+                          <h3 className="text-xl font-semibold"> {subcycle.name}</h3>
                           {editingSubcycle?.id === subcycle.id && (
                             <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full">Editing</span>
                           )}
@@ -439,7 +430,6 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     </div>
   )
 }
-
 function FullTable({ subcycle, onClose }: { subcycle: Subcycle; onClose: () => void }) {
   const [currentPage, setCurrentPage] = useState(1)
   const ROWS_PER_PAGE = 100

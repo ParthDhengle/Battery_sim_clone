@@ -1,4 +1,4 @@
-// FILE: Frontend/lib/api/drive-cycle.ts
+// FILE: Frontend/lib/api/drive-cycle.ts (updated for ID normalization)
 const API_BASE = "http://localhost:8000";
 
 export interface Trigger {
@@ -29,6 +29,27 @@ export interface Subcycle {
   updatedAt?: string;
 }
 
+// Helper to normalize subcycle responses (handles _id vs id)
+const normalizeSubcycle = (obj: any): Subcycle => {
+  if (!obj) throw new Error("Empty response");
+  const normalized = { ...obj };
+  if (!normalized.id && normalized._id && typeof normalized._id === 'string') {
+    normalized.id = normalized._id;
+    delete normalized._id; // Clean up
+  }
+  if (!normalized.id || typeof normalized.id !== 'string') {
+    throw new Error("Invalid or missing ID in response");
+  }
+  // Ensure datetimes are strings (isoformat)
+  if (normalized.createdAt && typeof normalized.createdAt !== 'string') {
+    normalized.createdAt = new Date(normalized.createdAt).toISOString();
+  }
+  if (normalized.updatedAt && typeof normalized.updatedAt !== 'string') {
+    normalized.updatedAt = new Date(normalized.updatedAt).toISOString();
+  }
+  return normalized as Subcycle;
+};
+
 // Helper to parse FastAPI errors (handles 422 detail array)
 const parseApiError = async (res: Response): Promise<string> => {
   const data = await res.json().catch(() => ({}));
@@ -46,7 +67,8 @@ export const getSubcycles = async (): Promise<Subcycle[]> => {
     const detail = await parseApiError(res);
     throw new Error(detail);
   }
-  return res.json();
+  const data = await res.json();
+  return Array.isArray(data) ? data.map(normalizeSubcycle) : [];
 };
 
 export const getSubcycle = async (id: string): Promise<Subcycle> => {
@@ -55,7 +77,8 @@ export const getSubcycle = async (id: string): Promise<Subcycle> => {
     const detail = await parseApiError(res);
     throw new Error(detail);
   }
-  return res.json();
+  const data = await res.json();
+  return normalizeSubcycle(data);
 };
 
 export const createSubcycle = async (data: Omit<Subcycle, "id" | "createdAt" | "updatedAt">): Promise<Subcycle> => {
@@ -68,7 +91,8 @@ export const createSubcycle = async (data: Omit<Subcycle, "id" | "createdAt" | "
     const detail = await parseApiError(res);
     throw new Error(detail);
   }
-  return res.json();
+  const rawData = await res.json();
+  return normalizeSubcycle(rawData);
 };
 
 export const updateSubcycle = async (id: string, data: Omit<Subcycle, "id" | "createdAt" | "updatedAt">): Promise<Subcycle> => {
@@ -81,7 +105,8 @@ export const updateSubcycle = async (id: string, data: Omit<Subcycle, "id" | "cr
     const detail = await parseApiError(res);
     throw new Error(detail);
   }
-  return res.json();
+  const rawData = await res.json();
+  return normalizeSubcycle(rawData);
 };
 
 export const deleteSubcycle = async (id: string) => {
@@ -104,7 +129,11 @@ export const createSimulationCycle = async (data: { name: string; description?: 
     throw new Error(detail);
   }
   const sim = await res.json();
-  return { id: sim.id || sim._id }; // Handle alias
+  const simId = sim.id || sim._id;
+  if (!simId || typeof simId !== 'string') {
+    throw new Error("Invalid simulation ID in response");
+  }
+  return { id: simId };
 }
 
 export const updateSimulationSubcycles = async (simId: string, subcycleIds: string[]): Promise<any> => {

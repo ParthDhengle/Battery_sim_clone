@@ -14,4 +14,4 @@ client = AsyncIOMotorClient(
 )
 db = client["Battery_sim_DB"]
 
-print("✅ MongoDB connected successfully")
+print("  MongoDB connected successfully")

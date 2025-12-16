@@ -174,7 +174,7 @@ async def run_sim_background(
                 sim_id  # Pass sim_id for progress updates
             )
         
-        print(f"✅ Simulation complete → Output saved at {csv_path}")
+        print(f"  Simulation complete → Output saved at {csv_path}")
         sim_doc = await db.simulations.find_one({"_id": ObjectId(sim_id)})
         if not sim_doc:
             raise ValueError("Simulation document disappeared")
@@ -198,7 +198,7 @@ async def run_sim_background(
                 "updated_at": datetime.utcnow()
             }}
         )
-        print(f"✅ Simulation {sim_name} ({sim_type}) completed and saved.")
+        print(f"  Simulation {sim_name} ({sim_type}) completed and saved.")
         
     except Exception as e:
         print("❌ ERROR in run_sim_background:", e)
@@ -421,7 +421,7 @@ async def get_simulation_data(
     
     try:
         df = pd.read_csv(csv_path, usecols=["cell_id", "time_step", "Vterm", "SOC", "Qgen", "dt", "I_module"])
-        print(f"✅ Loaded CSV ({len(df)} rows, {df['cell_id'].nunique()} cells)")
+        print(f"  Loaded CSV ({len(df)} rows, {df['cell_id'].nunique()} cells)")
         
         if cell_id not in df["cell_id"].values:
             cell_id = int(df["cell_id"].min())
@@ -460,7 +460,7 @@ async def get_simulation_data(
             "temp": 26.85
         } for i, row in enumerate(cell_df.itertuples(index=False))]
         
-        print(f"✅ Returning {len(data)} points for cell {cell_id}")
+        print(f"  Returning {len(data)} points for cell {cell_id}")
         
         # Get summary (partial or final)
         summary = sim.get("metadata", {}).get("summary") or sim.get("metadata", {}).get("partial_summary", {})

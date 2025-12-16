@@ -105,7 +105,7 @@ export default function CompositionEditor({
           <SelectContent>
             {subcycles.map((sc: any) => (
               <SelectItem key={sc.id} value={sc.id}>
-                {sc.id} - {sc.name}
+                {sc.name}
               </SelectItem>
             ))}
           </SelectContent>

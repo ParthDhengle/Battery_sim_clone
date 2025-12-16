@@ -181,7 +181,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         if (data.status === "completed" || data.status === "stopped") {
           setIsSimulationComplete(true)
           setProgress(100)
-          console.log(`✅ Simulation ${data.status}!`)
+          console.log(`  Simulation ${data.status}!`)
         } else if (data.status === "failed") {
           setError(data.error || "Simulation failed")
           setIsSimulationComplete(true)
@@ -384,7 +384,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         document.body.removeChild(a)
       }, 100)
       
-      console.log("✅ Export successful:", filename)
+      console.log("  Export successful:", filename)
       
     } catch (err) {
       console.error("❌ Export failed:", err)

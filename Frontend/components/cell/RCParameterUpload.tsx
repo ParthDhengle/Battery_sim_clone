@@ -41,7 +41,7 @@ export default function RCParameterUpload({
   const handleRcPairChange = (value: "rc2" | "rc3") => {
     setRcPairType(value)  // This now updates parent state
     updateField("rc_pair_type", value)
-    console.log("✅ RC Pair Type selected:", value)  // Debug log
+    console.log("  RC Pair Type selected:", value)  // Debug log
   }
 
   const clearFile = () => {
@@ -205,7 +205,7 @@ export default function RCParameterUpload({
 
       updateField("rc_parameter_file", file)
       onFileChange(file)
-      console.log("✅ File uploaded successfully:", file.name)  // Debug log
+      console.log("  File uploaded successfully:", file.name)  // Debug log
     } catch (err: any) {
       setFileError(err.message)
       updateField("rc_parameter_file", null)

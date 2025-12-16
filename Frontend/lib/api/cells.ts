@@ -67,7 +67,7 @@ export async function createCellWithRCFile(formData: FormData) {
     }
 
     const result = JSON.parse(responseText);
-    console.log("✅ API: Cell created successfully:", result.id);
+    console.log("  API: Cell created successfully:", result.id);
     return result;
   } catch (error: any) {
     console.error("❌ API: Request failed:", error.message);

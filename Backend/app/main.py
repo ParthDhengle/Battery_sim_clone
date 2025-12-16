@@ -49,13 +49,13 @@ async def startup_event():
     """Initialize scheduler on startup"""
     scheduler.add_job(cleanup_deleted, 'interval', days=1)
     scheduler.start()
-    print("✅ API started successfully")
+    print("  API started successfully")
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     client.close()
     scheduler.shutdown()
-    print("✅ Application shutdown complete")
+    print("  Application shutdown complete")
 # Include routers AFTER middleware
 app.include_router(cells.router)
 app.include_router(packs.router)

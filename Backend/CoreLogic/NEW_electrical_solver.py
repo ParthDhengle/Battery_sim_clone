@@ -255,7 +255,7 @@ def run_electrical_solver_with_progress(setup, filename="simulation_results.csv"
     
     # Final write
     write_partial_results(time_steps)
-    print(f"✅ Simulation complete. Final CSV written to {filename}")
+    print(f"  Simulation complete. Final CSV written to {filename}")
     
     return filename
 
