@@ -1,6 +1,7 @@
 // FILE: Frontend/components/drivecycle/simulationcycle/simulation-cycle-viewer.tsx
 "use client"
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,11 +20,10 @@ export default function SimulationCycleViewer({
   subcycles,
   simId,
 }: SimulationCycleViewerProps) {
+  const router = useRouter()
   const [expanded, setExpanded] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
-  const [csvUrl, setCsvUrl] = useState<string | null>(null)
   const [showFullTable, setShowFullTable] = useState(false)
-  const [tableData, setTableData] = useState<any[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const ROWS_PER_PAGE = 100
   const simulationCycle = useMemo(() => {
@@ -37,35 +37,8 @@ export default function SimulationCycleViewer({
   const handleGenerate = async () => {
     setLoading(true)
     try {
-      const result = await generateSimulationTable(simId)
-      setCsvUrl(result.path)
-      // Removed setStats: properties don't exist in backend response; stats computed client-side
-      // Fetch CSV content for preview
-      const response = await fetch(result.path)
-      const csvText = await response.text()
-      const rows = csvText.trim().split("\n").slice(1).map(line => {
-        const values = line.match(/(".*?")|([^,]+)/g)?.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"')) || []
-        return {
-          globalIndex: values[0],
-          dayOfYear: values[1],
-          drivecycleId: values[2],
-          subcycleTriggers: values[3],
-          subcycleId: values[4],
-          subcycleStepIndex: values[5],
-          valueType: values[6],
-          value: values[7],
-          unit: values[8],
-          stepType: values[9],
-          duration: values[10],
-          timestep: values[11],
-          ambientTemp: values[12],
-          location: values[13],
-          triggers: values[14],
-          label: values[15]
-        }
-      })
-      setTableData(rows)
-      alert("Simulation table generated successfully!")
+      await generateSimulationTable(simId)
+      router.push('/library/drive-cycles')
     } catch (err) {
       alert("Failed to generate simulation table")
     } finally {
@@ -170,13 +143,6 @@ export default function SimulationCycleViewer({
           View Full Table
         </Button>
       </div>
-      {csvUrl && (
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Generated File: <a href={csvUrl} className="text-blue-500 underline">{csvUrl}</a></p>
-          </CardContent>
-        </Card>
-      )}
       {/* Preview - First 20 Days */}
       <Card>
         <CardHeader>
