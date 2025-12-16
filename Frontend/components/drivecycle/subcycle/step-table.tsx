@@ -1,4 +1,4 @@
-// FILE: Frontend/components/drivecycle/subcycle/step-table.tsx (added validation feedback)
+// FILE: Frontend/components/drivecycle/subcycle/step-table.tsx
 "use client"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Edit2, Trash2, Plus, X } from "lucide-react"
 import StepEditor from "./step-editor"
-import { Step } from "./types"
+import { Step, Trigger } from "./types"  // Import Trigger for typing
 interface StepTableProps {
   steps: Step[]
   onStepsChange: (steps: Step[]) => void
@@ -97,6 +97,7 @@ export default function StepTable({ steps, onStepsChange }: StepTableProps) {
               </TableHeader>
               <TableBody>
                 {steps.map((step, index) => {
+                  if (!step.id) return null;  // Skip if no id (shouldn't happen)
                   const isError = (step.stepType !== "trigger_only" && step.duration <= 0) || 
                                   step.timestep <= 0 || 
                                   (step.stepType === "trigger_only" && step.triggers.length === 0)
@@ -121,7 +122,7 @@ export default function StepTable({ steps, onStepsChange }: StepTableProps) {
                       <TableCell className="max-w-[180px]">
                         {step.triggers.length > 0 ? (
                           <div className="space-y-1 text-xs">
-                            {step.triggers.map((t, i) => (
+                            {step.triggers.map((t: Trigger, i: number) => (
                               <div key={i}>{t.type.replace(/_/g, " ")}: {t.value}</div>
                             ))}
                           </div>
@@ -136,7 +137,7 @@ export default function StepTable({ steps, onStepsChange }: StepTableProps) {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8"
-                            onClick={() => setEditingId(step.id)}
+                            onClick={() => setEditingId(step.id)}  // Safe: id exists
                             disabled={isEditorOpen}
                           >
                             <Edit2 className="h-3.5 w-3.5" />
@@ -145,7 +146,7 @@ export default function StepTable({ steps, onStepsChange }: StepTableProps) {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8"
-                            onClick={() => handleDelete(step.id)}
+                            onClick={() => handleDelete(step.id)}  // Safe: id exists
                           >
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>

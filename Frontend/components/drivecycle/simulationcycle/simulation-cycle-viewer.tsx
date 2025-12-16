@@ -22,11 +22,6 @@ export default function SimulationCycleViewer({
   const [expanded, setExpanded] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [csvUrl, setCsvUrl] = useState<string | null>(null)
-  const [stats, setStats] = useState<{
-    totalSteps?: number
-    totalDuration?: number
-    coveredDays?: number
-  }>({})
   const [showFullTable, setShowFullTable] = useState(false)
   const [tableData, setTableData] = useState<any[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -44,11 +39,7 @@ export default function SimulationCycleViewer({
     try {
       const result = await generateSimulationTable(simId)
       setCsvUrl(result.path)
-      setStats({
-        totalSteps: result.totalSteps,
-        totalDuration: result.totalDuration || 0,
-        coveredDays: result.coveredDays || 0
-      })
+      // Removed setStats: properties don't exist in backend response; stats computed client-side
       // Fetch CSV content for preview
       const response = await fetch(result.path)
       const csvText = await response.text()
@@ -269,7 +260,6 @@ export default function SimulationCycleViewer({
                       <TableHead>Timestep (s)</TableHead>
                       <TableHead>Ambient Temp (°C)</TableHead>
                       <TableHead>Location</TableHead>
-                      
                       <TableHead>step Trigger(s)</TableHead>
                       <TableHead>Label</TableHead>
                     </TableRow>

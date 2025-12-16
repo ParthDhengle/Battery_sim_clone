@@ -1,4 +1,4 @@
-// FILE: Frontend/components/drivecycle/subcycle/import-tab.tsx (updated for better CSV parsing)
+// FILE: Frontend/components/drivecycle/subcycle/import-tab.tsx
 "use client"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -56,7 +56,7 @@ export default function ImportTab({ onSave, onCancel }: ImportTabProps) {
             duration,
             timestep: duration / 10 || 1, // Default to 10% of duration if too small
             valueType: "current",
-            value: dataRows[i].current.toString(),
+            value: dataRows[i].current,  // ← Fixed: use number directly (no .toString())
             unit: "A",
             repetitions: 1,
             stepType: "fixed",

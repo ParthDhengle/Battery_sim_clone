@@ -1,23 +1,21 @@
-// components/drivecycle/subcycle/types.ts
-
+// FILE: Frontend/components/drivecycle/subcycle/types.ts
+// Aligned with API: id optional, value number
 export interface Trigger {
   type: string
   value: number
 }
-
 export interface Step {
-  id: string
+  id?: string  // Optional to match API/backend
   duration: number
   timestep: number
   valueType: string
-  value: string
+  value: number  // Number to match backend
   unit: string
   repetitions: number
   stepType: string
   triggers: Trigger[]
   label: string
 }
-
 export interface Subcycle {
   id: string
   name: string
@@ -25,7 +23,6 @@ export interface Subcycle {
   source: "manual" | "import"
   steps: Step[]
 }
-
 export interface SubcycleLibraryProps {
   subcycles: Subcycle[]
   onSubcyclesChange: (subcycles: Subcycle[]) => void

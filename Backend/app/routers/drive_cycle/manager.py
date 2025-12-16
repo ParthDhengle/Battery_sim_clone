@@ -28,6 +28,7 @@ async def get_simulation_cycle(id: str):
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     return sim
+
 @router.put("/{id}/subcycles", response_model=SimulationCycle)
 async def update_simulation_subcycles(id: str, subcycle_ids: List[str] = Body(...)):
     """
@@ -35,9 +36,15 @@ async def update_simulation_subcycles(id: str, subcycle_ids: List[str] = Body(..
     Validates that all subcycle IDs exist.
     """
     # 1. Validate subcycle IDs exist
-    count = await db.subcycles.count_documents({"_id": {"$in": subcycle_ids}})
-    if count != len(set(subcycle_ids)):
-         raise HTTPException(status_code=400, detail="One or more Subcycle IDs are invalid")
+    unique_ids = set(subcycle_ids)
+    count = await db.subcycles.count_documents({"_id": {"$in": list(unique_ids)}})
+    if count < len(unique_ids):
+        # Log missing for debugging
+        existing = await db.subcycles.find({"_id": {"$in": list(unique_ids)}}).to_list(None)
+        existing_set = {doc["_id"] for doc in existing}
+        missing = unique_ids - existing_set
+        print(f"Missing subcycle IDs in validation: {missing}")  # Debug log
+        raise HTTPException(status_code=400, detail=f"One or more Subcycle IDs are invalid: {list(missing)}")
     # 2. Update
     result = await db.simulation_cycles.find_one_and_update(
         {"_id": id},
@@ -52,6 +59,8 @@ async def update_simulation_subcycles(id: str, subcycle_ids: List[str] = Body(..
     if not result:
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     return result
+
+
 @router.put("/{id}/drive-cycles", response_model=SimulationCycle)
 async def update_drive_cycles(id: str, definitions: List[DriveCycleDefinition] = Body(...)):
     """

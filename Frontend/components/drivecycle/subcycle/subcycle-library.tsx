@@ -1,4 +1,4 @@
-// FILE: Frontend/components/drivecycle/subcycle/subcycle-library.tsx (added loading + error handling)
+// FILE: Frontend/components/drivecycle/subcycle/subcycle-library.tsx
 "use client"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import ManualEditor from "./manual-editor"
 import ImportTab from "./import-tab"
 import { exportSubcycleJson, exportSubcycleCsv, convertSecondsToHMS, calculateTotalDuration } from "./utils"
-import { Subcycle, SubcycleLibraryProps } from "./types"
+import { Subcycle, SubcycleLibraryProps, Step, Trigger } from "./types"
 import { updateSimulationSubcycles, getSubcycles, createSubcycle, updateSubcycle } from "@/lib/api/drive-cycle"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -43,7 +43,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
         setLoading(true)
         setError(null)
         const data = await getSubcycles()
-        setGlobalSubcycles(data)
+        setGlobalSubcycles(data)  // Types now match, no conversion needed
       } catch (err: any) {
         setError("Failed to load subcycles: " + err.message)
         console.error("Failed to load subcycles from backend", err)
@@ -81,6 +81,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     if (!simId || selectedToAdd.length === 0) return
     try {
       setLoading(true)
+      setError(null)
       const currentIds = subcycles.map(s => s.id)
       const newIds = Array.from(new Set([...currentIds, ...selectedToAdd]))
       await updateSimulationSubcycles(simId, newIds)
@@ -89,12 +90,13 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setSelectedToAdd([])
       setIsAddingExisting(false)
     } catch (err: any) {
-      setError("Failed to add subcycles: " + err.message)
+      const message = err?.message || String(err)
+      setError("Failed to add subcycles: " + message)
     } finally {
       setLoading(false)
     }
   }
-  const handleSave = async (steps: any[], source: "manual" | "import") => {
+  const handleSave = async (steps: Step[], source: "manual" | "import") => {
     if (!name.trim()) {
       setNameError("Name is required")
       return
@@ -111,25 +113,30 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     }
     try {
       setLoading(true)
+      setError(null)
       let savedSubcycle: Subcycle
       if (editingSubcycle) {
-        savedSubcycle = await updateSubcycle(editingSubcycle.id, payload)
+        savedSubcycle = await updateSubcycle(editingSubcycle.id, payload)  // Types match now
         setGlobalSubcycles(prev =>
           prev.map(sc => sc.id === editingSubcycle.id ? savedSubcycle : sc)
         )
         onSubcyclesChange(subcycles.map(s => s.id === savedSubcycle.id ? savedSubcycle : s))
       } else {
-        savedSubcycle = await createSubcycle(payload)
+        savedSubcycle = await createSubcycle(payload)  // Types match now
         setGlobalSubcycles(prev => [...prev, savedSubcycle])
         if (simId) {
           const currentIds = subcycles.map(s => s.id)
+          // Add small delay to ensure DB consistency (fixes race condition on new ID)
+          await new Promise(resolve => setTimeout(resolve, 100))
           await updateSimulationSubcycles(simId, [...currentIds, savedSubcycle.id])
           onSubcyclesChange([...subcycles, savedSubcycle])
         }
       }
       cancelEditor()
     } catch (err: any) {
-      setNameError("Failed to save: " + (err.message || "Unknown error"))
+      const message = err?.message || String(err)
+      setNameError("Failed to save: " + message)
+      setError("Failed to save subcycle: " + message)
     } finally {
       setLoading(false)
     }
@@ -151,6 +158,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
   if (loading && !globalSubcycles.length) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin mr-2" /> Loading subcycles...</div>
   }
+  
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -191,8 +199,11 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                       id={sc.id}
                       checked={selectedToAdd.includes(sc.id)}
                       onCheckedChange={(checked) => {
-                        if (checked) setSelectedToAdd([...selectedToAdd, sc.id])
-                        else setSelectedToAdd(selectedToAdd.filter(id => id !== sc.id))
+                        setSelectedToAdd(prev =>
+                          checked
+                            ? [...prev, sc.id]
+                            : prev.filter(id => id !== sc.id)
+                        )
                       }}
                       disabled={loading}
                     />
@@ -283,7 +294,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
         ) : (
           <div className="grid gap-6">
             {subcycles.map((subcycle) => {
-              const hasTriggerOnly = subcycle.steps.some((s: any) => s.stepType === "trigger_only")
+              const hasTriggerOnly = subcycle.steps.some((s: Step) => s.stepType === "trigger_only")
               const totalSec = calculateTotalDuration(subcycle.steps)
               const durationText = hasTriggerOnly ? "Dynamic (triggers)" : convertSecondsToHMS(totalSec)
               return (
@@ -350,8 +361,8 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {subcycle.steps.slice(0, 5).map((step: any, i: number) => (
-                                <TableRow key={step.id}>
+                              {subcycle.steps.slice(0, 5).map((step: Step, i: number) => (
+                                <TableRow key={step.id ?? i}>
                                   <TableCell>{i + 1}</TableCell>
                                   <TableCell>{step.stepType === "trigger_only" ? "-" : step.duration}</TableCell>
                                   <TableCell>{step.timestep}</TableCell>
@@ -366,7 +377,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                                   <TableCell className="max-w-[180px]">
                                     {step.triggers.length > 0 ? (
                                       <div className="space-y-1 text-xs">
-                                        {step.triggers.map((t, i) => (
+                                        {step.triggers.map((t: Trigger, i: number) => (
                                           <div key={i}>{t.type.replace(/_/g, " ")}: {t.value}</div>
                                         ))}
                                       </div>
@@ -436,8 +447,8 @@ function FullTable({ subcycle, onClose }: { subcycle: Subcycle; onClose: () => v
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentSteps.map((step: any, i: number) => (
-                  <TableRow key={step.id}>
+                {currentSteps.map((step: Step, i: number) => (
+                  <TableRow key={step.id ?? i}>  {/* Fallback key */}
                     <TableCell>{startIndex + i + 1}</TableCell>
                     <TableCell>{step.stepType === "trigger_only" ? "-" : step.duration}</TableCell>
                     <TableCell>{step.timestep}</TableCell>
@@ -446,7 +457,7 @@ function FullTable({ subcycle, onClose }: { subcycle: Subcycle; onClose: () => v
                     <TableCell>{step.repetitions}</TableCell>
                     <TableCell><span className="text-xs px-2 py-1 bg-secondary rounded">{step.stepType.replace(/_/g, " ")}</span></TableCell>
                     <TableCell className="text-xs">
-                      {step.triggers.length > 0 ? step.triggers.map((t: any) => `${t.type.replace(/_/g, " ")}: ${t.value}`).join(" | ") : "-"}
+                      {step.triggers.length > 0 ? step.triggers.map((t: Trigger) => `${t.type.replace(/_/g, " ")}: ${t.value}`).join(" | ") : "-"}
                     </TableCell>
                     <TableCell className="truncate max-w-[120px]">{step.label || "-"}</TableCell>
                   </TableRow>
