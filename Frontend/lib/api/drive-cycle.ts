@@ -1,21 +1,24 @@
-// FILE: Frontend/lib/api/drive-cycle.ts (added list_simulation_cycles + fixes)
+// FILE: Frontend/lib/api/drive-cycle.ts
 const API_BASE = "http://localhost:8000";
+
 export interface Trigger {
   type: string;
   value: number;
 }
+
 export interface Step {
   id?: string;
   duration: number;
   timestep: number;
   valueType: string;
-  value: number;  // Number for backend
+  value: number; // Number for backend
   unit: string;
   repetitions: number;
   stepType: string;
   triggers: Trigger[];
   label: string;
 }
+
 export interface Subcycle {
   id: string;
   name: string;
@@ -25,12 +28,36 @@ export interface Subcycle {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// Helper to parse FastAPI errors (handles 422 detail array)
+const parseApiError = async (res: Response): Promise<string> => {
+  const data = await res.json().catch(() => ({}));
+  let detail = data.detail || "Unknown error";
+  if (Array.isArray(detail)) {
+    detail = detail.map((e: any) => e.msg || e).join('; ');
+  }
+  return detail as string;
+};
+
 // Subcycle CRUD
 export const getSubcycles = async (): Promise<Subcycle[]> => {
   const res = await fetch(`${API_BASE}/subcycles/`);
-  if (!res.ok) throw new Error("Failed to fetch subcycles");
+  if (!res.ok) {
+    const detail = await parseApiError(res);
+    throw new Error(detail);
+  }
   return res.json();
 };
+
+export const getSubcycle = async (id: string): Promise<Subcycle> => {
+  const res = await fetch(`${API_BASE}/subcycles/${id}`);
+  if (!res.ok) {
+    const detail = await parseApiError(res);
+    throw new Error(detail);
+  }
+  return res.json();
+};
+
 export const createSubcycle = async (data: Omit<Subcycle, "id" | "createdAt" | "updatedAt">): Promise<Subcycle> => {
   const res = await fetch(`${API_BASE}/subcycles/`, {
     method: "POST",
@@ -38,11 +65,12 @@ export const createSubcycle = async (data: Omit<Subcycle, "id" | "createdAt" | "
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Failed to create subcycle");
+    const detail = await parseApiError(res);
+    throw new Error(detail);
   }
   return res.json();
 };
+
 export const updateSubcycle = async (id: string, data: Omit<Subcycle, "id" | "createdAt" | "updatedAt">): Promise<Subcycle> => {
   const res = await fetch(`${API_BASE}/subcycles/${id}`, {
     method: "PUT",
@@ -50,15 +78,20 @@ export const updateSubcycle = async (id: string, data: Omit<Subcycle, "id" | "cr
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Failed to update subcycle");
+    const detail = await parseApiError(res);
+    throw new Error(detail);
   }
   return res.json();
 };
+
 export const deleteSubcycle = async (id: string) => {
   const res = await fetch(`${API_BASE}/subcycles/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete");
+  if (!res.ok) {
+    const detail = await parseApiError(res);
+    throw new Error(detail);
+  }
 };
+
 // Simulation Cycle Management
 export const createSimulationCycle = async (data: { name: string; description?: string } = { name: "New Simulation" }): Promise<{ id: string }> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/`, {
@@ -67,24 +100,26 @@ export const createSimulationCycle = async (data: { name: string; description?: 
     body: JSON.stringify(data)
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Failed to create simulation cycle");
+    const detail = await parseApiError(res);
+    throw new Error(detail);
   }
   const sim = await res.json();
-  return { id: sim.id || sim._id };  // Handle alias
+  return { id: sim.id || sim._id }; // Handle alias
 }
+
 export const updateSimulationSubcycles = async (simId: string, subcycleIds: string[]): Promise<any> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/subcycles`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(subcycleIds),  // Direct array
+    body: JSON.stringify({ subcycle_ids: subcycleIds }), // Object for model
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Failed to update simulation subcycles");
+    const detail = await parseApiError(res);
+    throw new Error(detail);
   }
   return res.json();
 }
+
 export const saveDriveCycles = async (simId: string, definitions: any[]): Promise<any> => {
   // Expand repetitions to flat subcycle_ids list
   const expandedPayload = definitions.map(d => {
@@ -105,37 +140,43 @@ export const saveDriveCycles = async (simId: string, definitions: any[]): Promis
     body: JSON.stringify(expandedPayload)
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Failed to save drive cycles");
+    const detail = await parseApiError(res);
+    throw new Error(detail);
   }
   return res.json();
 }
+
 // Calendar Assignment
 export const saveCalendarAssignments = async (simId: string, assignments: any[]) => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/calendar`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(assignments),
+    body: JSON.stringify({ calendar_assignments: assignments }),
   });
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Failed to save calendar assignments");
+    const detail = await parseApiError(res);
+    throw new Error(detail);
   }
   return res.json();
 };
+
 // Generate
 export const generateSimulationTable = async (simId: string): Promise<{ path: string; size_bytes: number }> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/generate`, {
     method: "POST",
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(err.detail || "Failed to generate simulation table");
+    const detail = await parseApiError(res);
+    throw new Error(detail);
   }
   return res.json();
 };
+
 export const list_simulation_cycles = async (): Promise<any[]> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/`);
-  if (!res.ok) throw new Error("Failed to fetch simulation cycles");
+  if (!res.ok) {
+    const detail = await parseApiError(res);
+    throw new Error(detail);
+  }
   return res.json();
 };

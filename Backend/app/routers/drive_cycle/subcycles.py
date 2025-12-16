@@ -16,7 +16,7 @@ async def list_subcycles():
     List all available subcycles.
     """
     subcycles = await db.subcycles.find().to_list(1000)
-    return subcycles
+    return [Subcycle.model_validate(sc) for sc in subcycles]
 @router.get("/{id}", response_model=Subcycle)
 async def get_subcycle(id: str):
     """
@@ -25,7 +25,7 @@ async def get_subcycle(id: str):
     subcycle = await db.subcycles.find_one({"_id": id})
     if not subcycle:
         raise HTTPException(status_code=404, detail="Subcycle not found")
-    return subcycle
+    return Subcycle.model_validate(subcycle)
 @router.post("/", response_model=Subcycle, status_code=201)
 async def create_subcycle(subcycle: SubcycleCreate):
     """
@@ -41,7 +41,7 @@ async def create_subcycle(subcycle: SubcycleCreate):
     new_subcycle["createdAt"] = datetime.utcnow()
     new_subcycle["updatedAt"] = datetime.utcnow()
     await db.subcycles.insert_one(new_subcycle)
-    return new_subcycle
+    return Subcycle.model_validate(new_subcycle)
 @router.put("/{id}", response_model=Subcycle)
 async def update_subcycle(id: str, subcycle: SubcycleCreate):
     """
@@ -62,7 +62,7 @@ async def update_subcycle(id: str, subcycle: SubcycleCreate):
         {"$set": updated},
         return_document=True
     )
-    return result
+    return Subcycle.model_validate(result)
 @router.delete("/{id}", status_code=204)
 async def delete_subcycle(id: str):
     """

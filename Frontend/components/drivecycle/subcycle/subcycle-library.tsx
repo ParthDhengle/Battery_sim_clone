@@ -12,9 +12,10 @@ import ManualEditor from "./manual-editor"
 import ImportTab from "./import-tab"
 import { exportSubcycleJson, exportSubcycleCsv, convertSecondsToHMS, calculateTotalDuration } from "./utils"
 import { Subcycle, SubcycleLibraryProps, Step, Trigger } from "./types"
-import { updateSimulationSubcycles, getSubcycles, createSubcycle, updateSubcycle } from "@/lib/api/drive-cycle"
+import { updateSimulationSubcycles, getSubcycles, createSubcycle, updateSubcycle, getSubcycle } from "@/lib/api/drive-cycle"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+
 export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }: SubcycleLibraryProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [isAddingExisting, setIsAddingExisting] = useState(false)
@@ -27,6 +28,8 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
   const [selectedToAdd, setSelectedToAdd] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false) // Separate saving state for UX
+
   useEffect(() => {
     if (editingSubcycle) {
       setName(editingSubcycle.name)
@@ -37,13 +40,14 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     }
     setNameError("")
   }, [editingSubcycle, isCreating])
+
   useEffect(() => {
     const fetchGlobal = async () => {
       try {
         setLoading(true)
         setError(null)
         const data = await getSubcycles()
-        setGlobalSubcycles(data)  // Types now match, no conversion needed
+        setGlobalSubcycles(data) // Types now match, no conversion needed
       } catch (err: any) {
         setError("Failed to load subcycles: " + err.message)
         console.error("Failed to load subcycles from backend", err)
@@ -53,22 +57,27 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     }
     if (simId) fetchGlobal()
   }, [simId])
+
   const isEditorOpen = isCreating || !!editingSubcycle
+
   const startCreating = () => {
     setIsAddingExisting(false)
     setIsCreating(true)
     setEditingSubcycle(null)
   }
+
   const startAdding = () => {
     setIsCreating(false)
     setEditingSubcycle(null)
     setIsAddingExisting(true)
     setSelectedToAdd([])
   }
+
   const startEditing = (subcycle: Subcycle) => {
     setEditingSubcycle(subcycle)
     setIsCreating(false)
   }
+
   const cancelEditor = () => {
     setIsCreating(false)
     setIsAddingExisting(false)
@@ -77,6 +86,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     setDescription("")
     setNameError("")
   }
+
   const handleAddExisting = async () => {
     if (!simId || selectedToAdd.length === 0) return
     try {
@@ -96,8 +106,11 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setLoading(false)
     }
   }
+
   const handleSave = async (steps: Step[], source: "manual" | "import") => {
-    if (!name.trim()) {
+    // Pre-validate name uniqueness (frontend-side)
+    const trimmedName = name.trim()
+    if (!trimmedName) {
       setNameError("Name is required")
       return
     }
@@ -105,29 +118,38 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setNameError("At least one step is required")
       return
     }
+    const isDuplicate = globalSubcycles.some(sc => sc.name.toLowerCase() === trimmedName.toLowerCase() && (!editingSubcycle || sc.id !== editingSubcycle.id))
+    if (isDuplicate) {
+      setNameError("A subcycle with this name already exists. Please choose a unique name.")
+      return
+    }
+
     const payload = {
-      name: name.trim(),
+      name: trimmedName,
       description: description.trim(),
       source,
-      steps: steps.map(s => ({ ...s, value: Number(s.value) }))  // Ensure numbers
+      steps: steps.map(s => ({ ...s, value: Number(s.value) })) // Ensure numbers for backend
     }
     try {
-      setLoading(true)
+      setSaving(true)
       setError(null)
+      setNameError("")
       let savedSubcycle: Subcycle
       if (editingSubcycle) {
-        savedSubcycle = await updateSubcycle(editingSubcycle.id, payload)  // Types match now
+        savedSubcycle = await updateSubcycle(editingSubcycle.id, payload) // Types match now
         setGlobalSubcycles(prev =>
           prev.map(sc => sc.id === editingSubcycle.id ? savedSubcycle : sc)
         )
         onSubcyclesChange(subcycles.map(s => s.id === savedSubcycle.id ? savedSubcycle : s))
       } else {
-        savedSubcycle = await createSubcycle(payload)  // Types match now
+        savedSubcycle = await createSubcycle(payload) // Types match now
+        // Only fetch if creation succeeded (avoids undefined ID)
+        if (savedSubcycle && savedSubcycle.id) {
+          savedSubcycle = await getSubcycle(savedSubcycle.id)
+        }
         setGlobalSubcycles(prev => [...prev, savedSubcycle])
         if (simId) {
           const currentIds = subcycles.map(s => s.id)
-          // Add small delay to ensure DB consistency (fixes race condition on new ID)
-          await new Promise(resolve => setTimeout(resolve, 100))
           await updateSimulationSubcycles(simId, [...currentIds, savedSubcycle.id])
           onSubcyclesChange([...subcycles, savedSubcycle])
         }
@@ -135,12 +157,19 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       cancelEditor()
     } catch (err: any) {
       const message = err?.message || String(err)
-      setNameError("Failed to save: " + message)
-      setError("Failed to save subcycle: " + message)
+      // Specific handling for common errors
+      if (message.includes("already exists")) {
+        setNameError("A subcycle with this name already exists. Please choose a unique name.")
+      } else {
+        setNameError("Failed to save: " + message)
+        setError("Failed to save subcycle: " + message)
+      }
+      console.error("Save error details:", err)
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
+
   const handleDelete = async (id: string) => {
     if (!simId) return
     if (!confirm("Remove this sub-cycle from CURRENT simulation? (It will remain in the database)")) return
@@ -155,10 +184,11 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
       setLoading(false)
     }
   }
+
   if (loading && !globalSubcycles.length) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin mr-2" /> Loading subcycles...</div>
   }
-  
+ 
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -178,7 +208,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
         )}
       </div>
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -242,7 +272,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                   onChange={(e) => { setName(e.target.value); if (nameError) setNameError("") }}
                   placeholder="e.g., Highway Cruise"
                   className={nameError ? "border-destructive" : ""}
-                  disabled={loading}
+                  disabled={saving}
                 />
                 {nameError && (
                   <p className="text-sm text-destructive mt-1 flex items-center gap-1">
@@ -257,7 +287,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="e.g., 100 km/h constant speed with regen"
-                  disabled={loading}
+                  disabled={saving}
                 />
               </div>
             </div>
@@ -267,10 +297,10 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                 <TabsTrigger value="import">Import CSV</TabsTrigger>
               </TabsList>
               <TabsContent value="manual" className="mt-6">
-                <ManualEditor 
-                  initialData={editingSubcycle} 
-                  onSave={(d) => handleSave(d.steps, "manual")} 
-                  onCancel={cancelEditor} 
+                <ManualEditor
+                  initialData={editingSubcycle}
+                  onSave={(d) => handleSave(d.steps, "manual")}
+                  onCancel={cancelEditor}
                 />
               </TabsContent>
               <TabsContent value="import" className="mt-6">
@@ -323,8 +353,8 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
                         <Button size="sm" variant="outline" onClick={() => exportSubcycleCsv(subcycle)} disabled={loading}>
                           <Download className="h-4 w-4 mr-1" /> CSV
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="ghost"
                           onClick={() => startEditing(subcycle)}
                           disabled={subcycle.source === "import" || loading || isEditorOpen}
@@ -409,6 +439,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
     </div>
   )
 }
+
 function FullTable({ subcycle, onClose }: { subcycle: Subcycle; onClose: () => void }) {
   const [currentPage, setCurrentPage] = useState(1)
   const ROWS_PER_PAGE = 100
@@ -448,7 +479,7 @@ function FullTable({ subcycle, onClose }: { subcycle: Subcycle; onClose: () => v
               </TableHeader>
               <TableBody>
                 {currentSteps.map((step: Step, i: number) => (
-                  <TableRow key={step.id ?? i}>  {/* Fallback key */}
+                  <TableRow key={step.id ?? i}> {/* Fallback key */}
                     <TableCell>{startIndex + i + 1}</TableCell>
                     <TableCell>{step.stepType === "trigger_only" ? "-" : step.duration}</TableCell>
                     <TableCell>{step.timestep}</TableCell>
