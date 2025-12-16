@@ -26,7 +26,7 @@ class Trigger(BaseModel):
 
 class Step(BaseModel):
     id: Optional[str] = None
-    duration: float = Field(..., gt=0, description="Duration in seconds (required for fixed steps)")
+    duration: float = Field(..., ge=0, description="Duration in seconds (0 allowed for trigger_only steps)")
     timestep: float = Field(..., gt=0, description="Timestep in seconds for data logging")
     valueType: str = Field(..., pattern="^(current|c_rate|voltage|power|resistance)$")
     value: float = Field(..., description="Target value (can be positive or negative)")
@@ -54,10 +54,16 @@ class SubcycleCreate(SubcycleBase):
     def validate_steps(cls, steps):
         if not steps:
             raise ValueError("Sub-cycle must have at least one step")
-        # Validate trigger_only steps have triggers
+        # Validate trigger_only steps have triggers and duration=0
         for step in steps:
-            if step.stepType == "trigger_only" and len(step.triggers) == 0:
-                raise ValueError("trigger_only steps must have at least one trigger")
+            if step.stepType == "trigger_only":
+                if len(step.triggers) == 0:
+                    raise ValueError("trigger_only steps must have at least one trigger")
+                if step.duration != 0:
+                    raise ValueError("trigger_only steps must have duration=0")
+            else:
+                if step.duration <= 0:
+                    raise ValueError("Non-trigger_only steps must have positive duration")
         return steps
 
 class Subcycle(SubcycleBase):

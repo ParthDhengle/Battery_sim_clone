@@ -49,7 +49,7 @@ export default function SimulationCycleViewer({
           globalIndex: values[0],
           dayOfYear: values[1],
           drivecycleId: values[2],
-          drivecycleTriggers: values[3],
+          subcycleTriggers: values[3],
           subcycleId: values[4],
           subcycleStepIndex: values[5],
           valueType: values[6],
@@ -85,14 +85,19 @@ export default function SimulationCycleViewer({
           drivecycleName: day.drivecycleName,
           globalIndex: globalIndex++,
           subcycleStepIndex: dayStepIndex++,
-          drivecycleTriggers: step.compositionTriggers || "", // if you ever add triggers at drivecycle level
+          subcycleTriggers: step.subcycleTriggers || "", 
         }
         return enrichedStep
       })
     })
   }, [simulationCycle])
   const totalSteps = allSteps.length
-  const totalDuration = allSteps.reduce((sum, step) => sum + (step.duration || 0), 0)
+  const round1 = (value: number) => Math.round(value * 10) / 10
+
+  const totalDuration = round1(
+    allSteps.reduce((sum, step) => sum + (step.duration || 0), 0)
+  )
+
   const totalPages = Math.ceil(totalSteps / ROWS_PER_PAGE)
   const paginatedSteps = allSteps.slice(
     (currentPage - 1) * ROWS_PER_PAGE,
@@ -149,15 +154,12 @@ export default function SimulationCycleViewer({
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Duration</p>
-            <p className="text-2xl font-bold">{totalDuration} s</p>
+            <p className="text-lg sm:text-xl font-bold truncate">{totalDuration} s</p>
           </CardContent>
         </Card>
       </div>
       {/* Export & View Full */}
-      <div className="flex gap-3">
-        <Button onClick={() => handleExport("json")} className="gap-2">
-          <Download className="h-4 w-4" /> Export JSON
-        </Button>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Button onClick={() => handleExport("csv")} variant="outline" className="gap-2">
           <Download className="h-4 w-4" /> Export CSV
         </Button>
@@ -165,7 +167,7 @@ export default function SimulationCycleViewer({
           {loading ? "Generating..." : "Generate & Save Table"}
         </Button>
         <Button onClick={() => { setShowFullTable(true); setCurrentPage(1) }} variant="secondary">
-          View Full Table ({totalSteps.toLocaleString()} steps)
+          View Full Table
         </Button>
       </div>
       {csvUrl && (
@@ -249,7 +251,7 @@ export default function SimulationCycleViewer({
                       <TableHead>Global Step Index</TableHead>
                       <TableHead>Day_of_year</TableHead>
                       <TableHead>DriveCycle_ID</TableHead>
-                      <TableHead>drive cycle trigger</TableHead>
+                      <TableHead>Subcycle Trigger(s)</TableHead>
                       <TableHead>Subcycle_ID</TableHead>
                       <TableHead>Subcycle Step Index</TableHead>
                       <TableHead>Value Type</TableHead>
@@ -270,7 +272,7 @@ export default function SimulationCycleViewer({
                         <TableCell className="font-mono">{step.globalIndex}</TableCell>
                         <TableCell>{step.dayOfYear}</TableCell>
                         <TableCell>{step.drivecycleId}</TableCell>
-                        <TableCell>{step.drivecycleTriggers || "-"}</TableCell>
+                        <TableCell>{step.subcycleTriggers || "-"}</TableCell>
                         <TableCell>{step.subcycleId || "-"}</TableCell>
                         <TableCell>{step.subcycleStepIndex}</TableCell>
                         <TableCell>{step.valueType}</TableCell>
@@ -330,7 +332,7 @@ function generateSimulationCycleCSV(steps: any[]) {
     "Global Step Index",
     "Day_of_year",
     "DriveCycle_ID",
-    "drive cycle trigger",
+    "Subcycle Trigger(s)",
     "Subcycle_ID",
     "Subcycle Step Index",
     "Value Type",
@@ -348,7 +350,7 @@ function generateSimulationCycleCSV(steps: any[]) {
     step.globalIndex,
     step.dayOfYear,
     step.drivecycleId || "",
-    step.drivecycleTriggers || "",
+    step.subcycleTriggers || "",
     step.subcycleId || "",
     step.subcycleStepIndex,
     step.valueType || "",
@@ -366,7 +368,7 @@ function generateSimulationCycleCSV(steps: any[]) {
   ].map(val => `"${val}"`).join(","))
   return [header, ...rows].join("\n")
 }
-// generateSimulationCycle remains unchanged (already correct)
+// generateSimulationCycle remains unchanged (already correct) - but update to set subcycleTriggers
 function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], subcycles: any[]) {
   if (calendarAssignment.length === 0 || drivecycles.length === 0) return []
   const defaultRule = calendarAssignment.find(rule => rule.id === 'DEFAULT_RULE')
@@ -399,7 +401,7 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
       for (const comp of drivecycle.composition) {
         const subcycle = subcycles.find((sc: any) => sc.id === comp.subcycleId)
         if (!subcycle) continue
-        const drivecycleRowTriggers = comp.triggers || []
+        const subcycleTriggers = comp.triggers || []
         for (let rep = 0; rep < comp.repetitions; rep++) {
           for (const step of subcycle.steps) {
             steps.push({
@@ -414,8 +416,8 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
               subcycleId: comp.subcycleId,
               ambientTemp: comp.ambientTemp,
               location: comp.location || "",
-              drivecycleTriggers: drivecycleRowTriggers.length > 0
-                ? drivecycleRowTriggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
+              subcycleTriggers: subcycleTriggers.length > 0
+                ? subcycleTriggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
                 : "",
             })
           }

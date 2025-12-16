@@ -1,3 +1,4 @@
+// FILE: Frontend/components/drivecycle/simulationcycle/calendar-rule-table.tsx
 "use client"
 
 import { Button } from "@/components/ui/button"
@@ -49,7 +50,7 @@ export default function CalendarRuleTable({ rules, onEdit, onDelete }: CalendarR
               </TableCell>
               <TableCell className="text-sm">{rule.months.map((m) => MONTH_NAMES[m - 1]).join(", ")}</TableCell>
               <TableCell className="text-sm">
-                {rule.daysOfWeek.length > 0 ? rule.daysOfWeek.join(", ") : rule.dates.join(", ")}
+                {rule.daysOfWeek.length > 0 ? rule.daysOfWeek.join(", ") : rule.dates.sort((a, b) => a - b).join(", ")}
               </TableCell>
               <TableCell className="text-sm">{rule.notes || "-"}</TableCell>
               <TableCell>
