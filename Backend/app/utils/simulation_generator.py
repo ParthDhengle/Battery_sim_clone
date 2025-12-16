@@ -14,18 +14,19 @@ async def generate_simulation_cycle(
     """
     calendar_assignments = sim_doc.get("calendar_assignments", []) # List[Rule]
     drive_cycles_meta = sim_doc.get("drive_cycles_metadata", []) # List[DriveCycleDefinition]
-   
+  
     # Map definitions for easy lookup
-    drive_cycle_map = {dc["name"]: dc for dc in drive_cycles_meta}
+    drive_cycle_map = {dc["id"]: dc for dc in drive_cycles_meta}
     # 1. Collect and Fetch SubCycles
     subcycle_ids = set()
     for dc in drive_cycles_meta:
-        subcycle_ids.update(dc["subcycle_ids"])
-    subcycles_cursor = db.subcycles.find({"_id": {"$in": list(subcycle_ids)}})
+        for row in dc.get("composition", []):
+            subcycle_ids.add(row["subcycleId"])
+    subcycles_cursor = db.subcycles.find({"_id": {"$in": list(subcycle_ids)}, "deleted_at": None})
     subcycles_map = {sc["_id"]: sc async for sc in subcycles_cursor}
     # Find default rule
     default_rule = next((r for r in calendar_assignments if r.get("id") == "DEFAULT_RULE"), None)
-    default_drivecycle_name = default_rule["drivecycleName"] if default_rule else "DC_IDLE" # Using Name in new schema
+    default_drivecycle_id = default_rule["drivecycleId"] if default_rule else "DC_IDLE" # Using ID in new schema
     simulation_cycle = []
     for day_of_year in range(1, 365): # 1 to 364
         matched_rule = None
@@ -44,38 +45,47 @@ async def generate_simulation_cycle(
             if month_match and day_match:
                 matched_rule = rule
                 break # First match wins
-        target_dc_name = matched_rule["drivecycleName"] if matched_rule else default_drivecycle_name
-       
-        dc_def = drive_cycle_map.get(target_dc_name)
-       
+        target_dc_id = matched_rule["drivecycleId"] if matched_rule else default_drivecycle_id
+      
+        dc_def = drive_cycle_map.get(target_dc_id)
+      
         day_steps = []
         if dc_def:
-             for sc_id in dc_def["subcycle_ids"]:
+             for row in dc_def.get("composition", []):
+                sc_id = row["subcycleId"]
                 subcycle = subcycles_map.get(sc_id)
                 if not subcycle: continue
-                for step in subcycle.get("steps", []):
-                    # Trigger logic (simplified for now, assuming subcycle steps have triggers)
-                    triggers_str = (
-                        "; ".join(f"{t['type']}:{t['value']}" for t in step.get("triggers", []))
-                        if step.get("triggers") else ""
-                    )
-                   
-                    day_steps.append({
-                        "valueType": step["valueType"],
-                        "value": step["value"],
-                        "unit": step["unit"],
-                        "duration": step["duration"],
-                        "timestep": step["timestep"],
-                        "stepType": step["stepType"],
-                        "triggers": step.get("triggers", []),
-                        "triggers_str": triggers_str,
-                        "label": step.get("label", ""),
-                        "subcycleId": sc_id,
-                        "subcycleName": subcycle.get("name", "")
-                    })
+                for rep in range(row["repetitions"]):
+                    for step in subcycle.get("steps", []):
+                        # Trigger logic (simplified for now, assuming subcycle steps have triggers)
+                        triggers_str = (
+                            "; ".join(f"{t['type']}:{t['value']}" for t in step.get("triggers", []))
+                            if step.get("triggers") else ""
+                        )
+                      
+                        day_steps.append({
+                            "valueType": step["valueType"],
+                            "value": step["value"],
+                            "unit": step["unit"],
+                            "duration": step["duration"],
+                            "timestep": step["timestep"],
+                            "stepType": step["stepType"],
+                            "triggers": step.get("triggers", []),
+                            "triggers_str": triggers_str,
+                            "label": step.get("label", ""),
+                            "subcycleId": sc_id,
+                            "subcycleName": subcycle.get("name", ""),
+                            "ambientTemp": row["ambientTemp"],
+                            "location": row["location"],
+                            "subcycleTriggers": (
+                                "; ".join(f"{t['type']}:{t['value']}" for t in row.get("triggers", []))
+                                if row.get("triggers") else ""
+                            )
+                        })
         simulation_cycle.append({
             "dayOfYear": day_of_year,
-            "drivecycleName": target_dc_name,
+            "drivecycleId": target_dc_id,
+            "drivecycleName": dc_def["name"] if dc_def else (default_rule["drivecycleName"] if default_rule else "DC_IDLE"),
             "steps": day_steps,
             "notes": matched_rule["notes"] if matched_rule else ("Default" if default_rule else "Idle")
         })
@@ -90,24 +100,24 @@ async def generate_simulation_csv(
     simulation_cycle = await generate_simulation_cycle(sim_doc, db)
     all_rows = []
     global_index = 1
-   
+  
     for day_data in simulation_cycle:
         day_num = day_data["dayOfYear"]
-        dc_name = day_data["drivecycleName"]
-       
+        dc_id = day_data["drivecycleId"]
+      
         subcycle_step_idx = 1
         current_subcycle_id = None
-       
+      
         for step in day_data["steps"]:
             if step["subcycleId"] != current_subcycle_id:
                 current_subcycle_id = step["subcycleId"]
                 subcycle_step_idx = 1
-           
+          
             row = {
                 "Global Step Index": global_index,
                 "Day_of_year": day_num,
-                "DriveCycle_ID": dc_name,
-                "drive cycle trigger": "",
+                "DriveCycle_ID": dc_id,
+                "drive cycle trigger": step["subcycleTriggers"],
                 "Subcycle_ID": step.get("subcycleName", step["subcycleId"]),
                 "Subcycle Step Index": subcycle_step_idx,
                 "Value Type": step["valueType"],
@@ -116,8 +126,8 @@ async def generate_simulation_csv(
                 "Step Type": step["stepType"],
                 "Step Duration (s)": step["duration"],
                 "Timestep (s)": step["timestep"],
-                "Ambient Temp (°C)": 25,
-                "Location": "Lab",
+                "Ambient Temp (°C)": step["ambientTemp"],
+                "Location": step["location"],
                 "step Trigger(s)": step["triggers_str"],
                 "Label": step["label"]
             }
@@ -133,7 +143,7 @@ async def generate_simulation_csv(
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=header)
     writer.writeheader()
-   
+  
     for row in all_rows:
         writer.writerow(row)
     return output.getvalue()

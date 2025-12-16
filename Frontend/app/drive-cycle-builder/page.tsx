@@ -1,6 +1,7 @@
 // FILE: Frontend/app/drive-cycle-builder/page.tsx
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import SubcycleLibrary from "@/components/drivecycle/subcycle/subcycle-library"
 import DriveCycleBuilder from "@/components/drivecycle/drivecycle/drivecycle-builder"
 import CalendarAssignment from "@/components/drivecycle/simulationcycle/calendar-assignment"
@@ -10,16 +11,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createSimulationCycle } from "@/lib/api/drive-cycle"
+import { createSimulationCycle, get_simulation_cycle, updateSimulationSubcycles, saveDriveCycles, saveCalendarAssignments } from "@/lib/api/drive-cycle"
+import { Drivecycle } from "@/components/drivecycle/drivecycle/drivecycle-builder"
+import { CalendarRule } from "@/components/drivecycle/simulationcycle/calendar-types"
 export default function Home() {
+  const searchParams = useSearchParams()
+  const existingSimId = searchParams.get("simId")
   const [subcycles, setSubcycles] = useState<any[]>([])
-  const [drivecycles, setDrivecycles] = useState<any[]>([])
-  const [calendarAssignment, setCalendarAssignment] = useState<any[]>([])
+  const [drivecycles, setDrivecycles] = useState<Drivecycle[]>([])
+  const [calendarAssignment, setCalendarAssignment] = useState<CalendarRule[]>([])
   const [simulationCycle, setSimulationCycle] = useState<any[]>([])
-  const [simId, setSimId] = useState<string | null>(null)
+  const [simId, setSimId] = useState<string | null>(existingSimId || null)
   const [simName, setSimName] = useState("")
   const [simDesc, setSimDesc] = useState("")
   const [isCreatingSim, setIsCreatingSim] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState("subcycles")
+  useEffect(() => {
+    if (existingSimId && !simId) {
+      loadExistingSimulation(existingSimId)
+    }
+  }, [existingSimId])
+  const loadExistingSimulation = async (id: string) => {
+    try {
+      const sim = await get_simulation_cycle(id)
+      setSimId(id)
+      setSimName(sim.name)
+      setSimDesc(sim.description || "")
+      // Load subcycles
+      setSubcycles(sim.subcycle_ids.map((sid: string) => ({ id: sid }))) // Fetch full if needed
+      // Load drivecycles from metadata
+      setDrivecycles(sim.drive_cycles_metadata.map((dc: any) => ({
+        id: dc.id,
+        name: dc.name,
+        notes: dc.notes || "",
+        source: "manual" as const,
+        composition: dc.composition
+      })))
+      // Load calendar
+      setCalendarAssignment(sim.calendar_assignments)
+      // Set active tab based on completeness
+      if (sim.drive_cycles_metadata.length > 0 && sim.calendar_assignments.length > 0) {
+        setActiveTab("simulation")
+      } else if (sim.drive_cycles_metadata.length > 0) {
+        setActiveTab("calendar")
+      } else {
+        setActiveTab("drivecycles")
+      }
+    } catch (err) {
+      alert("Failed to load simulation")
+      window.location.href = "/library/drive-cycles"
+    }
+  }
   const handleCreateSimulation = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!simName) return
@@ -27,10 +70,26 @@ export default function Home() {
     try {
       const sim = await createSimulationCycle({ name: simName, description: simDesc })
       setSimId(sim.id)
+      setActiveTab("subcycles")
     } catch (err) {
       alert("Failed to create simulation")
     } finally {
       setIsCreatingSim(false)
+    }
+  }
+  const handleSaveAndExit = async () => {
+    if (!simId) return
+    setIsSaving(true)
+    try {
+      // Save all data
+      await updateSimulationSubcycles(simId, subcycles.map(s => s.id))
+      await saveDriveCycles(simId, drivecycles)
+      await saveCalendarAssignments(simId, calendarAssignment)
+      window.location.href = "/library/drive-cycles"
+    } catch (err) {
+      alert("Failed to save")
+    } finally {
+      setIsSaving(false)
     }
   }
   // Initial Setup View
@@ -85,19 +144,13 @@ export default function Home() {
               <code className="text-xs bg-muted px-1 rounded ml-2 text-muted-foreground">{simId}</code>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => {
-            if (confirm("Exit current simulation? Unsaved changes may be lost.")) {
-              setSimId(null);
-              setSimName("");
-              setSimDesc("");
-            }
-          }}>
-            Exit Simulation
+          <Button variant="outline" size="sm" onClick={handleSaveAndExit} disabled={isSaving}>
+            {isSaving ? "Saving..." : "Save and Exit"}
           </Button>
         </div>
       </header>
       <main className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="subcycles" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4 mb-8">
             <TabsTrigger value="subcycles">1. Sub-cycles</TabsTrigger>
             <TabsTrigger value="drivecycles">2. Drive Cycles</TabsTrigger>
@@ -111,6 +164,7 @@ export default function Home() {
                   subcycles={subcycles}
                   onSubcyclesChange={setSubcycles}
                   simId={simId}
+                  simName={simName}  // Pass for ID generation
                 />
               </CardContent>
             </Card>

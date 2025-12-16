@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CalendarDays, Download, Pencil, Trash2 } from "lucide-react"
+import { CalendarDays, Download, Pencil, Trash2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { list_simulation_cycles } from "@/lib/api/drive-cycle"
+import { Badge } from "@/components/ui/badge"
+import { list_simulation_cycles, delete_simulation_cycle } from "@/lib/api/drive-cycle"
 type DriveCycleConfig = {
   id: string;
   name: string;
@@ -14,6 +15,8 @@ type DriveCycleConfig = {
   driveCycles: number; // Count for summary
   calendarRules: number; // Count for summary
   created_at: string;
+  simulation_table_path?: string | null;
+  deleted_at?: string | null;
 };
 export default function DriveCycles() {
   const [driveCycles, setDriveCycles] = useState<DriveCycleConfig[]>([]);
@@ -30,32 +33,40 @@ export default function DriveCycles() {
         subCycles: c.subcycle_ids.length,
         driveCycles: c.drive_cycles_metadata.length,
         calendarRules: c.calendar_assignments.length,
-        created_at: c.created_at
+        created_at: c.created_at,
+        simulation_table_path: c.simulation_table_path,
+        deleted_at: c.deleted_at
       }));
-      setDriveCycles(formatted);
+      setDriveCycles(formatted.filter(c => !c.deleted_at));
     } catch (err) {
       setError("Failed to load drive cycles");
     }
   };
   const handleDelete = async (cycleId: string) => {
-    if (confirm('Are you sure you want to delete this drive cycle?')) {
+    if (confirm('Are you sure you want to delete this drive cycle? It will be permanently removed after 30 days.')) {
       try {
-        // Implement delete endpoint if needed
+        await delete_simulation_cycle(cycleId)
         loadDriveCycles();
       } catch (err) {
         alert('Failed to delete drive cycle');
       }
     }
   };
-  const exportDriveCycle = (dc: DriveCycleConfig) => {
-    const dataStr = JSON.stringify(dc, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${dc.name.replace(/\s+/g, '_')}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const handleDownload = async (config: DriveCycleConfig) => {
+    if (!config.simulation_table_path) return
+    try {
+      const res = await fetch(`http://localhost:8000${config.simulation_table_path}`)
+      if (!res.ok) throw new Error("Download failed")
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${config.id}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert("Download failed")
+    }
   };
   return (
     <div className="space-y-8 p-6">
@@ -97,8 +108,15 @@ export default function DriveCycles() {
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span className="truncate">{dc.name}</span>
-                  <CalendarDays className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  {dc.simulation_table_path ? (
+                    <Badge variant="default" className="bg-green-100 text-green-800">Complete</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> Incomplete
+                    </Badge>
+                  )}
                 </CardTitle>
+                <CardDescription>{new Date(dc.created_at).toLocaleDateString()}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -122,9 +140,12 @@ export default function DriveCycles() {
                       Edit
                     </Button>
                   </Link>
-                  <Button variant="outline" size="sm" onClick={() => exportDriveCycle(dc)}>
-                    <Download className="w-3 h-3" />
-                  </Button>
+                  {dc.simulation_table_path && (
+                    <Button variant="outline" size="sm" onClick={() => handleDownload(dc)}>
+                      <Download className="w-3 h-3 mr-1" />
+                      Download CSV
+                    </Button>
+                  )}
                   <Button variant="destructive" size="sm" onClick={() => handleDelete(dc.id)}>
                     <Trash2 className="w-3 h-3" />
                   </Button>

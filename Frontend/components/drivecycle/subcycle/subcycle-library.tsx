@@ -1,8 +1,5 @@
 // Updated FILE: Frontend/components/drivecycle/subcycle/subcycle-library.tsx
-// Only the handleSave function is modified for robustness in handling create response.
-// This ensures the subcycle ID is always a valid string before updating the simulation.
-// The double-fetch is now mandatory after create to guarantee consistency and avoid adding invalid IDs.
-
+// Pass simName for ID generation in create
 "use client"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -19,7 +16,7 @@ import { Subcycle, SubcycleLibraryProps, Step, Trigger } from "./types"
 import { updateSimulationSubcycles, getSubcycles, createSubcycle, updateSubcycle, getSubcycle } from "@/lib/api/drive-cycle"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }: SubcycleLibraryProps) {
+export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId, simName }: SubcycleLibraryProps & { simName?: string }) {
   const [isCreating, setIsCreating] = useState(false)
   const [isAddingExisting, setIsAddingExisting] = useState(false)
   const [editingSubcycle, setEditingSubcycle] = useState<Subcycle | null>(null)
@@ -136,7 +133,7 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId }:
         onSubcyclesChange(subcycles.map(s => s.id === savedSubcycle.id ? savedSubcycle : s))
       } else {
         // Updated logic: Always fetch after create to ensure full, consistent data and valid ID
-        const createdSubcycle = await createSubcycle(payload)
+        const createdSubcycle = await createSubcycle(payload, simName)  // Pass simName
         if (!createdSubcycle || !createdSubcycle.id || typeof createdSubcycle.id !== 'string') {
           throw new Error("Failed to create subcycle: invalid or missing ID in server response")
         }

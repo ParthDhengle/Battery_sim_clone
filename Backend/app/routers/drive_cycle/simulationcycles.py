@@ -12,21 +12,21 @@ async def generate_simulation_table(sim_id: str):
     Generates full simulation cycle CSV using exact frontend logic
     and saves it to app/upload/simulation_cycle/{sim_id}.csv
     """
-    sim = await db.simulation_cycles.find_one({"_id": sim_id})
+    sim = await db.simulation_cycles.find_one({"_id": sim_id, "deleted_at": None})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
     # Generate CSV using ported frontend logic
     csv_content = await generate_simulation_csv(sim, db)
     # Save to local upload directory
-    upload_dir = os.getenv("UPLOAD_DIR", "app/upload/simulation_cycle")
+    upload_dir = os.getenv("UPLOAD_DIR", "app/uploads/simulation_cycle")
     os.makedirs(upload_dir, exist_ok=True)
     file_path = f"{upload_dir}/{sim_id}.csv"
     # Use async file write
     await save_csv_async(sim_id, csv_content)
     # Update simulation document with path
-    relative_path = f"/static/uploads/simulation_cycle/{sim_id}.csv"
+    relative_path = f"/uploads/simulation_cycle/{sim_id}.csv"
     await db.simulation_cycles.update_one(
-        {"_id": sim_id},
+        {"_id": sim_id, "deleted_at": None},
         {"$set": {"simulation_table_path": relative_path}}
     )
     # Optional: return basic stats
