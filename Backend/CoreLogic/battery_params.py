@@ -2,93 +2,120 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 import json
 import os
-def create_mock_battery_data():
-    temps = ['T05', 'T15', 'T25', 'T35', 'T45', 'T55']
-    soc_points = np.linspace(0, 1, 11)
-    data = {}
-    for mode in ['CHARGE', 'DISCHARGE']:
-        data[mode] = {}
-        for temp in temps:
-            grid = np.zeros((len(soc_points), 7))
-            grid[:, 0] = soc_points  # SOC
-            grid[:, 1] = 2.5 + soc_points * 1.7  # OCV
-            grid[:, 2] = 0.02  # R0
-            grid[:, 3] = 0.01  # R1
-            grid[:, 4] = 0.01  # R2
-            grid[:, 5] = 1000  # C1
-            grid[:, 6] = 10000 # C2
-            data[mode][temp] = grid
-    return data
+import pandas as pd
+from scipy.io import loadmat  # For MAT files
 
-def load_battery_data(filename):
-    with open(filename, 'r') as f:
-        data = json.load(f)
-    # Convert lists to numpy arrays for compatibility with the rest of your code
+def load_cell_rc_data(file_path: str, rc_pair_type: str = 'rc2') -> dict:
+    """
+    Load RC parameters from cell's uploaded file (JSON/CSV/MAT).
+    Returns: {'CHARGE': {'T05': np.array([[SOC], [OCV], [R0], [R1], [R2], [C1], [C2]]), ...},
+              'DISCHARGE': ...}
+    Assumes 2RC (ignores extra for 'rc3').
+    """
+    if not os.path.exists(file_path):
+        raise ValueError(f"RC file not found: {file_path}")
+    
+    ext = os.path.splitext(file_path)[1].lower()
+    data = {}
+    
+    if ext == '.json':
+        with open(file_path, 'r') as f:
+            raw = json.load(f)
+        for mode in ['CHARGE', 'DISCHARGE']:
+            data[mode] = {}
+            for temp_key in raw.get(mode, {}):
+                grid_list = raw[mode][temp_key]  # [[SOC], [OCV], [R0], ...]
+                grid = np.array(grid_list).T  # Shape: (n_SOC, 7)
+                data[mode][temp_key] = grid
+    
+    elif ext == '.csv':
+        df = pd.read_csv(file_path)
+        # Assume columns: Mode, Temp, SOC, OCV, R0, R1, R2, C1, C2
+        for mode in df['Mode'].unique():
+            mode_df = df[df['Mode'] == mode]
+            temps = sorted(mode_df['Temp'].unique())
+            soc_points = sorted(mode_df['SOC'].unique())
+            for temp in temps:
+                temp_df = mode_df[mode_df['Temp'] == temp].sort_values('SOC')
+                if len(temp_df) != len(soc_points):
+                    raise ValueError(f"Incomplete data for {mode} at {temp}°C")
+                grid = np.zeros((len(soc_points), 7))
+                grid[:, 0] = temp_df['SOC'].values  # SOC
+                grid[:, 1] = temp_df['OCV'].values  # OCV
+                grid[:, 2] = temp_df['R0'].values   # R0
+                grid[:, 3] = temp_df['R1'].values   # R1
+                grid[:, 4] = temp_df['R2'].values   # R2
+                grid[:, 5] = temp_df['C1'].values   # C1
+                grid[:, 6] = temp_df['C2'].values   # C2
+                data.setdefault(mode, {})[f"T{int(temp):02d}"] = grid
+    
+    elif ext == '.mat':
+        mat = loadmat(file_path)
+        # Assume struct: data.CHARGE.T05.SOC, data.CHARGE.T05.OCV, etc.
+        for mode in ['CHARGE', 'DISCHARGE']:
+            data[mode] = {}
+            for temp_key in [k for k in mat if mode.lower() in k.lower() and 'T' in k]:
+                temp_data = mat[temp_key]
+                # Flatten: assume [SOC, OCV, R0, R1, R2, C1, C2] x n_SOC
+                grid = temp_data.T  # Adjust shape if needed
+                data[mode][temp_key] = grid
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+    
+    # Validate: All modes/temps have consistent SOC grid
+    soc_ref = next(iter(next(iter(data.values())).__iter__()))[:, 0]
     for mode in data:
         for temp in data[mode]:
-            data[mode][temp] = np.array(data[mode][temp])
+            if not np.allclose(data[mode][temp][:, 0], soc_ref):
+                raise ValueError(f"Inconsistent SOC grid in {file_path}")
+    
     return data
 
-# Assuming files are in same directory as script
-base_path = os.path.dirname(__file__)
- 
-BatteryData_SOH1 = create_mock_battery_data()
-BatteryData_SOH2 = create_mock_battery_data()
-BatteryData_SOH3 = create_mock_battery_data()
-
-def get_battery_params(SOC, cell_temp_C, mode, SOH, DCIR_aging_factor, BatteryData_SOH1, BatteryData_SOH2, BatteryData_SOH3):
-    # Select SOH dataset
+def get_battery_params(cell_rc_data: dict, SOC: float, cell_temp_C: float, mode: str, SOH: float, DCIR_aging_factor: float):
+    """
+    Interpolate OCV/R0/R1/R2/C1/C2 for a cell using its RC data.
+    Applies SOH (selects grid) and DCIR aging to resistances.
+    Warns on invalid values.
+    """
     if SOH >= 0.9:
-        BatteryData = BatteryData_SOH1
+        soh_key = 'SOH1'  # Assume data has SOH variants; extend if needed
     elif SOH >= 0.8:
-        BatteryData = BatteryData_SOH2
+        soh_key = 'SOH2'
     else:
-        BatteryData = BatteryData_SOH3
-
-    # Select mode
+        soh_key = 'SOH3'
+    # If no SOH variants, use base; TODO: extend for real SOH grids
+    base_data = cell_rc_data
     if mode.upper() == 'CHARGE':
-        Data_Temp = BatteryData['CHARGE']
+        data_temp = base_data['CHARGE']
     elif mode.upper() == 'DISCHARGE':
-        Data_Temp = BatteryData['DISCHARGE']
+        data_temp = base_data['DISCHARGE']
     else:
         raise ValueError('Invalid mode. Use "CHARGE" or "DISCHARGE".')
-
-    # Extract grids
-    temp_keys = ['T05', 'T15', 'T25', 'T35', 'T45', 'T55']
-    temp_vals = [5, 15, 25, 35, 45, 55]
+    
+    temp_keys = sorted([k for k in data_temp], key=lambda k: int(k[1:]))  # T05, T15,...
+    temp_vals = [int(k[1:]) for k in temp_keys]
+    soc_grid = data_temp[temp_keys[0]][:, 0]
+    
+    # Build grids for each param (col 1-6: OCV, R0, R1, R2, C1, C2)
     parameter_grids = []
-
     for col in range(1, 7):
-        grid = np.stack([Data_Temp[temp][:, col] for temp in temp_keys], axis=1)
-        parameter_grids.append(grid)
-
-    SOC_grid = Data_Temp['T05'][:, 0]
-    Temp_grid = np.array(temp_vals)
-
-    # Interpolators
-    def make_interp(grid):
-        return RegularGridInterpolator((SOC_grid, Temp_grid), grid, bounds_error=False, fill_value=None)
-
-    OCV = make_interp(parameter_grids[0])((SOC, cell_temp_C))
-    R0 = make_interp(parameter_grids[1])((SOC, cell_temp_C))
-    R1 = make_interp(parameter_grids[2])((SOC, cell_temp_C))
-    R2 = make_interp(parameter_grids[3])((SOC, cell_temp_C))
-    C1 = make_interp(parameter_grids[4])((SOC, cell_temp_C))
-    C2 = make_interp(parameter_grids[5])((SOC, cell_temp_C))
+        grid = np.stack([data_temp[temp][:, col] for temp in temp_keys], axis=1)
+        interp = RegularGridInterpolator((soc_grid, np.array(temp_vals)), grid, bounds_error=False, fill_value=None)
+        param = interp((SOC, cell_temp_C))
+        parameter_grids.append(param)
+    
+    OCV, R0, R1, R2, C1, C2 = parameter_grids
+    
     # Apply aging
     R0 *= DCIR_aging_factor
     R1 *= DCIR_aging_factor
     R2 *= DCIR_aging_factor
-
-    # Warnings (same as original)
-    def warn_if_negative(val, name):
-        if val < 0:
-            print(f"Warning: {name} is negative ({val:.4f}) at SOC={SOC:.4f}, T={cell_temp_C:.2f}°C")
-
+    
+    # Warnings
     for val, name in zip([OCV, R0, R1, R2, C1, C2], ['OCV', 'R0', 'R1', 'R2', 'C1', 'C2']):
-        warn_if_negative(val, name)
-
+        if val < 0:
+            print(f"Warning: {name} negative ({val:.4f}) at SOC={SOC:.4f}, T={cell_temp_C:.2f}°C")
     if OCV < 2.5 or OCV > 4.2:
-        print(f"Warning: OCV ({OCV:.4f} V) out of expected range at SOC={SOC:.4f}, T={cell_temp_C:.2f}°C")
-
+        print(f"Warning: OCV out of range ({OCV:.4f}V) at SOC={SOC:.4f}")
+    
     return OCV, R0, R1, R2, C1, C2
