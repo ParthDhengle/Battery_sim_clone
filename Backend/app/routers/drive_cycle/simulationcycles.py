@@ -6,7 +6,6 @@ import os
 import aiofiles
 from io import StringIO
 from motor.motor_asyncio import AsyncIOMotorDatabase
-
 DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 async def generate_simulation_cycle(
@@ -19,7 +18,7 @@ async def generate_simulation_cycle(
     """
     calendar_assignments = sim_doc.get("calendar_assignments", []) # List[Rule]
     drive_cycles_meta = sim_doc.get("drive_cycles_metadata", []) # List[DriveCycleDefinition]
-  
+ 
     # Map definitions for easy lookup
     drive_cycle_map = {dc["id"]: dc for dc in drive_cycles_meta}
     # 1. Collect and Fetch SubCycles
@@ -51,9 +50,9 @@ async def generate_simulation_cycle(
                 matched_rule = rule
                 break # First match wins
         target_dc_id = matched_rule["drivecycleId"] if matched_rule else default_drivecycle_id
-      
+    
         dc_def = drive_cycle_map.get(target_dc_id)
-      
+    
         day_steps = []
         if dc_def:
              for row in dc_def.get("composition", []):
@@ -67,7 +66,7 @@ async def generate_simulation_cycle(
                             "; ".join(f"{t['type']}:{t['value']}" for t in step.get("triggers", []))
                             if step.get("triggers") else ""
                         )
-                      
+                    
                         day_steps.append({
                             "valueType": step["valueType"],
                             "value": step["value"],
@@ -102,19 +101,19 @@ def generate_simulation_cycle_csv(simulation_cycle: List[Dict[str, Any]]) -> str
     """
     all_rows = []
     global_index = 1
-  
+ 
     for day_data in simulation_cycle:
         day_num = day_data["dayOfYear"]
         dc_id = day_data["drivecycleId"]
-      
+    
         subcycle_step_idx = 1
         current_subcycle_id = None
-      
+    
         for step in day_data["steps"]:
             if step["subcycleId"] != current_subcycle_id:
                 current_subcycle_id = step["subcycleId"]
                 subcycle_step_idx = 1
-          
+        
             row = [
                 global_index,
                 day_num,
@@ -136,26 +135,26 @@ def generate_simulation_cycle_csv(simulation_cycle: List[Dict[str, Any]]) -> str
             all_rows.append(row)
             global_index += 1
             subcycle_step_idx += 1
-    
+ 
     header = [
         "Global Step Index", "Day_of_year", "DriveCycle_ID", "drive cycle trigger",
         "Subcycle_ID", "Subcycle Step Index", "Value Type", "Value", "Unit",
         "Step Type", "Step Duration (s)", "Timestep (s)", "Ambient Temp (°C)",
         "Location", "step Trigger(s)", "Label"
     ]
-    
+ 
     # Manual CSV construction to match frontend exactly
     def escape_csv_value(val):
         str_val = str(val).strip()
         if '"' in str_val:
             str_val = str_val.replace('"', '""')
         return f'"{str_val}"'
-    
+ 
     csv_lines = [",".join(header)]
     for row in all_rows:
         csv_line = ",".join(escape_csv_value(cell) for cell in row)
         csv_lines.append(csv_line)
-    
+ 
     return "\n".join(csv_lines)
 
 async def save_csv_async(sim_id: str, csv_data: str) -> str:
@@ -166,9 +165,12 @@ async def save_csv_async(sim_id: str, csv_data: str) -> str:
         await f.write(csv_data)
     return f"/uploads/simulation_cycle/{sim_id}.csv"
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/simulation-cycles",  # ← ADD THIS PREFIX
+    tags=["Simulation Cycles Generate"],  # Optional: for docs
+)
 
-@router.post("/{sim_id}/generate", response_model=Dict)
+@router.post("/{sim_id}/generate", response_model=Dict)  # ← sim_id → sim_id (consistent)
 async def generate_simulation_table(sim_id: str):
     """
     Generates full simulation cycle CSV using exact frontend logic

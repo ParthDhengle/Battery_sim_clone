@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import cells, packs, simulations
-from app.routers.drive_cycle import subcycles, manager # Add manager import
+from app.routers.drive_cycle import subcycles, manager, simulationcycles  # ← ADD simulationcycles
 from app.config import client, db
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta
@@ -34,24 +34,24 @@ scheduler = AsyncIOScheduler()
 async def cleanup_deleted():
     """Delete cells and packs that have been soft-deleted for more than 30 days"""
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-  
+ 
     cells_result = await db.cells.delete_many({
         "deleted_at": {"$lt": thirty_days_ago, "$ne": None}
     })
-  
+ 
     packs_result = await db.packs.delete_many({
         "deleted_at": {"$lt": thirty_days_ago, "$ne": None}
     })
-  
+ 
     # Add simulation_cycles and subcycles cleanup
     sim_cycles_result = await db.simulation_cycles.delete_many({
         "deleted_at": {"$lt": thirty_days_ago, "$ne": None}
     })
-  
+ 
     subcycles_result = await db.subcycles.delete_many({
         "deleted_at": {"$lt": thirty_days_ago, "$ne": None}
     })
-  
+ 
     print(f"Cleaned up {cells_result.deleted_count} old deleted cells")
     print(f"Cleaned up {packs_result.deleted_count} old deleted packs")
     print(f"Cleaned up {sim_cycles_result.deleted_count} old deleted simulation cycles")
@@ -74,6 +74,7 @@ app.include_router(packs.router)
 app.include_router(simulations.router)
 app.include_router(subcycles.router)
 app.include_router(manager.router) # Add manager router
+app.include_router(simulationcycles.router)  # ← ADD THIS LINE
 @app.get("/")
 async def root():
     return {
