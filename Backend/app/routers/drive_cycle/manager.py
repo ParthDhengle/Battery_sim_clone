@@ -8,19 +8,25 @@ from datetime import datetime
 import uuid
 import random
 from app.utils.soft_delete import soft_delete_item
+from copy import deepcopy  # Added for deep copy in patching
+
 def generate_custom_id(prefix: str, timestamp: str, suffix: str = None) -> str:
     """Generate meaningful ID: prefix_timestamp_random"""
     random_num = f"{random.randint(1000, 9999):04d}"
     return f"{prefix}_{timestamp}_{random_num}"
+
 class SubcycleIdsUpdate(BaseModel):
     subcycle_ids: List[str]
+
 class CalendarUpdate(BaseModel):
     calendar_assignments: List[Dict]
+
 router = APIRouter(
     prefix="/simulation-cycles",
     tags=["Simulation Cycles"],
     responses={404: {"description": "Not found"}},
 )
+
 @router.post("/", response_model=SimulationCycle)
 async def create_simulation_cycle(sim_data: SimulationCycleCreate):
     """
@@ -33,15 +39,16 @@ async def create_simulation_cycle(sim_data: SimulationCycleCreate):
     new_sim["created_at"] = datetime.utcnow()
     new_sim["updated_at"] = datetime.utcnow()
     new_sim["deleted_at"] = None
- 
     await db.simulation_cycles.insert_one(new_sim)
     return SimulationCycle.model_validate(new_sim)
+
 @router.get("/{id}", response_model=SimulationCycle)
 async def get_simulation_cycle(id: str):
     sim = await db.simulation_cycles.find_one({"_id": id, "deleted_at": None})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     return SimulationCycle.model_validate(sim)
+
 @router.put("/{id}/subcycles", response_model=SimulationCycle)
 async def update_simulation_subcycles(id: str, data: SubcycleIdsUpdate = Body(...)):
     """
@@ -57,7 +64,7 @@ async def update_simulation_subcycles(id: str, data: SubcycleIdsUpdate = Body(..
         existing = await db.subcycles.find({"_id": {"$in": list(unique_ids)}, "deleted_at": None}).to_list(None)
         existing_set = {doc["_id"] for doc in existing}
         missing = unique_ids - existing_set
-        print(f"Missing subcycle IDs in validation: {missing}") # Debug log
+        print(f"Missing subcycle IDs in validation: {missing}")  # Debug log
         raise HTTPException(status_code=400, detail=f"One or more Subcycle IDs are invalid: {list(missing)}")
     # 2. Update
     result = await db.simulation_cycles.find_one_and_update(
@@ -73,18 +80,23 @@ async def update_simulation_subcycles(id: str, data: SubcycleIdsUpdate = Body(..
     if not result:
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     return SimulationCycle.model_validate(result)
+
 @router.put("/{id}/drive-cycles", response_model=SimulationCycle)
 async def update_drive_cycles(id: str, definitions: List[DriveCycleDefinition] = Body(...)):
     """
     Update the list of Drive Cycle Definitions with full composition.
     Validates that all SubCycle IDs exist.
     """
+    # Ensure each definition has an ID (generate if missing for legacy/partial data)
+    for defn in definitions:
+        if not defn.id:
+            defn.id = f"DC_{uuid.uuid4().hex[:8].upper()}"
+    
     # Verify subcycle IDs
     all_sub_ids = set()
     for d in definitions:
         for row in d.composition:
             all_sub_ids.add(row.subcycleId)
- 
     # Check distinct IDs existence in DB
     count = await db.subcycles.count_documents({"_id": {"$in": list(all_sub_ids)}, "deleted_at": None})
     if count != len(all_sub_ids):
@@ -102,12 +114,26 @@ async def update_drive_cycles(id: str, definitions: List[DriveCycleDefinition] =
     if not result:
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     return SimulationCycle.model_validate(result)
+
 @router.put("/{id}/calendar", response_model=SimulationCycle)
 async def update_calendar(id: str, data: CalendarUpdate = Body(...)):
     """
     Update calendar assignments (Rules).
+    Ensure IDs and validate basics (patch legacy).
     """
     assignments = data.calendar_assignments
+    # Deep copy to avoid mutating input
+    assignments = deepcopy(assignments)
+    # Patch missing IDs and fix invalid empty filters for legacy data
+    for i, rule in enumerate(assignments):
+        if 'id' not in rule or not rule['id']:
+            rule['id'] = f"RULE_{i+1}"
+        # Fix empty daysOfWeek and dates (explicit len check)
+        if len(rule.get('daysOfWeek', [])) == 0 and len(rule.get('dates', [])) == 0:
+            rule['daysOfWeek'] = ['Mon']  # Default; adjust as needed
+        # Debug print (remove after testing)
+        print(f"Calendar patch {i}: daysOfWeek={rule.get('daysOfWeek')}, dates={rule.get('dates')}")
+    
     result = await db.simulation_cycles.find_one_and_update(
         {"_id": id, "deleted_at": None},
         {
@@ -121,6 +147,7 @@ async def update_calendar(id: str, data: CalendarUpdate = Body(...)):
     if not result:
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     return SimulationCycle.model_validate(result)
+
 @router.post("/{id}/generate")
 async def generate_simulation_table(id: str):
     """
@@ -133,10 +160,10 @@ async def generate_simulation_table(id: str):
         raise HTTPException(status_code=404, detail="Simulation Cycle not found")
     try:
         csv_content = await generate_simulation_csv(sim, db)
-     
+   
         # Save file with custom name
         relative_path = await save_csv_async(id, csv_content)
-     
+   
         # Update record with path
         await db.simulation_cycles.update_one(
             {"_id": id, "deleted_at": None},
@@ -145,7 +172,7 @@ async def generate_simulation_table(id: str):
                 "updated_at": datetime.utcnow()
             }}
         )
-     
+   
         return {
             "message": "Simulation table generated successfully",
             "path": relative_path,
@@ -155,10 +182,32 @@ async def generate_simulation_table(id: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
 @router.get("/", response_model=List[SimulationCycle])
 async def list_simulation_cycles():
     cycles = await db.simulation_cycles.find({"deleted_at": None}).to_list(100)
-    return [SimulationCycle.model_validate(c) for c in cycles]
+    # Patch legacy data before validation (deep copy for safety)
+    patched_cycles = []
+    for cycle in cycles:
+        c = deepcopy(cycle)  # Deep copy to safely mutate nested
+        # Patch drive_cycles_metadata
+        for i, dc in enumerate(c.get('drive_cycles_metadata', [])):
+            if 'id' not in dc or not dc['id']:
+                dc['id'] = f"DC_{i+1}"
+        # Patch calendar_assignments
+        for i, rule in enumerate(c.get('calendar_assignments', [])):
+            if 'id' not in rule or not rule['id']:
+                rule['id'] = f"RULE_{i+1}"
+            # Fix empty both (explicit len check for robustness)
+            if len(rule.get('daysOfWeek', [])) == 0 and len(rule.get('dates', [])) == 0:
+                rule['daysOfWeek'] = ['Mon']  # Default to avoid validation error
+            # Debug print (remove after testing)
+            print(f"List patch cycle {c.get('_id', 'unknown')} rule {i}: before daysOfWeek={rule.get('daysOfWeek')}, dates={rule.get('dates')}")
+            print(f"List patch ... after: daysOfWeek={rule.get('daysOfWeek')}, dates={rule.get('dates')}")
+        patched_cycles.append(c)
+    # Now validate
+    return [SimulationCycle.model_validate(c) for c in patched_cycles]
+
 @router.delete("/{id}", status_code=204)
 async def delete_simulation_cycle(id: str):
     """

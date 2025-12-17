@@ -8,66 +8,100 @@ import { CalendarDays, Download, Pencil, Trash2, AlertCircle } from "lucide-reac
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { list_simulation_cycles, delete_simulation_cycle } from "@/lib/api/drive-cycle"
+
 type DriveCycleConfig = {
   id: string;
   name: string;
-  subCycles: number; // Count for summary
-  driveCycles: number; // Count for summary
-  calendarRules: number; // Count for summary
+  subCycles: number;
+  driveCycles: number;
+  calendarRules: number;
   created_at: string;
   simulation_table_path?: string | null;
   deleted_at?: string | null;
 };
+
 export default function DriveCycles() {
   const [driveCycles, setDriveCycles] = useState<DriveCycleConfig[]>([]);
   const [error, setError] = useState('');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);  // Track delete loading
+
   useEffect(() => {
     loadDriveCycles();
   }, []);
+
   const loadDriveCycles = async () => {
     try {
       const cycles = await list_simulation_cycles();
-      const formatted = cycles.map(c => ({
-        id: c.id,
-        name: c.name,
-        subCycles: c.subcycle_ids.length,
-        driveCycles: c.drive_cycles_metadata.length,
-        calendarRules: c.calendar_assignments.length,
-        created_at: c.created_at,
-        simulation_table_path: c.simulation_table_path,
-        deleted_at: c.deleted_at
-      }));
-      setDriveCycles(formatted.filter(c => !c.deleted_at));
+      console.log('Raw cycles from API:', cycles);  // Debug: Check raw structure
+      const formatted = cycles
+        .filter(c => (c.id || c._id) && typeof (c.id || c._id) === 'string')  // Fallback to _id
+        .map(c => {
+          const simId = c.id || c._id;  // Ensure ID is set
+          return {
+            id: simId,
+            name: c.name || 'Unnamed',
+            subCycles: c.subcycle_ids?.length || 0,
+            driveCycles: c.drive_cycles_metadata?.length || 0,
+            calendarRules: c.calendar_assignments?.length || 0,
+            created_at: c.created_at || new Date().toISOString(),
+            simulation_table_path: c.simulation_table_path,
+            deleted_at: c.deleted_at
+          };
+        });
+      console.log('Formatted cycles:', formatted);  // Debug: Check IDs
+      const activeCycles = formatted.filter(c => c.deleted_at == null);  // Robust filter
+      console.log('Active cycles count:', activeCycles.length);
+      setDriveCycles(activeCycles);
     } catch (err) {
+      console.error('Load error:', err);
       setError("Failed to load drive cycles");
     }
   };
+
   const handleDelete = async (cycleId: string) => {
+    if (!cycleId || cycleId === 'undefined' || cycleId === null || cycleId === '') {
+      console.error("Invalid cycleId for delete:", cycleId);
+      return;  // Silent: No alert, just log
+    }
     if (confirm('Are you sure you want to delete this drive cycle? It will be permanently removed after 30 days.')) {
+      setIsDeleting(cycleId);  // Show loading
       try {
-        await delete_simulation_cycle(cycleId)
-        loadDriveCycles();
+        await delete_simulation_cycle(cycleId);
+        await loadDriveCycles();  // Reload list
+        console.log('Deleted:', cycleId);
       } catch (err) {
-        alert('Failed to delete drive cycle');
+        console.error('Delete error:', err);
+        alert('Failed to delete drive cycle. Please try again.');
+      } finally {
+        setIsDeleting(null);
       }
     }
   };
+
   const handleDownload = async (config: DriveCycleConfig) => {
-    if (!config.simulation_table_path) return
+    if (!config.simulation_table_path) {
+      alert('No file available for download');
+      return;
+    }
     try {
-      const res = await fetch(`http://localhost:8000${config.simulation_table_path}`)
-      if (!res.ok) throw new Error("Download failed")
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${config.id}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      alert("Download failed")
+      const res = await fetch(`http://localhost:8000${config.simulation_table_path}`);
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${config.id}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      console.log('Downloaded:', config.id);
+    } catch (err: any) {
+      console.error('Download error:', err);
+      alert(`Download failed: ${err.message}`);
     }
   };
+
+  const validCycles = driveCycles.filter(dc => dc.id);  // Final safety filter
+
   return (
     <div className="space-y-8 p-6">
       <div className="flex justify-between items-center">
@@ -90,21 +124,26 @@ export default function DriveCycles() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {driveCycles.length === 0 ? (
+      {validCycles.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Saved Drive Cycles</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground text-center py-8">
+          <CardContent className="text-center py-8">
+            <p className="text-muted-foreground">
               No drive cycles saved yet. Create your first drive cycle to get started.
             </p>
+            <Button asChild className="mt-4">
+              <Link href="/drive-cycle-builder">
+                Create First Drive Cycle
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {driveCycles.map((dc) => (
-            <Card key={dc.id} className="hover:shadow-lg transition-shadow">
+          {validCycles.map((dc, index) => (
+            <Card key={dc.id || `card-${index}`} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span className="truncate">{dc.name}</span>
@@ -141,13 +180,29 @@ export default function DriveCycles() {
                     </Button>
                   </Link>
                   {dc.simulation_table_path && (
-                    <Button variant="outline" size="sm" onClick={() => handleDownload(dc)}>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleDownload(dc)}
+                      className="flex-1"
+                    >
                       <Download className="w-3 h-3 mr-1" />
-                      Download CSV
+                      Download
                     </Button>
                   )}
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(dc.id)}>
-                    <Trash2 className="w-3 h-3" />
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={() => handleDelete(dc.id)}
+                    disabled={isDeleting === dc.id}
+                    className="flex-1"
+                  >
+                    {isDeleting === dc.id ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3 h-3 mr-1" />
+                    )}
+                    Delete
                   </Button>
                 </div>
               </CardContent>
