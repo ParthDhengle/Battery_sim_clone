@@ -45,20 +45,26 @@ export default function SimulationCycleViewer({
       setLoading(false)
     }
   }
-  // Flatten all steps with global index and subcycle step index
+  // Flatten all steps with global index and subcycle step index (reset per subcycle)
   const allSteps = useMemo(() => {
     let globalIndex = 1
+    let currentSubcycleId: string | null = null
+    let subcycleStepIndex = 1
     return simulationCycle.flatMap(day => {
-      let dayStepIndex = 1
+      currentSubcycleId = null
+      subcycleStepIndex = 1
       return (day.steps || []).map((step: any) => {
+        if (step.subcycleId !== currentSubcycleId) {
+          currentSubcycleId = step.subcycleId
+          subcycleStepIndex = 1
+        }
         const enrichedStep = {
           ...step,
           dayOfYear: day.dayOfYear,
           drivecycleId: day.drivecycleId,
           drivecycleName: day.drivecycleName,
           globalIndex: globalIndex++,
-          subcycleStepIndex: dayStepIndex++,
-          subcycleTriggers: step.subcycleTriggers || "", 
+          subcycleStepIndex: subcycleStepIndex++,
         }
         return enrichedStep
       })
@@ -83,16 +89,16 @@ export default function SimulationCycleViewer({
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = "simulation-cycle.json"
+      a.download = `${simId}_simulation-cycle.json`
       a.click()
       URL.revokeObjectURL(url)
     } else {
-      const csv = generateSimulationCycleCSV(allSteps)
+      const csv = generateSimulationCycleCSV(allSteps, simId)
       const blob = new Blob([csv], { type: "text/csv" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = "simulation-cycle.csv"
+      a.download = `${simId}_simulation-cycle.csv`
       a.click()
       URL.revokeObjectURL(url)
     }
@@ -217,7 +223,7 @@ export default function SimulationCycleViewer({
                       <TableHead>Global Step Index</TableHead>
                       <TableHead>Day_of_year</TableHead>
                       <TableHead>DriveCycle_ID</TableHead>
-                      <TableHead>Subcycle Trigger(s)</TableHead>
+                      <TableHead>drive cycle trigger</TableHead>
                       <TableHead>Subcycle_ID</TableHead>
                       <TableHead>Subcycle Step Index</TableHead>
                       <TableHead>Value Type</TableHead>
@@ -239,7 +245,7 @@ export default function SimulationCycleViewer({
                         <TableCell>{step.dayOfYear}</TableCell>
                         <TableCell>{step.drivecycleId}</TableCell>
                         <TableCell>{step.subcycleTriggers || "-"}</TableCell>
-                        <TableCell>{step.subcycleId || "-"}</TableCell>
+                        <TableCell>{step.subcycleName || step.subcycleId || "-"}</TableCell>
                         <TableCell>{step.subcycleStepIndex}</TableCell>
                         <TableCell>{step.valueType}</TableCell>
                         <TableCell>{step.value}</TableCell>
@@ -292,13 +298,13 @@ function formatDuration(seconds: number): string {
     .filter(Boolean)
     .join(" ") || "0s"
 }
-// Updated CSV Export - EXACT column order and labels
-function generateSimulationCycleCSV(steps: any[]) {
+// Updated CSV Export - EXACT column order and labels to match backend, no extra spacing
+function generateSimulationCycleCSV(steps: any[], simId: string) {
   const header = [
     "Global Step Index",
     "Day_of_year",
     "DriveCycle_ID",
-    "Subcycle Trigger(s)",
+    "drive cycle trigger",
     "Subcycle_ID",
     "Subcycle Step Index",
     "Value Type",
@@ -317,7 +323,7 @@ function generateSimulationCycleCSV(steps: any[]) {
     step.dayOfYear,
     step.drivecycleId || "",
     step.subcycleTriggers || "",
-    step.subcycleId || "",
+    step.subcycleName || step.subcycleId || "",
     step.subcycleStepIndex,
     step.valueType || "",
     step.value || "",
@@ -331,10 +337,10 @@ function generateSimulationCycleCSV(steps: any[]) {
       ? step.triggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
       : "",
     (step.label || "").replace(/"/g, '""')
-  ].map(val => `"${val}"`).join(","))
+  ].map(val => `"${String(val).trim()}"`).join(","))
   return [header, ...rows].join("\n")
 }
-// generateSimulationCycle remains unchanged (already correct) - but update to set subcycleTriggers
+// generateSimulationCycle - updated to include subcycleName
 function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], subcycles: any[]) {
   if (calendarAssignment.length === 0 || drivecycles.length === 0) return []
   const defaultRule = calendarAssignment.find(rule => rule.id === 'DEFAULT_RULE')
@@ -380,6 +386,7 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
               triggers: step.triggers || [],
               label: step.label || "",
               subcycleId: comp.subcycleId,
+              subcycleName: subcycle.name || comp.subcycleId, // Added
               ambientTemp: comp.ambientTemp,
               location: comp.location || "",
               subcycleTriggers: subcycleTriggers.length > 0

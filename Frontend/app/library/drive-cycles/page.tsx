@@ -8,6 +8,7 @@ import { CalendarDays, Download, Pencil, Trash2, AlertCircle } from "lucide-reac
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { list_simulation_cycles, delete_simulation_cycle } from "@/lib/api/drive-cycle"
+import { Loader2 } from "lucide-react";
 
 type DriveCycleConfig = {
   id: string;
@@ -84,15 +85,20 @@ export default function DriveCycles() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:8000${config.simulation_table_path}`);
+      // Add cache buster to ensure latest file
+      const timestamp = Date.now();
+      const url = `http://localhost:8000${config.simulation_table_path}?t=${timestamp}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`Download failed: ${res.status}`);
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const downloadUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = downloadUrl;
       a.download = `${config.id}.csv`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
       console.log('Downloaded:', config.id);
     } catch (err: any) {
       console.error('Download error:', err);
