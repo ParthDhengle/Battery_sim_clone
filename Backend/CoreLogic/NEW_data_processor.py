@@ -1,15 +1,20 @@
+# FILE: Backend/CoreLogic/NEW_data_processor.py
 import numpy as np
-from CoreLogic.geometry import init_geometry
-from CoreLogic.classify_cells import init_classify_cells
-from CoreLogic.initial_conditions import init_initial_cell_conditions
-from CoreLogic.busbar_connections import define_busbar_connections
-from CoreLogic.battery_params import BatteryData_SOH1, BatteryData_SOH2, BatteryData_SOH3
+from .geometry import init_geometry
+from .classify_cells import init_classify_cells
+from .initial_conditions import init_initial_cell_conditions
+from .busbar_connections import define_busbar_connections
 import pandas as pd
 
-def create_setup_from_configs(pack: dict, drive_df: pd.DataFrame, sim: dict):
-    
+def create_setup_from_configs(pack: dict, dc_table: pd.DataFrame, sim_config: dict):
+    """Create setup from pack, new DC table (df), and sim config."""
+    # Geometry and classification
     cells = init_geometry(pack)
     layers = pack['layers']
+    # Assign rc_data to each cell (identical)
+    rc_data = pack['cell'].get('rc_data')
+    for cell in cells:
+        cell['rc_data'] = rc_data
     form_factor = pack['meta']['formFactor']
     capacity = pack['cell']['capacity']
     columbic_efficiency = pack['cell']['columbic_efficiency']
@@ -20,47 +25,42 @@ def create_setup_from_configs(pack: dict, drive_df: pd.DataFrame, sim: dict):
     voltage_limits['cell_upper'] = pack['cell']['cell_voltage_upper_limit']
     voltage_limits['cell_lower'] = pack['cell']['cell_voltage_lower_limit']
     masses = {'cell': pack['cell']['m_cell'], 'jellyroll': pack['cell']['m_jellyroll']}
-    
-    # Extract initial conditions from pack JSON
+
+    # Initial conditions
     initial_conditions = pack.get('initial_conditions', {})
     initial_temperature = initial_conditions.get('temperature', 300.0)
     initial_SOC = initial_conditions.get('soc', 1.0)
     initial_SOH = initial_conditions.get('soh', 1.0)
     initial_DCIR_AgingFactor = initial_conditions.get('dcir_aging_factor', 1.0)
-    
-    # UPDATED: Build label-to-index mapping
-    label_to_index = {}
-    for idx, cell in enumerate(cells):
-        cell['global_index'] = idx  # 0-based
-        label_to_index[cell.get('label', '')] = idx
-    
-    # UPDATED: Convert cell_ids (labels) to indices for varying_conditions
+
+    # Build label-to-index mapping for varying_conditions
+    label_to_index = {cell.get('label', ''): idx for idx, cell in enumerate(cells)}
+
     varying_cells_indices = []
     varying_temps = []
     varying_SOCs = []
     varying_SOHs = []
     varying_DCIRs = []
-    
+
     for vc in initial_conditions.get('varying_conditions', []):
         cell_ids = vc.get('cell_ids', [])
         indices = [label_to_index.get(cid) for cid in cell_ids if cid in label_to_index]
-        
-        if indices:  # Only add if we found valid indices
-            # Add each index separately (as original function expects)
+        if indices:
             for idx in indices:
                 varying_cells_indices.append(idx)
                 varying_temps.append(vc.get('temperature', initial_temperature))
                 varying_SOCs.append(vc.get('soc', initial_SOC))
                 varying_SOHs.append(vc.get('soh', initial_SOH))
                 varying_DCIRs.append(vc.get('dcir_aging_factor', initial_DCIR_AgingFactor))
-    
-    # Initialize cell conditions
+
+    # Classify cells per layer
     for layer_idx, layer in enumerate(layers, 1):
         layer_cells = [c for c in cells if c['layer_index'] == layer_idx]
         init_classify_cells(layer_cells, layer['n_rows'], layer['n_cols'])
-    
+
     print(f"Initialized {len(cells)} cells across {len(layers)} layers with form factor '{form_factor}'.")
-  
+
+    # Set initial conditions
     cells = init_initial_cell_conditions(
         cells,
         initial_temperature,
@@ -73,19 +73,18 @@ def create_setup_from_configs(pack: dict, drive_df: pd.DataFrame, sim: dict):
         varying_SOHs if varying_SOHs else None,
         varying_DCIRs if varying_DCIRs else None
     )
-    
-    time_gap=sim['simulation_frequency']
-  
+
+    time_gap = sim_config.get('simulation_frequency', 1.0)
+
+    # Busbar connections
     cells, parallel_groups = define_busbar_connections(cells, layers, connection_type)
     print(f"Defined {len(parallel_groups)} parallel groups based on connection type '{connection_type}'.")
-    
-    time = drive_df['Time'].values
-    I_module = drive_df['Current'].values
-    time_steps = len(time)
-    print(f"Drive cycle loaded from CSV with {time_steps} time steps over {time[-1]:.1f} seconds.")
-  
-    V_term_test = np.zeros(time_steps)
-  
+
+    # DC table is already loaded as df
+    print(f"Drive cycle table loaded with {len(dc_table)} steps over {dc_table['Day_of_year'].max()} days.")
+
+    # No time/I_module arrays; solver loops over rows
+
     return {
         'cells': cells,
         'capacity': capacity,
@@ -99,17 +98,7 @@ def create_setup_from_configs(pack: dict, drive_df: pd.DataFrame, sim: dict):
             'module_upper': voltage_limits['module_upper'],
             'module_lower': voltage_limits['module_lower'] or np.nan
         },
-        'masses': {
-            'cell': masses['cell'],
-            'jellyroll': masses['jellyroll']
-        },
-        'time': time,
-        'I_module': I_module,
-        'V_term_test': V_term_test,
-        'time_steps': time_steps,
-        'BatteryData_SOH1': BatteryData_SOH1,
-        'BatteryData_SOH2': BatteryData_SOH2,
-        'BatteryData_SOH3': BatteryData_SOH3,
-
-        'Frequency':time_gap
+        'masses': masses,
+        'dc_table': dc_table,  # Pass df directly
+        'Frequency': time_gap
     }
