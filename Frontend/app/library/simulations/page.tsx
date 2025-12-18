@@ -185,9 +185,9 @@ export default function Simulations() {
                       <span className="text-muted-foreground block text-[10px]">Cap Fade</span>
                       <p className="font-bold text-sm flex items-center gap-1">
                         <TrendingDown className="w-3 h-3" />
-                        {sim.summary.capacity_fade !== undefined
-                          ? sim.summary.capacity_fade.toFixed(2) + "%"
-                          : "—"}
+                        {sim.summary?.capacity_fade != null
+                        ? sim.summary.capacity_fade.toFixed(2) + "%"
+                        : "—"}
                       </p>
                     </div>
                   </div>

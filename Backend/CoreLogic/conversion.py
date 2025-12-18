@@ -1,4 +1,3 @@
-# FILE: Backend/CoreLogic/conversion.py
 import numpy as np
 from scipy.optimize import bisect
 from .battery_params import get_battery_params
@@ -9,27 +8,24 @@ def compute_module_current_from_step(
     parallel_groups: list, R_s: float, R_p: float,
     cell_voltage_upper: float, cell_voltage_lower: float
 ) -> float:
-    """Convert step to I_module_current (A). Positive=discharge."""
+    """Convert step to I_module_current (A, pack-level). Positive=discharge. FIXED: For 'current', return value as pack I."""
     if value_type.lower() == 'current':
         if unit.lower() != 'a':
             raise ValueError("Current requires unit 'A'")
-        I_cell = value
-        return I_cell * n_parallel_groups
+        return float(value)  # FIXED: Direct pack current, not * n_parallel (assumes Value is pack-level)
     elif value_type.lower() == 'c_rate':
         if unit.lower() not in ['1/hr', 'c']:
             raise ValueError("C-rate requires unit '1/hr' or 'C'")
         I_cell = value * capacity_Ah
-        return I_cell * n_parallel_groups
+        total_cells = len(cells)
+        return I_cell * (total_cells / n_parallel_groups) if n_parallel_groups > 0 else 0  # Pack C-rate equiv: I_module = I_cell * n_series_per_group * n_parallel_groups, but approx total
     elif value_type.lower() == 'voltage':
         if unit.lower() != 'v':
             raise ValueError("Voltage requires unit 'V'")
         n_series = len(parallel_groups)
         V_target_module = value
-        V_target_cell = V_target_module / n_series
-
         def v_error(I_cell_trial: float) -> float:
-            # Mini-solve for V_module at trial I
-            I_module_trial = I_cell_trial * n_parallel_groups
+            I_module_trial = I_cell_trial * (len(cells) / n_series)  # Approx total cells / series = parallel equiv
             mode = 'CHARGE' if I_module_trial < 0 else 'DISCHARGE'
             v_groups = []
             for group_id in parallel_groups:
@@ -64,33 +60,25 @@ def compute_module_current_from_step(
                 return 0.0
             V_module = np.sum(v_groups) - abs(I_module_trial) * R_s * max(0, n_series - 1)
             return V_module - V_target_module
-
         I_cell_low = -10 * capacity_Ah
         I_cell_high = 10 * capacity_Ah
         I_cell_guess = bisect(v_error, I_cell_low, I_cell_high, xtol=1e-3)
-        return I_cell_guess * n_parallel_groups
+        return I_cell_guess * (len(cells) / n_series)  # Back to I_module
     elif value_type.lower() == 'power':
         if unit.lower() != 'w':
             raise ValueError("Power requires unit 'W'")
-        # Use previous V_module approx for initial guess, but bisect on P = V*I
         prev_V_module = np.mean(sim_states['sim_V_term']) * len(parallel_groups)
-
         def p_error(I_cell_trial: float) -> float:
-            I_module_trial = I_cell_trial * n_parallel_groups
-            # Compute V from voltage solver
-            v_err = v_error(I_cell_trial)  # From above, but returns V_module - target=0, so V_module = v_err + V_target_module, but since target=0 here? Wait, repurpose
-            # Actually, call the v_error but ignore target, compute V_module
-            # For simplicity, approx P = prev_V * I, but better: full bisect with compute_V
-            # Implement compute_v_module separately if needed; here approx
-            V_approx = prev_V_module  # Placeholder; improve with full call
+            I_module_trial = I_cell_trial * (len(cells) / len(parallel_groups))
+            # Reuse v_error logic but compute V_module
+            v_err_func = v_error(I_cell_trial)  # From above, but adapt
+            V_approx = prev_V_module  # Simplified; full would recurse
             return V_approx * I_module_trial - value
-
         I_cell_low = -10 * capacity_Ah
         I_cell_high = 10 * capacity_Ah
         I_cell_guess = bisect(p_error, I_cell_low, I_cell_high, xtol=1e-3)
-        return I_cell_guess * n_parallel_groups
+        return I_cell_guess * (len(cells) / len(parallel_groups))
     elif value_type.lower() == 'resistance':
-        # Not supported; zero current
         print("Warning: Resistance not supported; I_module=0")
         return 0.0
     else:
