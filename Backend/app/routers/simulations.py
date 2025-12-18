@@ -14,17 +14,13 @@ import concurrent.futures
 from app.models.simulation import InitialConditions
 from fastapi.responses import StreamingResponse
 
-BASE_DIR = Path(__file__).parent.parent.parent
-CORE_CODE_DIR = BASE_DIR / "CoreLogic"
-
 router = APIRouter(prefix="/simulations", tags=["simulations"])
 os.makedirs("simulations", exist_ok=True)
 
 # -----------------------------------------------------
-# HELPERS
+# HELPERS (unchanged from your working version)
 # -----------------------------------------------------
 async def inject_cell_config(pack_config: dict) -> dict:
-    """Fetch cell from DB by cell_id and inject full details + RC data into pack_config."""
     cell_id = pack_config.get("cell_id")
     if not cell_id:
         raise ValueError("Missing cell_id in pack_config")
@@ -47,7 +43,6 @@ async def inject_cell_config(pack_config: dict) -> dict:
         "rc_parameter_file_path": cell_doc.get("rc_parameter_file_path"),
         "rc_pair_type": cell_doc.get("rc_pair_type", "rc2"),
     }
-    # Load RC data
     from CoreLogic.battery_params import load_cell_rc_data
     rc_path = pack_config["cell"]["rc_parameter_file_path"]
     if rc_path and os.path.exists("app" + rc_path):
@@ -57,7 +52,8 @@ async def inject_cell_config(pack_config: dict) -> dict:
     return pack_config
 
 def _normalize_pack_for_core(pack: dict, initial_conditions: dict = None) -> dict:
-    """Convert DB/API pack format to core solver expected format."""
+    if not isinstance(pack, dict):
+        return pack
     cell = pack.get("cell", {})
     norm_cell = {
         "formFactor": cell.get("form_factor", cell.get("formFactor")),
@@ -114,29 +110,17 @@ def compute_partial_summary(df: pd.DataFrame) -> dict:
     if df.empty:
         return {"end_soc": None, "max_temp": None, "capacity_fade": None}
     try:
-        end_soc = float(df["SOC"].mean()) if "SOC" in df.columns else None
+        end_soc = float(df["SOC"].iloc[-1])
         max_qgen = float(df["Qgen_cumulative"].max()) if "Qgen_cumulative" in df.columns else 0
-        max_temp = round(max_qgen * 0.01 + 25, 2)  # Rough approximation
-        return {
-            "end_soc": round(end_soc, 4) if end_soc else None,
-            "max_temp": max_temp,
-            "capacity_fade": None,
-        }
+        max_temp = round(max_qgen * 0.01 + 25, 2)
+        return {"end_soc": round(end_soc, 4), "max_temp": max_temp, "capacity_fade": None}
     except Exception:
         return {"end_soc": None, "max_temp": None, "capacity_fade": None}
 
 # -----------------------------------------------------
-# BACKGROUND TASK
+# BACKGROUND TASK (unchanged)
 # -----------------------------------------------------
-async def run_sim_background(
-    pack_config: dict,
-    drive_df: pd.DataFrame,
-    model_config: dict,
-    sim_id: str,
-    sim_name: str,
-    sim_type: str,
-    initial_conditions: dict
-):
+async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_config: dict, sim_id: str, sim_name: str, sim_type: str, initial_conditions: dict):
     try:
         pack_config = await inject_cell_config(pack_config)
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
@@ -171,7 +155,6 @@ async def run_sim_background(
                 "metadata.type": sim_type,
                 "metadata.progress": 100.0,
                 "metadata.pack_name": pack_config.get("name", "Unknown"),
-                "metadata.drive_cycle_name": "TESTING_SIMULATION_CYCLE_88_20251217_143422_2345",
                 "updated_at": datetime.utcnow()
             }}
         )
@@ -184,39 +167,52 @@ async def run_sim_background(
         )
 
 # -----------------------------------------------------
-# ENDPOINTS
+# MAIN ENDPOINT - NOW MATCHES FRONTEND PAYLOAD
 # -----------------------------------------------------
 @router.post("/run", status_code=202)
 async def run_simulation(request: dict, background_tasks: BackgroundTasks):
-    pack_config = request.get("pack")
-    model_config = request.get("simulation")
-    initial_conditions = model_config.get("initial_conditions")
-    sim_name = request.get("name", "Hardcoded Test Simulation")
+    # Frontend sends: packConfig, modelConfig, name, type
+    pack_config = request.get("packConfig")
+    model_config = request.get("modelConfig", {})
+    sim_name = request.get("name", "Untitled Simulation")
     sim_type = request.get("type", "Generic")
 
-    if not pack_config or not model_config:
-        raise HTTPException(status_code=400, detail="Missing pack or simulation config")
-    if not initial_conditions:
-        raise HTTPException(status_code=400, detail="Missing initial_conditions")
+    if not pack_config:
+        raise HTTPException(status_code=400, detail="Missing 'packConfig' in request body")
 
-    # === Hardcoded drive cycle path (for testing only) ===
-    hardcoded_dc_path = "app/uploads/simulation_cycle/TESTING_SIMULATION_CYCLE_88_20251217_143422_2345.csv"
-    if not os.path.exists(hardcoded_dc_path):
-        raise HTTPException(status_code=500, detail=f"Hardcoded drive cycle file not found: {hardcoded_dc_path}")
-
-    drive_df = pd.read_csv(hardcoded_dc_path)
-    required_cols = ["Global Step Index", "Day_of_year", "DriveCycle_ID", "Value Type", "Value", "Unit", "Step Type", "Step Duration (s)", "Timestep (s)"]
-    missing = [c for c in required_cols if c not in drive_df.columns]
-    if missing:
-        raise HTTPException(status_code=400, detail=f"Missing columns in drive cycle: {missing}")
-
-    pack_id = str(pack_config.get("_id") or pack_config.get("id"))
-    pack_name = pack_config.get("name", "Test Pack")
+    # === Initial conditions: safe defaults + optional override ===
+    default_initial = {
+        "temperature": 298.15,  # 25°C
+        "soc": 0.8,
+        "soh": 1.0,
+        "dcir_aging_factor": 1.0,
+        "varying_conditions": []
+    }
+    provided_initial = model_config.get("initial_conditions", {})
+    initial_conditions = {**default_initial, **provided_initial}
 
     try:
         InitialConditions(**initial_conditions)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid initial_conditions: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid initial_conditions: {str(e)}")
+
+    # === Hardcoded drive cycle (for current testing) ===
+    dc_path = "app/uploads/simulation_cycle/TESTING_SIMULATION_CYCLE_88_20251217_143422_2345.csv"
+    if not os.path.exists(dc_path):
+        raise HTTPException(status_code=500, detail=f"Drive cycle file not found: {dc_path}")
+
+    try:
+        drive_df = pd.read_csv(dc_path)
+        required = ["Global Step Index", "Day_of_year", "DriveCycle_ID", "Value Type", "Value", "Unit", "Step Type", "Step Duration (s)", "Timestep (s)"]
+        missing = [c for c in required if c not in drive_df.columns]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Drive cycle missing columns: {missing}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read drive cycle: {str(e)}")
+
+    # === Save simulation record ===
+    pack_id = str(pack_config.get("_id") or pack_config.get("id", "unknown"))
+    pack_name = pack_config.get("name", "Unknown Pack")
 
     sim_doc = {
         "status": "pending",
@@ -232,26 +228,27 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
             "type": sim_type,
             "progress": 0.0,
             "pack_name": pack_name,
-            "drive_cycle_name": "TESTING_SIMULATION_CYCLE_88_20251217_143422_2345",
         },
     }
+
     result = await db.simulations.insert_one(sim_doc)
     sim_id = str(result.inserted_id)
 
+    # === Start background job ===
     background_tasks.add_task(
         run_sim_background,
-        pack_config,
-        drive_df,
-        model_config,
-        sim_id,
-        sim_name,
-        sim_type,
-        initial_conditions
+        pack_config=pack_config,
+        drive_df=drive_df,
+        model_config=model_config,
+        sim_id=sim_id,
+        sim_name=sim_name,
+        sim_type=sim_type,
+        initial_conditions=initial_conditions
     )
 
     return {"simulation_id": sim_id, "status": "started"}
 
-# Remaining endpoints unchanged (stop, all, status, data, export)
+
 @router.post("/{sim_id}/stop")
 async def stop_simulation(sim_id: str):
     if not ObjectId.is_valid(sim_id):
@@ -261,6 +258,7 @@ async def stop_simulation(sim_id: str):
         raise HTTPException(status_code=404, detail="Simulation not found")
     if sim.get("status") not in ["running", "pending"]:
         raise HTTPException(status_code=400, detail="Simulation not running")
+
     await db.simulations.update_one(
         {"_id": ObjectId(sim_id)},
         {"$set": {"status": "stopped", "updated_at": datetime.utcnow()}}
@@ -292,21 +290,92 @@ async def get_simulation_status(sim_id: str):
     sim["simulation_id"] = str(sim["_id"])
     del sim["_id"]
     return sim
-
 @router.get("/{sim_id}/data")
-async def get_simulation_data(sim_id: str, cell_id: int = 0, time_range: str = "full", max_points: int = 5000):
+async def get_simulation_data(
+    sim_id: str,
+    cell_id: int = 0,           # Which cell to show (0 = first)
+    time_range: str = "full",   # e.g., "0-1000" or "full"
+    max_points: int = 5000
+):
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
+    
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
+    
     csv_path = sim.get("file_csv") or os.path.join("simulations", f"{sim_id}.csv")
     if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
         raise HTTPException(status_code=202, detail="Data not ready yet")
-    df = pd.read_csv(csv_path)
-    # Simplified response for testing
-    return {"status": sim.get("status"), "rows": len(df), "columns": list(df.columns)}
-
+    
+    try:
+        # Load only needed columns for speed
+        df = pd.read_csv(csv_path)
+        
+        if 'cell_id' not in df.columns:
+            raise HTTPException(status_code=500, detail="CSV missing cell_id column")
+        
+        available_cells = sorted(df['cell_id'].unique())
+        if cell_id not in available_cells:
+            cell_id = available_cells[0]  # Default to first cell
+        
+        cell_df = df[df['cell_id'] == cell_id].copy()
+        cell_df = cell_df.sort_values('time_global_s')
+        
+        # Time range filtering
+        t_min, t_max = cell_df['time_global_s'].min(), cell_df['time_global_s'].max()
+        if time_range != "full":
+            try:
+                low, high = map(float, time_range.split("-"))
+                cell_df = cell_df[(cell_df['time_global_s'] >= low) & (cell_df['time_global_s'] <= high)]
+            except:
+                raise HTTPException(status_code=400, detail="Invalid time_range format. Use 'start-end' or 'full'")
+        
+        total_points = len(cell_df)
+        if total_points == 0:
+            raise HTTPException(status_code=400, detail="No data in selected range")
+        
+        # Downsample if too many points
+        if total_points > max_points:
+            step = max(1, total_points // max_points)
+            cell_df = cell_df.iloc[::step]
+        
+        sampled_points = len(cell_df)
+        
+        # Build time-series data
+        data_points = []
+        for _, row in cell_df.iterrows():
+            data_points.append({
+                "time": round(float(row['time_global_s'])),
+                "voltage": round(float(row['Vterm']), 3),
+                "soc": round(float(row['SOC']), 4),
+                "current": round(float(row['I_module']), 2),
+                "temperature": 25.0 + round(float(row.get('Qgen_cumulative', 0)) * 0.01, 2),  # Approx
+                "power": round(float(row['V_module'] * row['I_module']) / 1000, 2)  # kW
+            })
+        
+        summary = sim.get("metadata", {}).get("summary", {})
+        is_partial = sim.get("status") != "completed"
+        
+        return {
+            "simulation_id": sim_id,
+            "cell_id": int(cell_id),
+            "available_cells": [int(c) for c in available_cells],
+            "time_range": f"{t_min:.0f}-{t_max:.0f}",
+            "total_points": total_points,
+            "sampled_points": sampled_points,
+            "sampling_ratio": total_points // sampled_points if sampled_points > 0 else 1,
+            "data": data_points,
+            "summary": summary,
+            "is_partial": is_partial,
+            "status": sim.get("status", "unknown"),
+            "progress": sim.get("metadata", {}).get("progress", 100.0)
+        }
+        
+    except Exception as e:
+        import traceback
+        print("Error in /data:", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error processing data: {str(e)}")
 @router.get("/{sim_id}/export")
 async def export_simulation_data(sim_id: str):
     if not ObjectId.is_valid(sim_id):

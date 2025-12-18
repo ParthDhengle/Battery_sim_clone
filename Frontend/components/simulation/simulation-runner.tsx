@@ -36,6 +36,10 @@ export function SimulationRunner({
     setLogs([])
     setError("")
     setCompleted(false)
+    console.log("Pack config: \n")
+    console.log(packConfig)
+    console.log("simulation config: \n")
+    console.log(simulationConfig)
 
     try {
       // Step 1: Initialize
