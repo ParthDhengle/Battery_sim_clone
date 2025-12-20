@@ -1,5 +1,5 @@
 # FILE: Backend/app/models/subcycle.py
-from pydantic import BaseModel, Field, field_validator  # Updated import: field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Optional
 from datetime import datetime
 
@@ -43,7 +43,7 @@ class Step(BaseModel):
 class SubcycleBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Unique name of the sub-cycle")
     description: Optional[str] = Field(default="", max_length=500)
-    source: str = Field(..., pattern="^(manual|import)$", description="How the sub-cycle was created")
+    source: str = Field(..., pattern="^(manual|import|import_file)$", description="How the sub-cycle was created")
     steps: List[Step] = Field(default=[], description="List of steps in the sub-cycle")
 
 class SubcycleCreate(SubcycleBase):
@@ -74,6 +74,8 @@ class Subcycle(SubcycleBase):
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
+    num_steps: Optional[int] = Field(default=None, description="Number of steps (for large imports)")
+    total_duration: Optional[float] = Field(default=None, description="Total duration in seconds (for large imports)")
 
     class Config:
         from_attributes = True

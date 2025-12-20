@@ -40,6 +40,8 @@ async def inject_cell_config(pack_config: dict) -> dict:
         "cell_volume": cell_doc.get("cell_volume", 0.0),
         "rc_parameter_file_path": cell_doc.get("rc_parameter_file_path"),
         "rc_pair_type": cell_doc.get("rc_pair_type", "rc2"),
+        # FIXED: Add missing cell_nominal_voltage (default 3.7V if absent)
+        "cell_nominal_voltage": cell_doc.get("cell_nominal_voltage", 3.7),
     }
     from CoreLogic.battery_params import load_cell_rc_data
     rc_path = pack_config["cell"]["rc_parameter_file_path"]
@@ -62,6 +64,8 @@ def _normalize_pack_for_core(pack: dict, initial_conditions: dict = None) -> dic
         "m_jellyroll": float(cell.get("m_jellyroll", 0) or 0),
         "cell_voltage_upper_limit": float(cell.get("cell_voltage_upper_limit", 0) or 0),
         "cell_voltage_lower_limit": float(cell.get("cell_voltage_lower_limit", 0) or 0),
+        # FIXED: Propagate cell_nominal_voltage to normalized cell
+        "cell_nominal_voltage": float(cell.get("cell_nominal_voltage", 3.7) or 3.7),
         "rc_data": cell.get("rc_data"),
     }
     layers = []
@@ -222,7 +226,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
                 raise ValueError(f"Hardcoded CSV invalid: missing {missing} and no Time/Current.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read drive cycle: {str(e)}")
-    
+   
     # NEW: Prepend idle step (I=0A) to avoid instant high-current cutoff
     idle_row = pd.DataFrame([{
         'Global Step Index': 0, 'Day_of_year': 1, 'DriveCycle_ID': 'idle_init',
@@ -234,7 +238,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
     }])
     drive_df = pd.concat([idle_row, drive_df], ignore_index=True)
     print(f"Prepended idle step; new DF shape: {drive_df.shape}")
-    
+   
     # === Save simulation record ===
     pack_id = str(pack_config.get("_id") or pack_config.get("id", "unknown"))
     pack_name = pack_config.get("name", "Unknown Pack")
@@ -269,7 +273,6 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
     )
     return {"simulation_id": sim_id, "status": "started"}
 
-# [Rest of the file unchanged: /stop, /all, /get, /data, /export endpoints]
 @router.post("/{sim_id}/stop")
 async def stop_simulation(sim_id: str):
     if not ObjectId.is_valid(sim_id):
@@ -320,29 +323,29 @@ async def get_simulation_data(
 ):
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
-   
+  
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
-   
+  
     csv_path = sim.get("file_csv") or os.path.join("simulations", f"{sim_id}.csv")
     if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
         raise HTTPException(status_code=202, detail="Data not ready yet")
-   
+  
     try:
         # Load only needed columns for speed
         df = pd.read_csv(csv_path)
-       
+      
         if 'cell_id' not in df.columns:
             raise HTTPException(status_code=500, detail="CSV missing cell_id column")
-       
+      
         available_cells = sorted(df['cell_id'].unique())
         if cell_id not in available_cells:
             cell_id = available_cells[0] # Default to first cell
-       
+      
         cell_df = df[df['cell_id'] == cell_id].copy()
         cell_df = cell_df.sort_values('time_global_s')
-       
+      
         # Time range filtering
         t_min, t_max = cell_df['time_global_s'].min(), cell_df['time_global_s'].max()
         if time_range != "full":
@@ -351,18 +354,18 @@ async def get_simulation_data(
                 cell_df = cell_df[(cell_df['time_global_s'] >= low) & (cell_df['time_global_s'] <= high)]
             except:
                 raise HTTPException(status_code=400, detail="Invalid time_range format. Use 'start-end' or 'full'")
-       
+      
         total_points = len(cell_df)
         if total_points == 0:
             raise HTTPException(status_code=400, detail="No data in selected range")
-       
+      
         # Downsample if too many points
         if total_points > max_points:
             step = max(1, total_points // max_points)
             cell_df = cell_df.iloc[::step]
-       
+      
         sampled_points = len(cell_df)
-       
+      
         # Build time-series data
         data_points = []
         for _, row in cell_df.iterrows():
@@ -374,10 +377,10 @@ async def get_simulation_data(
                 "temperature": 25.0 + round(float(row.get('Qgen_cumulative', 0)) * 0.01, 2), # Approx
                 "power": round(float(row['V_module'] * row['I_module']) / 1000, 2) # kW
             })
-       
+      
         summary = sim.get("metadata", {}).get("summary", {})
         is_partial = sim.get("status") != "completed"
-       
+      
         return {
             "simulation_id": sim_id,
             "cell_id": int(cell_id),
@@ -392,7 +395,7 @@ async def get_simulation_data(
             "status": sim.get("status", "unknown"),
             "progress": sim.get("metadata", {}).get("progress", 100.0)
         }
-       
+      
     except Exception as e:
         import traceback
         print("Error in /data:", traceback.format_exc())

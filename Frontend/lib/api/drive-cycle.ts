@@ -1,9 +1,11 @@
 // FILE: Frontend/lib/api/drive-cycle.ts (updated for ID normalization and new endpoints)
 const API_BASE = "http://localhost:8000";
+
 export interface Trigger {
   type: string;
   value: number;
 }
+
 export interface Step {
   id?: string;
   duration: number;
@@ -16,15 +18,28 @@ export interface Step {
   triggers: Trigger[];
   label: string;
 }
+
 export interface Subcycle {
   id: string;
   name: string;
   description: string;
-  source: "manual" | "import";
+  source: "manual" | "import" | "import_file";
   steps: Step[];
+  num_steps?: number;
+  total_duration?: number;
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface LightSubcycle {
+  id: string;
+  name: string;
+  description?: string;
+  source: "manual" | "import" | "import_file";
+  num_steps?: number;
+  total_duration?: number;
+}
+
 // Helper to normalize subcycle responses (handles _id vs id)
 const normalizeSubcycle = (obj: any): Subcycle => {
   if (!obj) throw new Error("Empty response");
@@ -45,6 +60,21 @@ const normalizeSubcycle = (obj: any): Subcycle => {
   }
   return normalized as Subcycle;
 };
+
+// Helper to normalize light subcycle (similar, but no steps)
+const normalizeLightSubcycle = (obj: any): LightSubcycle => {
+  if (!obj) throw new Error("Empty response");
+  const normalized = { ...obj };
+  if (!normalized.id && normalized._id && typeof normalized._id === 'string') {
+    normalized.id = normalized._id;
+    delete normalized._id;
+  }
+  if (!normalized.id || typeof normalized.id !== 'string') {
+    throw new Error("Invalid or missing ID in response");
+  }
+  return normalized as LightSubcycle;
+};
+
 // Helper to parse FastAPI errors (handles 422 detail array)
 const parseApiError = async (res: Response): Promise<string> => {
   const data = await res.json().catch(() => ({}));
@@ -54,6 +84,7 @@ const parseApiError = async (res: Response): Promise<string> => {
   }
   return detail as string;
 };
+
 // Subcycle CRUD
 export const getSubcycles = async (): Promise<Subcycle[]> => {
   const res = await fetch(`${API_BASE}/subcycles/`);
@@ -64,6 +95,17 @@ export const getSubcycles = async (): Promise<Subcycle[]> => {
   const data = await res.json();
   return Array.isArray(data) ? data.map(normalizeSubcycle) : [];
 };
+
+export const getLightSubcycles = async (): Promise<LightSubcycle[]> => {
+  const res = await fetch(`${API_BASE}/subcycles/light`);
+  if (!res.ok) {
+    const detail = await parseApiError(res);
+    throw new Error(detail);
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data.map(normalizeLightSubcycle) : [];
+};
+
 export const getSubcycle = async (id: string): Promise<Subcycle> => {
   const res = await fetch(`${API_BASE}/subcycles/${id}`);
   if (!res.ok) {
@@ -73,6 +115,7 @@ export const getSubcycle = async (id: string): Promise<Subcycle> => {
   const data = await res.json();
   return normalizeSubcycle(data);
 };
+
 export const createSubcycle = async (data: Omit<Subcycle, "id" | "createdAt" | "updatedAt">, simName?: string): Promise<Subcycle> => {
   const res = await fetch(`${API_BASE}/subcycles/?sim_name=${encodeURIComponent(simName || "")}`, {
     method: "POST",
@@ -86,6 +129,7 @@ export const createSubcycle = async (data: Omit<Subcycle, "id" | "createdAt" | "
   const rawData = await res.json();
   return normalizeSubcycle(rawData);
 };
+
 export const updateSubcycle = async (id: string, data: Omit<Subcycle, "id" | "createdAt" | "updatedAt">): Promise<Subcycle> => {
   const res = await fetch(`${API_BASE}/subcycles/${id}`, {
     method: "PUT",
@@ -99,6 +143,7 @@ export const updateSubcycle = async (id: string, data: Omit<Subcycle, "id" | "cr
   const rawData = await res.json();
   return normalizeSubcycle(rawData);
 };
+
 export const deleteSubcycle = async (id: string) => {
   const res = await fetch(`${API_BASE}/subcycles/${id}`, { method: "DELETE" });
   if (!res.ok) {
@@ -106,6 +151,7 @@ export const deleteSubcycle = async (id: string) => {
     throw new Error(detail);
   }
 };
+
 // Simulation Cycle Management
 export const get_simulation_cycle = async (id: string): Promise<any> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${id}`);
@@ -115,6 +161,7 @@ export const get_simulation_cycle = async (id: string): Promise<any> => {
   }
   return res.json();
 };
+
 export const createSimulationCycle = async (data: { name: string; description?: string } = { name: "New Simulation" }): Promise<{ id: string }> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/`, {
     method: "POST",
@@ -132,6 +179,7 @@ export const createSimulationCycle = async (data: { name: string; description?: 
   }
   return { id: simId };
 }
+
 export const updateSimulationSubcycles = async (simId: string, subcycleIds: string[]): Promise<any> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/subcycles`, {
     method: "PUT",
@@ -144,6 +192,7 @@ export const updateSimulationSubcycles = async (simId: string, subcycleIds: stri
   }
   return res.json();
 }
+
 export const saveDriveCycles = async (simId: string, definitions: any[]): Promise<any> => {
   // No expansion, send full composition
   const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/drive-cycles`, {
@@ -157,6 +206,7 @@ export const saveDriveCycles = async (simId: string, definitions: any[]): Promis
   }
   return res.json();
 }
+
 // Calendar Assignment
 export const saveCalendarAssignments = async (simId: string, assignments: any[]) => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/calendar`, {
@@ -170,6 +220,7 @@ export const saveCalendarAssignments = async (simId: string, assignments: any[])
   }
   return res.json();
 };
+
 // Generate
 export const generateSimulationTable = async (simId: string): Promise<{ path: string; size_bytes: number }> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${simId}/generate`, {
@@ -181,6 +232,7 @@ export const generateSimulationTable = async (simId: string): Promise<{ path: st
   }
   return res.json();
 };
+
 export const list_simulation_cycles = async (): Promise<any[]> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/`);
   if (!res.ok) {
@@ -189,6 +241,7 @@ export const list_simulation_cycles = async (): Promise<any[]> => {
   }
   return res.json();
 };
+
 export const delete_simulation_cycle = async (id: string) => {
   const res = await fetch(`${API_BASE}/simulation-cycles/${id}`, { method: "DELETE" });
   if (!res.ok) {

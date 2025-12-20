@@ -4,9 +4,29 @@ from typing import Dict, List, Any
 from app.config import db
 import os
 import aiofiles
+import json
 from io import StringIO
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from app.utils.simulation_generator import generate_simulation_cycle_csv  # Assuming utils has CSV gen
+
+UPLOAD_SUBCYCLES_DIR = os.path.join(os.getenv("UPLOAD_DIR", "app/uploads"), "subcycles")
+
 DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+async def load_subcycle_steps_if_needed(sc: Dict[str, Any]) -> Dict[str, Any]:
+    """Load steps from file if source=import_file."""
+    if sc.get("source") != "import_file" or sc.get("steps"):
+        return sc
+    rel_path = sc["_id"]
+    file_id = os.path.basename(rel_path)
+    abs_path = os.path.join(UPLOAD_SUBCYCLES_DIR, f"{file_id}")
+    if not os.path.exists(abs_path):
+        raise ValueError(f"Subcycle file missing: {abs_path}")
+    async with aiofiles.open(abs_path, "r", encoding="utf-8") as f:
+        content = await f.read()
+    steps_data = json.loads(content)
+    sc["steps"] = steps_data  # List of dicts, ready for use
+    return sc
 
 async def generate_simulation_cycle(
     sim_doc: Dict[str, Any],
@@ -18,7 +38,6 @@ async def generate_simulation_cycle(
     """
     calendar_assignments = sim_doc.get("calendar_assignments", []) # List[Rule]
     drive_cycles_meta = sim_doc.get("drive_cycles_metadata", []) # List[DriveCycleDefinition]
- 
     # Map definitions for easy lookup
     drive_cycle_map = {dc["id"]: dc for dc in drive_cycles_meta}
     # 1. Collect and Fetch SubCycles
@@ -27,7 +46,10 @@ async def generate_simulation_cycle(
         for row in dc.get("composition", []):
             subcycle_ids.add(row["subcycleId"])
     subcycles_cursor = db.subcycles.find({"_id": {"$in": list(subcycle_ids)}, "deleted_at": None})
-    subcycles_map = {sc["_id"]: sc async for sc in subcycles_cursor}
+    subcycles_map = {}
+    async for sc in subcycles_cursor:
+        sc = await load_subcycle_steps_if_needed(sc)  # Load if needed
+        subcycles_map[sc["_id"]] = sc
     # Find default rule
     default_rule = next((r for r in calendar_assignments if r.get("id") == "DEFAULT_RULE"), None)
     default_drivecycle_id = default_rule["drivecycleId"] if default_rule else "DC_IDLE" # Using ID in new schema
@@ -50,9 +72,9 @@ async def generate_simulation_cycle(
                 matched_rule = rule
                 break # First match wins
         target_dc_id = matched_rule["drivecycleId"] if matched_rule else default_drivecycle_id
-    
+   
         dc_def = drive_cycle_map.get(target_dc_id)
-    
+   
         day_steps = []
         if dc_def:
              for row in dc_def.get("composition", []):
@@ -66,7 +88,7 @@ async def generate_simulation_cycle(
                             "; ".join(f"{t['type']}:{t['value']}" for t in step.get("triggers", []))
                             if step.get("triggers") else ""
                         )
-                    
+                   
                         day_steps.append({
                             "valueType": step["valueType"],
                             "value": step["value"],
@@ -101,19 +123,18 @@ def generate_simulation_cycle_csv(simulation_cycle: List[Dict[str, Any]]) -> str
     """
     all_rows = []
     global_index = 1
- 
     for day_data in simulation_cycle:
         day_num = day_data["dayOfYear"]
         dc_id = day_data["drivecycleId"]
-    
+   
         subcycle_step_idx = 1
         current_subcycle_id = None
-    
+   
         for step in day_data["steps"]:
             if step["subcycleId"] != current_subcycle_id:
                 current_subcycle_id = step["subcycleId"]
                 subcycle_step_idx = 1
-        
+       
             row = [
                 global_index,
                 day_num,
@@ -135,26 +156,22 @@ def generate_simulation_cycle_csv(simulation_cycle: List[Dict[str, Any]]) -> str
             all_rows.append(row)
             global_index += 1
             subcycle_step_idx += 1
- 
     header = [
         "Global Step Index", "Day_of_year", "DriveCycle_ID", "drive cycle trigger",
         "Subcycle_ID", "Subcycle Step Index", "Value Type", "Value", "Unit",
         "Step Type", "Step Duration (s)", "Timestep (s)", "Ambient Temp (°C)",
         "Location", "step Trigger(s)", "Label"
     ]
- 
     # Manual CSV construction to match frontend exactly
     def escape_csv_value(val):
         str_val = str(val).strip()
         if '"' in str_val:
             str_val = str_val.replace('"', '""')
         return f'"{str_val}"'
- 
     csv_lines = [",".join(header)]
     for row in all_rows:
         csv_line = ",".join(escape_csv_value(cell) for cell in row)
         csv_lines.append(csv_line)
- 
     return "\n".join(csv_lines)
 
 async def save_csv_async(sim_id: str, csv_data: str) -> str:
@@ -166,11 +183,11 @@ async def save_csv_async(sim_id: str, csv_data: str) -> str:
     return f"/uploads/simulation_cycle/{sim_id}.csv"
 
 router = APIRouter(
-    prefix="/simulation-cycles",  # ← ADD THIS PREFIX
-    tags=["Simulation Cycles Generate"],  # Optional: for docs
+    prefix="/simulation-cycles", # ← ADD THIS PREFIX
+    tags=["Simulation Cycles Generate"], # Optional: for docs
 )
 
-@router.post("/{sim_id}/generate", response_model=Dict)  # ← sim_id → sim_id (consistent)
+@router.post("/{sim_id}/generate", response_model=Dict) # ← sim_id → sim_id (consistent)
 async def generate_simulation_table(sim_id: str):
     """
     Generates full simulation cycle CSV using exact frontend logic
