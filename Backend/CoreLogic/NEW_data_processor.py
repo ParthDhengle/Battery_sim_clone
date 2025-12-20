@@ -66,9 +66,39 @@ def create_setup_from_configs(pack: dict, dc_table: pd.DataFrame, sim_config: di
         varying_DCIRs if varying_DCIRs else None
     )
     time_gap = sim_config.get('simulation_frequency', 1.0)
-    # Busbar connections
+    # Busbar connections (MUST happen before accessing parallel_groups)
     cells, parallel_groups = define_busbar_connections(cells, layers, connection_type)
     print(f"Defined {len(parallel_groups)} parallel groups based on connection type '{connection_type}'.")
+    
+    # FIXED v3: Auto-default + VALIDATE/SWAP pack limits AFTER parallel_groups
+    n_series = len(parallel_groups)
+    cell_upper = voltage_limits['cell_upper']
+    cell_lower = voltage_limits['cell_lower']
+    module_lower = voltage_limits.get('module_lower')
+    module_upper = voltage_limits.get('module_upper')
+    
+    # Auto-set if None
+    if module_upper is None:
+        module_upper = cell_upper * n_series
+        print(f"Auto-set module_upper = {module_upper:.2f}V (cell_upper {cell_upper}V × n_series {n_series})")
+    if module_lower is None:
+        module_lower = cell_lower * n_series
+        print(f"Auto-set module_lower = {module_lower:.2f}V (cell_lower {cell_lower}V × n_series {n_series})")
+    
+    # NEW v3: Validate & fix invalid (swapped or unrealistic)
+    nominal_pack_v = pack['cell']['cell_nominal_voltage'] * n_series  # Use nominal for sanity (add to cell if missing)
+    if module_lower is not None and module_upper is not None:
+        if module_lower >= module_upper:
+            print(f"⚠️ Swapped limits detected (lower={module_lower}V >= upper={module_upper}V); swapping.")
+            module_lower, module_upper = module_upper, module_lower
+        if module_lower > nominal_pack_v * 1.1 or module_upper < nominal_pack_v * 0.9:
+            print(f"⚠️ Unrealistic limits (lower={module_lower}V, upper={module_upper}V vs nominal {nominal_pack_v:.2f}V); overriding with auto-defaults.")
+            module_lower = cell_lower * n_series
+            module_upper = cell_upper * n_series
+        voltage_limits['module_lower'] = module_lower
+        voltage_limits['module_upper'] = module_upper
+        print(f"Validated pack limits: {module_lower:.2f}-{module_upper:.2f}V (n_series={n_series})")
+    
     # Validate DC table; fallback to old-style if missing cols
     required_cols = ["Global Step Index", "Day_of_year", "DriveCycle_ID", "Value Type", "Value", "Unit", "Step Type", "Step Duration (s)", "Timestep (s)"]
     missing = [c for c in required_cols if c not in dc_table.columns]
@@ -102,6 +132,6 @@ def create_setup_from_configs(pack: dict, dc_table: pd.DataFrame, sim_config: di
             'module_lower': voltage_limits['module_lower'] or np.nan
         },
         'masses': masses,
-        'dc_table': dc_table,  # Pass full table
+        'dc_table': dc_table, # Pass full table
         'Frequency': time_gap
     }

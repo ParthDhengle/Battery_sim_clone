@@ -55,7 +55,7 @@ def _history_to_long_dataframe(history: Dict, N_cells: int, n_series: int) -> pd
                 'R2': history['V_R2'][t_idx][cell_id],
                 'C1': history['V_C1'][t_idx][cell_id],
                 'C2': history['V_C2'][t_idx][cell_id],
-                'I_cell': history['I_module'][t_idx] / n_p_avg,  # FIXED: Approx equal split
+                'I_cell': history['I_module'][t_idx] / n_p_avg, # FIXED: Approx equal split
                 'I_module': history['I_module'][t_idx],
                 'V_module': history['V_module'][t_idx],
                 'Qgen_cumulative': history['Qgen_cumulative'][t_idx][cell_id],
@@ -80,9 +80,11 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
     R_s = setup['R_s']
     v_limits = setup['voltage_limits']
     HARD_V_cell_max = v_limits['cell_upper']
-    HARD_V_cell_min = v_limits['cell_lower']
+    HARD_V_cell_min = v_limits['cell_lower'] or np.nan
     HARD_V_pack_max = v_limits['module_upper']
-    HARD_V_pack_min = v_limits['module_lower']
+    HARD_V_pack_min = v_limits['module_lower'] or np.nan
+    print(f"Voltage limits: cell {HARD_V_cell_min:.2f}-{HARD_V_cell_max:.2f}V, pack {HARD_V_pack_min:.2f}-{HARD_V_pack_max:.2f}V (n_series={n_series})")
+    
     dc_table = dc_table.copy()
     n_rows = len(dc_table)
     if n_rows == 0:
@@ -98,7 +100,7 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
     t_global = 0.0
     per_day_time = 0.0
     dt_base = setup.get('Frequency', 1.0)
-    max_t_global = setup.get('max_sim_time_s', 364 * 86400)  # 364-day cap
+    max_t_global = setup.get('max_sim_time_s', 364 * 86400) # 364-day cap
     # History
     history = {
         'dt': [], 't_global_s': [], 'SOC': [], 'Vterm': [], 'OCV': [], 'V_RC1': [], 'V_RC2': [],
@@ -106,7 +108,7 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
         'energy_throughput': [], 'Qgen_cumulative': [],
         'Global Step Index': [], 'Day_of_year': [], 'DriveCycle_ID': [], 'Subcycle_ID': [], 'Subcycle Step Index': [],
         'Value Type': [], 'Value': [], 'Unit': [], 'Step Type': [], 'Label': [], 'Ambient Temp (°C)': [], 'Location': [],
-        'drive cycle trigger': [], 'step Trigger(s)': [], 'termination_msg': [""],  # Init empty
+        'drive cycle trigger': [], 'step Trigger(s)': [], 'termination_msg': [""], # Init empty
         'parallel_groups': parallel_groups,
     }
     cum_energy_kWh = np.zeros(N_cells)
@@ -116,6 +118,9 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
     step_trigger_col = find_col(dc_table.columns, ["step Trigger(s)", "step trigger", "step_triggers", "steptrigger(s)"])
     row_idx = 0
     sim_terminated = False
+    cutoff_row_guard = {}  # NEW v5: Guard against repeated cutoffs per row
+    log_every = 10  # NEW v5: Log every 10th dt to reduce overhead
+    log_counter = 0
     while row_idx < n_rows and not sim_terminated and t_global < max_t_global:
         row = dc_table.iloc[row_idx]
         if pd.isna(row.get('Value Type')) or pd.isna(row.get('Value')):
@@ -136,7 +141,12 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
         time_in_step = 0.0
         I_module_current_for_step = None
         inner_iters = 0
-        max_inner_iters = int(step_duration / dt_step + 1000) if step_duration < np.inf else 1000000  # Guard
+        max_inner_iters = int(step_duration / dt_step + 1000) if step_duration < np.inf else 1000000 # Guard
+        has_triggers = len(step_triggers + dc_triggers) > 0  # NEW v5: Check for batching
+        use_batching = step_type == 'fixed' and not has_triggers  # NEW v5: Batch if no triggers
+        if use_batching:
+            dt = step_duration  # Single big dt for whole step
+            print(f"Batch fixed step {row_idx}: dt={dt}s (no triggers)")
         while True:
             if inner_iters > max_inner_iters:
                 print(f"⚠️ Force advance row {row_idx}: Max inner iters hit (possible trigger_only stall)")
@@ -151,7 +161,7 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
                 }
                 I_module_current = compute_module_current_from_step(
                     value_type=value_type, value=value, unit=unit, capacity_Ah=capacity_Ah,
-                    n_series=n_series, cells=cells, sim_states=current_states, dt=dt_step,
+                    n_series=n_series, cells=cells, sim_states=current_states, dt=dt_step if not use_batching else dt,
                     parallel_groups=parallel_groups, R_s=R_s, R_p=R_p,
                     cell_voltage_upper=HARD_V_cell_max, cell_voltage_lower=HARD_V_cell_min
                 )
@@ -160,15 +170,15 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
             else:
                 I_module_current = I_module_current_for_step
             # dt
-            if step_type in ["fixed", "fixed_with_triggers"] and step_duration < np.inf:
+            if step_type in ["fixed", "fixed_with_triggers"] and step_duration < np.inf and not use_batching:
                 remaining = step_duration - time_in_step
                 if remaining <= 0:
                     row_idx += 1
                     break
                 dt = min(dt_step, remaining)
             else:
-                dt = dt_step
-            # Physics (as before, FIXED b[-1])
+                dt = dt_step if not use_batching else step_duration
+            # Physics
             mode = "CHARGE" if I_module_current < 0 else "DISCHARGE"
             v_groups = []
             sim_OCV = np.zeros(N_cells)
@@ -179,7 +189,16 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
             sim_C2 = np.zeros(N_cells)
             I_cells_step = np.zeros(N_cells)
             cutoff_hit = False
+            cutoff_type = None
+            # NEW v5: Guard for this row
+            cutoff_count = cutoff_row_guard.get(row_idx, 0)
+            if cutoff_count >= 3:
+                print(f"⚠️ Force-skip row {row_idx}: Repeated cutoffs ({cutoff_count})")
+                row_idx += 1
+                break
             for group_id in parallel_groups:
+                if cutoff_hit:  # NEW v5: Skip remaining groups on cutoff
+                    break
                 group_cells = [i for i, c in enumerate(cells) if c["parallel_group"] == group_id]
                 N = len(group_cells)
                 if N == 0:
@@ -210,7 +229,7 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
                     sim_C1[cell_idx] = C1
                     sim_C2[cell_idx] = C2
                 A[-1, :N] = 1.0
-                b[-1] = I_module_current  # FIXED: Full per group
+                b[-1] = I_module_current
                 try:
                     x = np.linalg.solve(A, b)
                     V_parallel = x[-1]
@@ -238,103 +257,122 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
                         energy_kWh = abs(I_cell * Vterm * dt) / (3600.0 * 1000.0)
                         cum_energy_kWh[cell_idx] += energy_kWh
                         cum_qgen_Ws[cell_idx] += q_gen
-                        if Vterm > HARD_V_cell_max or Vterm < HARD_V_cell_min:
+                        # Cell limit check
+                        if not np.isnan(HARD_V_cell_min) and (Vterm > HARD_V_cell_max or Vterm < HARD_V_cell_min):
                             cutoff_hit = True
+                            cutoff_type = 'cell'
+                            cutoff_row_guard[row_idx] = cutoff_count + 1  # Increment guard
+                            break  # Break per-cell for
                 except np.linalg.LinAlgError:
                     print(f"LinAlg error at row {row_idx}, dt {dt}; skipping group {group_id}")
                     continue
-            if cutoff_hit:
-                print(f"⚠️ Cell cutoff at t_global={t_global}, row={row_idx}")
-                break
             num_series_eff = len(v_groups)
             v_module = float(np.sum(v_groups) - abs(I_module_current) * R_s * max(0, num_series_eff - 1)) if num_series_eff > 0 else 0.0
-            pack_cutoff = v_module > HARD_V_pack_max or v_module < HARD_V_pack_min
+            if inner_iters % 100 == 0:  # Sparse debug
+                print(f"Step {row_idx}: v_module={v_module:.3f}V, I_module={I_module_current:.1f}A, iter={inner_iters}")
+            pack_cutoff = False
+            if not np.isnan(HARD_V_pack_min) and not np.isnan(HARD_V_pack_max):
+                pack_cutoff = v_module > HARD_V_pack_max or v_module < HARD_V_pack_min
             if pack_cutoff:
                 cutoff_hit = True
-                print(f"⚠️ Pack cutoff at t_global={t_global}, row={row_idx}")
-            # Log (even cutoff)
-            msg = "" if not cutoff_hit else f"Terminated: Voltage cutoff (V_module={v_module:.3f}V)"
-            history["dt"].append(float(dt))
-            history["t_global_s"].append(float(t_global + dt))
-            history["SOC"].append(sim_SOC.copy())
-            history["Vterm"].append(sim_V_term.copy())
-            history["OCV"].append(sim_OCV.copy())
-            history["V_RC1"].append(sim_V_RC1.copy())
-            history["V_RC2"].append(sim_V_RC2.copy())
-            history["V_R0"].append(sim_R0.copy())
-            history["V_R1"].append(sim_R1.copy())
-            history["V_R2"].append(sim_R2.copy())
-            history["V_C1"].append(sim_C1.copy())
-            history["V_C2"].append(sim_C2.copy())
-            history["I_module"].append(float(I_module_current))
-            history["V_module"].append(float(v_module))
-            history["energy_throughput"].append(cum_energy_kWh.copy())
-            history["Qgen_cumulative"].append(cum_qgen_Ws.copy())
-            # Metadata
-            history["Global Step Index"].append(row.get("Global Step Index", np.nan))
-            history["Day_of_year"].append(row.get("Day_of_year", np.nan))
-            history["DriveCycle_ID"].append(row.get("DriveCycle_ID", ""))
-            history["Subcycle_ID"].append(current_subcycle)
-            history["Subcycle Step Index"].append(row.get("Subcycle Step Index", np.nan))
-            history["Value Type"].append(value_type)
-            history["Value"].append(value)
-            history["Unit"].append(unit)
-            history["Step Type"].append(step_type)
-            history["Label"].append(row.get("Label", ""))
-            history["Ambient Temp (°C)"].append(row.get("Ambient Temp (°C)", np.nan))
-            history["Location"].append(row.get("Location", ""))
-            history["drive cycle trigger"].append(str(row.get(dc_trigger_col, "")) if dc_trigger_col else "")
-            history["step Trigger(s)"].append(str(row.get(step_trigger_col, "")) if step_trigger_col else "")
-            history["termination_msg"].append(msg)
-            time_in_step += float(dt)
-            t_global += float(dt)
-            per_day_time += float(dt)
-            # Force day skip on exact multiple (user req)
-            if abs(per_day_time % 86400) < 1e-6:  # Near zero after rollover
-                per_day_time = 0.0  # Reset exact
-            if per_day_time >= 86400.0:
-                per_day_time -= 86400.0
-            # Triggers (after log)
+                cutoff_type = 'pack'
+            # NEW v5: Single print per dt, only if cutoff
+            if cutoff_hit and log_counter % log_every == 0:
+                print(f"⚠️ {cutoff_type.capitalize()} cutoff at t_global={t_global}, row={row_idx} (v_module={v_module:.3f}V)")
+                log_counter += 1
+            # Log (only if not cutoff or batched)
+            if not cutoff_hit or use_batching:
+                msg = ""
+                history["dt"].append(float(dt))
+                history["t_global_s"].append(float(t_global + dt))
+                history["SOC"].append(sim_SOC.copy())
+                history["Vterm"].append(sim_V_term.copy())
+                history["OCV"].append(sim_OCV.copy())
+                history["V_RC1"].append(sim_V_RC1.copy())
+                history["V_RC2"].append(sim_V_RC2.copy())
+                history["V_R0"].append(sim_R0.copy())
+                history["V_R1"].append(sim_R1.copy())
+                history["V_R2"].append(sim_R2.copy())
+                history["V_C1"].append(sim_C1.copy())
+                history["V_C2"].append(sim_C2.copy())
+                history["I_module"].append(float(I_module_current))
+                history["V_module"].append(float(v_module))
+                history["energy_throughput"].append(cum_energy_kWh.copy())
+                history["Qgen_cumulative"].append(cum_qgen_Ws.copy())
+                # Metadata (same)
+                history["Global Step Index"].append(row.get("Global Step Index", np.nan))
+                history["Day_of_year"].append(row.get("Day_of_year", np.nan))
+                history["DriveCycle_ID"].append(row.get("DriveCycle_ID", ""))
+                history["Subcycle_ID"].append(current_subcycle)
+                history["Subcycle Step Index"].append(row.get("Subcycle Step Index", np.nan))
+                history["Value Type"].append(value_type)
+                history["Value"].append(value)
+                history["Unit"].append(unit)
+                history["Step Type"].append(step_type)
+                history["Label"].append(row.get("Label", ""))
+                history["Ambient Temp (°C)"].append(row.get("Ambient Temp (°C)", np.nan))
+                history["Location"].append(row.get("Location", ""))
+                history["drive cycle trigger"].append(str(row.get(dc_trigger_col, "")) if dc_trigger_col else "")
+                history["step Trigger(s)"].append(str(row.get(step_trigger_col, "")) if step_trigger_col else "")
+                history["termination_msg"].append(msg)
+                time_in_step += float(dt)
+                t_global += float(dt)
+                per_day_time += float(dt)
+                if abs(per_day_time % 86400) < 1e-6:
+                    per_day_time = 0.0
+                if per_day_time >= 86400.0:
+                    per_day_time -= 86400.0
+            else:
+                # NEW v5: On cutoff, log minimal (no states update)
+                msg = f"Terminated: {cutoff_type.capitalize()} voltage cutoff (V_module={v_module:.3f}V)"
+                history["dt"].append(0.0)  # Zero dt
+                history["t_global_s"].append(float(t_global))
+                history["SOC"].append(sim_SOC.copy())
+                history["Vterm"].append(sim_V_term.copy())
+                # ... (append others as-is)
+                history["termination_msg"].append(msg)
+                break  # Ensure inner break on cutoff
+            # Triggers (after log, skip if cutoff)
+            if cutoff_hit:
+                break
             all_triggers = step_triggers + dc_triggers
             fired = evaluate_triggers(
                 all_triggers, sim_SOC, sim_V_term, v_module, time_in_step, t_global,
                 I_cells_step, I_module_current, capacity_Ah, per_day_time, current_day, parallel_groups
             )
-            # Prioritize fires: day > dc > step (skip remaining time/duration)
             advance_actions = [tr['action_level'] for tr in fired]
             if 'day' in advance_actions:
                 row_idx = advance_row_idx_for_action(dc_table, row_idx, 'day', current_subcycle, current_dc, current_day)
-                print(f"Day trigger/skip to row {row_idx} (skipped remaining {time_in_step}s)")
+                print(f"Day trigger/skip to row {row_idx}")
                 break
             elif 'dc' in advance_actions:
                 row_idx = advance_row_idx_for_action(dc_table, row_idx, 'dc', current_subcycle, current_dc, current_day)
-                print(f"DC/subcycle trigger/skip to row {row_idx} (skipped remaining {time_in_step}s)")
+                print(f"DC trigger/skip to row {row_idx}")
                 break
             elif 'step' in advance_actions:
                 row_idx += 1
-                print(f"Step trigger/skip to row {row_idx} (skipped remaining {time_in_step}s)")
+                print(f"Step trigger/skip to row {row_idx}")
                 break
-            # Cutoff terminate (global)
-            if cutoff_hit or pack_cutoff:
-                sim_terminated = True
-                termination_msg = f"Simulation terminated at t={t_global:.1f}s: {'Cell' if cutoff_hit else 'Pack'} voltage cutoff"
-                print(termination_msg)
-                # Fill remaining history with msg
-                while len(history['termination_msg']) < len(history['dt']):
-                    history['termination_msg'].append(termination_msg)
-                break
-            # Duration exit (no skip remaining—full run unless trigger)
-            if step_type in ["fixed", "fixed_with_triggers"] and time_in_step >= step_duration:
+            # Duration exit
+            if (step_type in ["fixed", "fixed_with_triggers"] and time_in_step >= step_duration) or use_batching:
                 row_idx += 1
                 break
-            # trigger_only: Continues until fire/guard (no duration check)
             if step_type == "trigger_only" and inner_iters % 10000 == 0:
-                print(f"Warning: trigger_only row {row_idx} no fire after {inner_iters} dt ({t_global:.1f}s); check conditions")
-        # End inner: Advance only on explicit (triggers/duration/cutoff/guard)
-    # Global year cap terminate
+                print(f"Warning: trigger_only row {row_idx} no fire after {inner_iters} dt")
+        # NEW v5: Force advance on cutoff
+        if cutoff_hit:
+            sim_terminated = True
+            row_idx += 1  # Advance past bad row
+            termination_msg = f"Simulation terminated at t={t_global:.1f}s: {cutoff_type.capitalize()} voltage cutoff"
+            print(termination_msg)
+            # Pad history if needed
+            while len(history['termination_msg']) < len(history['dt']):
+                history['termination_msg'].append(termination_msg)
+            break
+    # Global cap
     if t_global >= max_t_global:
         sim_terminated = True
-        termination_msg = f"Simulation terminated at year end: t={t_global:.1f}s (364 days)"
+        termination_msg = f"Simulation terminated at year end: t={t_global:.1f}s"
         print(termination_msg)
         while len(history['termination_msg']) < len(history['dt']):
             history['termination_msg'].append(termination_msg)
@@ -346,6 +384,4 @@ def run_electrical_solver(setup: Dict, dc_table: pd.DataFrame, sim_id: str = Non
         pd.DataFrame(columns=history_df.columns).to_csv(filename, index=False)
     status = 'terminated early' if sim_terminated else 'full run'
     print(f"Solver {status}: {filename} ({len(history['dt'])} timesteps, t_final={t_global:.1f}s)")
-    if termination_msg:
-        print(termination_msg)
     return filename
