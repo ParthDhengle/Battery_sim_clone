@@ -182,7 +182,7 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
             metadata, csv_file, last_row, existing_df = load_continuation_zip(continuation_zip_data["zip_path"])
             if metadata:
                 # Prepare last states for solver (wide format for last timestep)
-                N_cells = len(pack_config.get("layers", [{}])[0].get("n_rows", 1) * len(pack_config.get("layers", [{}])[0].get("n_cols", 1)))  # Approx N_cells
+                N_cells = len(pack_config.get("layers", [{}])[0].get("n_rows", 1) * len(pack_config.get("layers", [{}])[0].get("n_cols", 1))) # Approx N_cells
                 if not existing_df.empty and len(existing_df) >= N_cells:
                     last_timestep_rows = existing_df.tail(N_cells)
                     continuation_history = {
@@ -284,7 +284,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
     drive_cycle_id = "test_dc_id"
     drive_cycle_name = "TESTING_SIMULATION_CYCLE_88_20251217_143422_2345"
     drive_cycle_file = "TESTING_SIMULATION_CYCLE_88_20251217_143422_2345.csv"
-  
+ 
     # NEW: Prepend idle step (I=0A) to avoid instant high-current cutoff
     idle_row = pd.DataFrame([{
         'Global Step Index': 0, 'Day_of_year': 1, 'DriveCycle_ID': 'idle_init',
@@ -296,7 +296,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
     }])
     drive_df = pd.concat([idle_row, drive_df], ignore_index=True)
     print(f"Prepended idle step; new DF shape: {drive_df.shape}")
-  
+ 
     # === Save simulation record ===
     pack_id = str(pack_config.get("_id") or pack_config.get("id", "unknown"))
     pack_name = pack_config.get("name", "Unknown Pack")
@@ -365,17 +365,17 @@ async def pause_simulation(sim_id: str):
     # TODO: In prod, signal background task to pause and save state
     # For now, mock save
     csv_path = sim.get("file_csv")
-    last_row = 0  # Mock; in real, from solver state
+    last_row = 0 # Mock; in real, from solver state
     if csv_path and os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         # Approximate last_row from CSV length / estimated steps per row
-        last_row = len(df) // 100  # Mock approximation
+        last_row = len(df) // 100 # Mock approximation
     # Load dc_table for metadata
     dc_path = f"app{sim['drive_cycle_file']}"
     if os.path.exists(dc_path):
         dc_table = pd.read_csv(dc_path)
     else:
-        dc_table = pd.DataFrame()  # Fallback
+        dc_table = pd.DataFrame() # Fallback
     # Mock history save (in real: from solver)
     mock_history = {"SOC": [1.0] * 100, "V_RC1": [0.0] * 100} # From solver state
     zip_path = await save_continuation_zip(sim_id, last_row, dc_table, sim["pack_id"], sim["drive_cycle_id"], csv_path)
@@ -412,11 +412,11 @@ async def resume_simulation(sim_id: str, zip_file: Optional[UploadFile] = File(N
         zip_data["zip_path"] = uploaded_zip
         zip_data["last_row"] = last_row_from_zip
     # Reload params for resume (similar to /run)
-    pack_doc = await db.packs.find_one({"_id": ObjectId(sim["pack_id"])})  # Assume db.packs
+    pack_doc = await db.packs.find_one({"_id": ObjectId(sim["pack_id"])}) # Assume db.packs
     if not pack_doc:
         raise HTTPException(status_code=404, detail="Pack not found")
     pack_config = pack_doc
-    model_config = {}  # Default; in prod, store in sim_doc
+    model_config = {} # Default; in prod, store in sim_doc
     initial_conditions = sim["initial_conditions"]
     # Load drive_df (hardcoded for testing)
     dc_path = f"app{sim['drive_cycle_file']}"
@@ -484,29 +484,26 @@ async def get_simulation_data(
 ):
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
- 
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
- 
     csv_path = sim.get("file_csv") or os.path.join("simulations", f"{sim_id}.csv")
     if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
         raise HTTPException(status_code=202, detail="Data not ready yet")
- 
     try:
         # Load only needed columns for speed
         df = pd.read_csv(csv_path)
-     
+    
         if 'cell_id' not in df.columns:
             raise HTTPException(status_code=500, detail="CSV missing cell_id column")
-     
+    
         available_cells = sorted(df['cell_id'].unique())
         if cell_id not in available_cells:
             cell_id = available_cells[0] # Default to first cell
-     
+    
         cell_df = df[df['cell_id'] == cell_id].copy()
         cell_df = cell_df.sort_values('time_global_s')
-     
+    
         # Time range filtering
         t_min, t_max = cell_df['time_global_s'].min(), cell_df['time_global_s'].max()
         if time_range != "full":
@@ -515,18 +512,18 @@ async def get_simulation_data(
                 cell_df = cell_df[(cell_df['time_global_s'] >= low) & (cell_df['time_global_s'] <= high)]
             except:
                 raise HTTPException(status_code=400, detail="Invalid time_range format. Use 'start-end' or 'full'")
-     
+    
         total_points = len(cell_df)
         if total_points == 0:
             raise HTTPException(status_code=400, detail="No data in selected range")
-     
+    
         # Downsample if too many points
         if total_points > max_points:
             step = max(1, total_points // max_points)
             cell_df = cell_df.iloc[::step]
-     
+    
         sampled_points = len(cell_df)
-     
+    
         # Build time-series data
         data_points = []
         for _, row in cell_df.iterrows():
@@ -538,10 +535,10 @@ async def get_simulation_data(
                 "temperature": 25.0 + round(float(row.get('Qgen_cumulative', 0)) * 0.01, 2), # Approx
                 "power": round(float(row['V_module'] * row['I_module']) / 1000, 2) # kW
             })
-     
+    
         summary = sim.get("metadata", {}).get("summary", {})
         is_partial = sim.get("status") != "completed"
-     
+    
         return {
             "simulation_id": sim_id,
             "cell_id": int(cell_id),
@@ -556,7 +553,7 @@ async def get_simulation_data(
             "status": sim.get("status", "unknown"),
             "progress": sim.get("metadata", {}).get("progress", 100.0)
         }
-     
+    
     except Exception as e:
         import traceback
         print("Error in /data:", traceback.format_exc())

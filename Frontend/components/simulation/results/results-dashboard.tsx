@@ -1,3 +1,4 @@
+// FILE: Frontend/components/simulation/results/results-dashboard.tsx
 "use client"
 import React, { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { SimulationDataChart } from "./simulation-data-chart"
 import { generatePDFReport } from './pdf-report-generator'
+import { pauseSimulation, downloadContinuation, resumeSimulation } from "@/lib/api/simulations"
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 interface SimulationDataPoint {
   time: number
   voltage?: number
@@ -113,26 +116,26 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
     if (results.summary && !simulationData?.is_partial) {
       return results.summary
     }
-   
+  
     // Use live data from simulationData if available
     if (simulationData?.summary && Object.keys(simulationData.summary).length > 0) {
       console.log("📊 Using simulationData.summary:", simulationData.summary)
       return simulationData.summary
     }
-   
+  
     // Calculate from raw data as fallback
     if (simulationData && simulationData.data.length > 0) {
       const lastPoint = simulationData.data[simulationData.data.length - 1]
       const firstPoint = simulationData.data[0]
-     
+    
       // Calculate max temp from Qgen
       const maxQgen = Math.max(...simulationData.data.map(d => d.qgen ?? 0))
       const maxTemp = maxQgen * 0.01 + 26.85
-     
+    
       const initialSoc = firstPoint?.soc ?? 1.0
       const endSoc = lastPoint.soc ?? 0
       const capacityFade = Math.abs((initialSoc - endSoc) / initialSoc * 100)
-     
+    
       const calculated = {
         end_soc: endSoc,
         max_temp: maxTemp,
@@ -141,7 +144,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       console.log("🧮 Calculated summary from data:", calculated)
       return calculated
     }
-   
+  
     return {
       end_soc: 0,
       max_temp: 25.0,
@@ -154,14 +157,13 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       return
     }
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
       const response = await fetch(`${API_BASE}/simulations/${simulationId}`, {
         cache: "no-store"
       })
       if (response.ok) {
         const data = await response.json()
         setSimulationStatus(data.status)
-       
+      
         console.log("📡 Status response:", {
           status: data.status,
           progress: data.metadata?.progress,
@@ -213,8 +215,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         else if (timeRange === "1m") timeRangeValue = "0-2592000"
         if (timeRangeValue) params.append("time_range", timeRangeValue)
       }
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const response = await fetch(`${API_BASE}/simulations/${simulationId}/data?${params}`, {
+      const response = await fetch(`${API_BASE}/simulations/${simulationId}/data?${params.toString()}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         cache: "no-store"
@@ -230,7 +231,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         throw new Error(`Failed to fetch data: ${response.statusText}`)
       }
       const data: SimulationDataResponse = await response.json()
-     
+    
       console.log("📥 Received data:", {
         total_points: data.total_points,
         sampled_points: data.sampled_points,
@@ -239,7 +240,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         status: data.status,
         progress: data.progress
       })
-     
+    
       // Fill missing fields with defaults
       data.data = data.data.map(d => ({
         ...d,
@@ -249,14 +250,14 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       }))
       setSimulationData(data)
       setSimulationStatus(data.status || "unknown")
-     
+    
       // Calculate progress based on total_points vs expected
       if (expectedTotalRows === 0 && data.total_points > 0) {
         // First time, try to estimate expected total
         // Assuming simulation hasn't completed, this is partial data
         setExpectedTotalRows(data.total_points * 10) // Conservative estimate
       }
-     
+    
       if (data.status === "completed") {
         setProgress(100)
         setExpectedTotalRows(data.total_points)
@@ -294,13 +295,13 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
   const handleRefresh = useCallback(async () => {
     console.log("🔄 Manual refresh triggered")
     setIsLoading(true)
-   
+  
     // Check status first
     await checkStatus()
-   
+  
     // Then fetch latest data
     await fetchData()
-   
+  
     setRefreshKey(prev => prev + 1)
   }, [checkStatus, fetchData])
   const handleExport = async () => {
@@ -314,8 +315,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
     }
     try {
       setError(null)
-     
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+    
       const response = await fetch(`${API_BASE}/simulations/${simulationId}/export`, {
         method: "GET",
         headers: {
@@ -331,28 +331,28 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       const a = document.createElement("a")
       a.style.display = "none"
       a.href = url
-     
+    
       const contentDisposition = response.headers.get("Content-Disposition")
       let filename = `simulation-${simulationId}.csv`
-     
+    
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
         if (filenameMatch) {
           filename = filenameMatch[1]
         }
       }
-     
+    
       a.download = filename
       document.body.appendChild(a)
       a.click()
-     
+    
       setTimeout(() => {
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
       }, 100)
-     
+    
       console.log(" Export successful:", filename)
-     
+    
     } catch (err) {
       console.error("❌ Export failed:", err)
       const errorMsg = err instanceof Error ? err.message : "Failed to export data"
@@ -366,7 +366,6 @@ const handleReport = async () => {
   }
   try {
     setError(null);
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     // 1. Get simulation (has pack_id, initial_conditions, drive_cycle_name)
     const simRes = await fetch(`${API_BASE}/simulations/${simulationId}`, { cache: "no-store" });
     if (!simRes.ok) throw new Error("Failed to fetch simulation");
@@ -401,7 +400,7 @@ const handleReport = async () => {
       simulationId,
       packInfo: {
         cellDetails: {
-          formFactor: cell.form_factor || "cylindrical",
+          formFactor: cell.formFactor || "cylindrical",
           dimensions: {
             radius: cell.radius || 0,
             height: cell.height || 0,
@@ -453,12 +452,11 @@ const handleReport = async () => {
     setError(err.message || "Failed to generate PDF report");
   }
 };
-
 // UPDATED: handlePause
 const handlePause = async () => {
   setIsPausing(true)
   try {
-    await pauseSimulation(simulationId)
+    await pauseSimulation(simulationId!)
     setSimulationStatus("paused")
   } catch (err) {
     setError("Failed to pause")
@@ -466,11 +464,10 @@ const handlePause = async () => {
     setIsPausing(false)
   }
 }
-
 // UPDATED: Download Continuation ZIP
 const handleDownloadContinuation = async () => {
   try {
-    const blob = await downloadContinuation(simulationId)
+    const blob = await downloadContinuation(simulationId!)
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -481,7 +478,6 @@ const handleDownloadContinuation = async () => {
     setError("Failed to download ZIP")
   }
 }
-
   const toggleMetric = useCallback((metric: string) => {
     setSelectedMetrics((prev) => (prev.includes(metric) ? prev.filter((m) => m !== metric) : [...prev, metric]))
   }, [])

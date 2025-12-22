@@ -1,3 +1,4 @@
+// FILE: Frontend/app/library/simulations/page.tsx
 "use client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Zap, Plus, TrendingDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { getAllSimulations } from "@/lib/api/simulations" // import your utility function
+import { getAllSimulations, resumeSimulation } from "@/lib/api/simulations" // import your utility function
 interface Simulation {
   _id: string
   name: string
@@ -66,7 +67,7 @@ export default function Simulations() {
   // NEW: Auto continue (no upload)
   const handleAutoContinue = async (simId: string) => {
     try {
-      await resumeSimulation(simId)  // No file
+      await resumeSimulation(simId) // No file
       router.push(`/simulation/${simId}/results`)
     } catch (err) {
       setError("Failed to resume simulation")
@@ -96,7 +97,7 @@ export default function Simulations() {
       case "pending":
         return "bg-blue-100 text-blue-800"
       case "paused":
-        return "bg-yellow-100 text-yellow-800"  // NEW
+        return "bg-yellow-100 text-yellow-800" // NEW
       case "failed":
         return "bg-red-100 text-red-800"
       default:
@@ -109,7 +110,7 @@ export default function Simulations() {
       case "pending":
         return "⏳"
       case "paused":
-        return "⏸️"  // NEW
+        return "⏸️" // NEW
       case "completed":
         return "✓"
       case "failed":
@@ -153,10 +154,10 @@ export default function Simulations() {
           <div className="bg-white rounded-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">Upload Continuation ZIP</h3>
-              <input 
-                type="file" 
-                onChange={(e) => setSelectedContZip(e.target.files?.[0] || null)} 
-                accept=".zip" 
+              <input
+                type="file"
+                onChange={(e) => setSelectedContZip(e.target.files?.[0] || null)}
+                accept=".zip"
                 className="w-full p-2 border rounded mb-4"
               />
               <div className="flex gap-2">
