@@ -162,6 +162,15 @@ export const get_simulation_cycle = async (id: string): Promise<any> => {
   return res.json();
 };
 
+export const getSimulationCycleTable = async (id: string): Promise<string> => {
+  const res = await fetch(`${API_BASE}/simulation-cycles/${id}/table`);
+  if (!res.ok) {
+    const detail = await parseApiError(res);
+    throw new Error(detail);
+  }
+  return res.text();
+};
+
 export const createSimulationCycle = async (data: { name: string; description?: string } = { name: "New Simulation" }): Promise<{ id: string }> => {
   const res = await fetch(`${API_BASE}/simulation-cycles/`, {
     method: "POST",

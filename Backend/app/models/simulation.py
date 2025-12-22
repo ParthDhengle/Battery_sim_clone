@@ -1,6 +1,15 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from enum import Enum
+
+class SimulationStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    STOPPED = "stopped"
+    FAILED = "failed"
 
 class VaryingCellsCondition(BaseModel):
     cell_ids: List[str]  # CHANGED: String IDs like ["R1C1L1", "R2C3L1"]
@@ -19,14 +28,18 @@ class InitialConditions(BaseModel):
 class SimulationBase(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None
-    pack_id: Optional[str] = None          # ← Already exists (good!)
-    pack_name: Optional[str] = None         # ← ADD
-    drive_cycle_id: Optional[str] = None    # ← ADD (for DB cycles)
+    pack_id: Optional[str] = None  # ← Already exists (good!)
+    pack_name: Optional[str] = None  # ← ADD
+    drive_cycle_id: Optional[str] = None  # ← ADD (for DB cycles)
     drive_cycle_name: Optional[str] = None  # ← ADD
     drive_cycle_file: Optional[str] = None
-    status: str = "pending"
+    status: SimulationStatus = SimulationStatus.PENDING
     initial_conditions: Optional[InitialConditions] = None
     metadata: Dict[str, Any] = {}
+    # NEW: Pause/Resume fields
+    continuation_zip: Optional[str] = None  # Path to ZIP file (CSV + JSON metadata)
+    last_executed_row: Optional[int] = None  # DC table row to resume from
+    pause_metadata: Optional[Dict[str, Any]] = None  # {pack_id, dc_id, etc.} for manual validation
 
 class SimulationInDB(SimulationBase):
     id: str

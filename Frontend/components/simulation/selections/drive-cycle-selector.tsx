@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Upload, X, FileText, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { list_simulation_cycles } from "@/lib/api/drive-cycle"
 
 interface DriveOption {
   value: string
@@ -23,7 +24,7 @@ interface DriveOption {
 
 export interface DriveCycleSelectorProps {
   value: string
-  onValueChange: (value: string) => void
+  onValueChange: (value: string, label?: string) => void
 }
 
 // Helper function to clear all drive cycle related storage
@@ -38,93 +39,40 @@ function clearAllDriveCycles() {
   keysToRemove.forEach((key) => sessionStorage.removeItem(key))
 }
 
-// Helper function to fetch drive cycle CSV from public folder
-async function fetchDriveCycleData(filename: string): Promise<{ full: string; preview: string } | null> {
-  try {
-    const response = await fetch(`/drive_cycles/${filename}`)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${filename}`)
-    }
-    const fullText = await response.text()
-    const lines = fullText.split(/\r?\n/)
-    
-    // Keep full data for backend
-    // Create preview with max 5000 samples for frontend display
-    const MAX_PREVIEW_ROWS = 5000
-    let previewText = fullText
-    
-    if (lines.length > MAX_PREVIEW_ROWS + 1) { // +1 for header
-      const header = lines[0]
-      const sampledLines = [header]
-      
-      // Sample evenly across the dataset
-      const step = Math.floor((lines.length - 1) / MAX_PREVIEW_ROWS)
-      for (let i = 1; i < lines.length; i += step) {
-        if (sampledLines.length >= MAX_PREVIEW_ROWS + 1) break
-        sampledLines.push(lines[i])
-      }
-      
-      previewText = sampledLines.join('\n')
-    }
-    
-    return {
-      full: fullText,
-      preview: previewText
-    }
-  } catch (error) {
-    console.error(`Error fetching drive cycle ${filename}:`, error)
-    return null
-  }
-}
-
 async function getDriveCyclesFromStorage(): Promise<DriveOption[]> {
-  if (typeof window === "undefined") return []
-  
   try {
-    if (window.storage && typeof window.storage.list === "function") {
-      const result = await window.storage.list("drivecycle:")
-      const keys = result?.keys ?? []
-      const items = await Promise.all(
-        keys.map(async (key: string) => {
-          const dc = await window.storage.get(key)
-          return dc ? { key, data: JSON.parse(dc.value) } : null
-        })
-      )
-      const cycles = items.filter(Boolean) as Array<{ key: string; data: any }>
-      return cycles.map(({ key, data: cycle }) => ({
-        value: String(cycle.id ?? cycle.name ?? key),
-        label: cycle.name ?? `Drive Cycle ${cycle.id ?? ''}`,
-        specs: {
-          duration: cycle.duration ?? cycle.totalDuration ?? "",
-          avgSpeed: cycle.avgSpeed ?? "",
-        },
-      }))
-    }
-    throw new Error("No drive cycle storage available")
+    const cycles = await list_simulation_cycles()
+    console.log('Raw cycles from API in selector:', cycles) // Debug: Add this to match library
+    const formatted = cycles
+      .filter(c => (c.id || c._id) && typeof (c.id || c._id) === 'string')  // Fallback to _id
+      .map(c => {
+        const simId = c.id || c._id  // Ensure ID is set
+        return {
+          id: simId,
+          name: c.name || 'Unnamed',
+          subCycles: c.subcycle_ids?.length || 0,
+          driveCycles: c.drive_cycles_metadata?.length || 0,
+          calendarRules: c.calendar_assignments?.length || 0,
+          created_at: c.created_at || new Date().toISOString(),
+          simulation_table_path: c.simulation_table_path,
+          deleted_at: c.deleted_at
+        }
+      })
+    console.log('Formatted cycles in selector:', formatted) // Debug: Add this to match library
+    const activeCycles = formatted.filter(c => c.deleted_at == null)  // Robust filter
+    console.log('Active cycles count in selector:', activeCycles.length) // Debug
+    return activeCycles.map(c => ({
+      value: c.id,
+      label: c.name || 'Unnamed Cycle',
+      specs: {
+        subCycles: c.subCycles,
+        driveCycles: c.driveCycles,
+        calendarRules: c.calendarRules,
+      },
+    }))
   } catch (error) {
     console.error("Failed to fetch drive cycles:", error)
-    return [
-      { 
-        value: "drive_cycle1.csv", 
-        label: "Drive Cycle 1", 
-        specs: {} 
-      },
-      {
-        value: "drive_cycle2.csv",
-        label: "Drive Cycle 2",
-        specs: {},
-      },
-      {
-        value: "drive_cycle3.csv",
-        label: "Drive Cycle 3",
-        specs: {},
-      },
-      {
-        value: "drive_cycle4.csv",
-        label: "Drive Cycle 4",
-        specs: {},
-      },
-    ]
+    return []
   }
 }
 
@@ -150,9 +98,8 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
     }
   }
 
-  const predefinedCycles = ['drive_cycle1.csv', 'drive_cycle2.csv', 'drive_cycle3.csv', 'drive_cycle4.csv']
-  const isDbCycleSelected = value && predefinedCycles.includes(value)
-  const isCsvUploaded = value && value.endsWith(".csv") && !predefinedCycles.includes(value)
+  const isDbCycleSelected = value && !value.endsWith(".csv")
+  const isCsvUploaded = value && value.endsWith(".csv")
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -203,7 +150,7 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
 
       // Update state
       setUploadedFile(file)
-      onValueChange(file.name)
+      onValueChange(file.name, file.name)
       setUploadError(null)
     } catch (err: any) {
       setUploadError(err.message || "Failed to process CSV file")
@@ -231,43 +178,14 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
     onValueChange("")
   }
 
-  const handleDbCycleSelect = async (selectedValue: string) => {
+  const handleDbCycleSelect = (selectedValue: string) => {
     // Remove any uploaded CSV first
     if (isCsvUploaded) {
       handleRemoveCsv()
     }
     
-    // Clear all previous storage if changing selection
-    if (value !== selectedValue) {
-      clearAllDriveCycles()
-    }
-    
-    // If it's one of the predefined CSV files, fetch and store it
-    if (predefinedCycles.includes(selectedValue)) {
-      setIsProcessing(true)
-      setUploadError(null)
-      
-      try {
-        const data = await fetchDriveCycleData(selectedValue)
-        if (data) {
-          // Store both full and preview data
-          sessionStorage.setItem(`csv:${selectedValue}`, data.full)
-          sessionStorage.setItem(`csv-preview:${selectedValue}`, data.preview)
-          console.log(`Successfully loaded ${selectedValue} from public folder`)
-          // Only update the value after data is stored
-          onValueChange(selectedValue)
-        } else {
-          throw new Error(`Failed to load ${selectedValue}`)
-        }
-      } catch (error) {
-        console.error('Error loading drive cycle:', error)
-        setUploadError(`Failed to load ${selectedValue}. Please try again.`)
-      } finally {
-        setIsProcessing(false)
-      }
-    } else {
-      onValueChange(selectedValue)
-    }
+    const cycle = cycles.find(c => c.value === selectedValue)
+    onValueChange(selectedValue, cycle?.label)
   }
 
   if (loading) {
@@ -344,12 +262,6 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
               </Button>
             )}
           </div>
-          {isProcessing && isDbCycleSelected && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Loading drive cycle data...</span>
-            </div>
-          )}
           {isDbCycleSelected && !isProcessing && (
             <p className="text-xs text-muted-foreground">
               ✓ Drive cycle selected from database
@@ -467,4 +379,4 @@ export function DriveCycleSelector({ value, onValueChange }: DriveCycleSelectorP
   )
 }
 
-export { getDriveCyclesFromStorage, fetchDriveCycleData }
+export { getDriveCyclesFromStorage }

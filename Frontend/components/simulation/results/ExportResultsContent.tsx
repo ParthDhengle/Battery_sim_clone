@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExportModal } from "./ExportModal";  // Assuming this is local; adjust if needed
+import { ExportModal } from "@/components/simulation/results/ExportModel";  // Assuming this is local; adjust if needed
 
 export function ExportResultsContent() {
   const params = useParams();

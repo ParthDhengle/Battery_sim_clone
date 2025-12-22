@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -8,19 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Zap, Plus, TrendingDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { getAllSimulations } from "@/lib/api/simulations"  //   import your utility function
-
+import { getAllSimulations } from "@/lib/api/simulations" // import your utility function
 interface Simulation {
   _id: string
   name: string
   type: string
-  status: "completed" | "running" | "failed" | "pending" | "unknown"
+  status: "completed" | "running" | "failed" | "pending" | "paused" | "unknown"
   created_at: string
   // NEW: These fields are now returned from backend
   pack_name?: string
   drive_cycle_name?: string
   drive_cycle_file?: string
-
   // Optional fallback via metadata (some old sims may still use this)
   metadata?: {
     name?: string
@@ -37,14 +34,15 @@ interface Simulation {
   }
   progress?: number
 }
-
 export default function Simulations() {
   const [simulations, setSimulations] = useState<Simulation[]>([])
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [showManualContinue, setShowManualContinue] = useState(false)
+  const [selectedContZip, setSelectedContZip] = useState<File | null>(null)
+  const [manualSimId, setManualSimId] = useState("")
   const router = useRouter()
-
-  //   Fetch all simulations from backend
+  // Fetch all simulations from backend
   const loadSimulations = async () => {
     try {
       setIsLoading(true)
@@ -59,15 +57,37 @@ export default function Simulations() {
       setIsLoading(false)
     }
   }
-
   useEffect(() => {
     loadSimulations()
   }, [])
-
   const handleViewResults = (simId: string) => {
     router.push(`/simulation/${simId}/results`)
   }
-
+  // NEW: Auto continue (no upload)
+  const handleAutoContinue = async (simId: string) => {
+    try {
+      await resumeSimulation(simId)  // No file
+      router.push(`/simulation/${simId}/results`)
+    } catch (err) {
+      setError("Failed to resume simulation")
+    }
+  }
+  // UPDATED: Manual continue with ZIP
+  const handleManualContinue = (simId: string) => {
+    setManualSimId(simId)
+    setShowManualContinue(true)
+  }
+  const submitManualContinue = async () => {
+    if (!selectedContZip || !manualSimId) return
+    try {
+      await resumeSimulation(manualSimId, selectedContZip)
+      router.push(`/simulation/${manualSimId}/results`)
+      setShowManualContinue(false)
+      setSelectedContZip(null)
+    } catch (err) {
+      setError("Failed to resume with ZIP")
+    }
+  }
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case "completed":
@@ -75,18 +95,21 @@ export default function Simulations() {
       case "running":
       case "pending":
         return "bg-blue-100 text-blue-800"
+      case "paused":
+        return "bg-yellow-100 text-yellow-800"  // NEW
       case "failed":
         return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
   }
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "running":
       case "pending":
         return "⏳"
+      case "paused":
+        return "⏸️"  // NEW
       case "completed":
         return "✓"
       case "failed":
@@ -95,7 +118,6 @@ export default function Simulations() {
         return "○"
     }
   }
-
   return (
     <div className="space-y-8 p-6">
       {/* Header */}
@@ -107,21 +129,48 @@ export default function Simulations() {
           </h1>
           <p className="text-muted-foreground">View and manage your battery simulations</p>
         </div>
-        <Link href="/simulation">
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            New Simulation
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => {/* Global manual selector TODO */}}>
+            Continue Simulation
           </Button>
-        </Link>
+          <Link href="/simulation">
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              New Simulation
+            </Button>
+          </Link>
+        </div>
       </div>
-
       {/* Error Alert */}
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
+      {/* UPDATED: Manual ZIP Modal */}
+      {showManualContinue && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold mb-4">Upload Continuation ZIP</h3>
+              <input 
+                type="file" 
+                onChange={(e) => setSelectedContZip(e.target.files?.[0] || null)} 
+                accept=".zip" 
+                className="w-full p-2 border rounded mb-4"
+              />
+              <div className="flex gap-2">
+                <Button onClick={submitManualContinue} disabled={!selectedContZip} className="flex-1">
+                  Continue
+                </Button>
+                <Button variant="outline" onClick={() => { setShowManualContinue(false); setSelectedContZip(null) }} className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Loading State */}
       {isLoading ? (
         <Card>
@@ -160,7 +209,6 @@ export default function Simulations() {
                   </Badge>
                 </div>
               </CardHeader>
-
               <CardContent className="space-y-4">
                 {/* Summary Stats */}
                 {sim.summary ? (
@@ -200,17 +248,6 @@ export default function Simulations() {
                     </p>
                   </div>
                 )}
-
-                {/* Metadata */}
-                <div className="text-xs text-muted-foreground">
-                  <span className="block">
-                    Created:{" "}
-                    {sim.created_at
-                      ? new Date(sim.created_at).toLocaleString()
-                      : "Unknown date"}
-                  </span>
-                </div>
-                
                 {/* Metadata */}
                 <div className="text-xs text-muted-foreground space-y-1">
                   <span className="block">
@@ -227,18 +264,45 @@ export default function Simulations() {
                     Created: {sim.created_at ? new Date(sim.created_at).toLocaleString() : "—"}
                   </span>
                 </div>
-                {/* View Results Button */}
-                {sim.status === "completed" && (
-                  <Button
-                    className="w-full mt-2"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleViewResults(sim._id)
-                    }}
-                  >
-                    View Results
-                  </Button>
-                )}
+                {/* Buttons */}
+                <div className="space-y-2">
+                  {sim.status === "completed" && (
+                    <Button
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleViewResults(sim._id)
+                      }}
+                    >
+                      View Results
+                    </Button>
+                  )}
+                  {sim.status === "paused" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleAutoContinue(sim._id)
+                        }}
+                      >
+                        ▶️ Auto Continue
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleManualContinue(sim._id)
+                        }}
+                      >
+                        Manual Continue (ZIP)
+                      </Button>
+                    </>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}

@@ -1,13 +1,14 @@
+// FILE: Frontend/components/drivecycle/subcycle/utils.ts
 import { Step, Subcycle } from "./types"
 
-export const calculateTotalDuration = (steps: Step[]) =>
+export const calculateTotalDuration = (steps: Step[] = []): number =>
   steps.reduce((sum, s) => sum + s.duration * s.repetitions, 0)
 
-export const getStepCount = (subcycle: Subcycle): number => 
-  subcycle.num_steps ?? subcycle.steps.length
+export const getStepCount = (subcycle: Subcycle | any): number =>
+  subcycle.num_steps ?? (subcycle.steps ? subcycle.steps.length : 0)
 
-export const getTotalDuration = (subcycle: Subcycle): number => 
-  subcycle.total_duration ?? calculateTotalDuration(subcycle.steps)
+export const getTotalDuration = (subcycle: Subcycle | any): number =>
+  subcycle.total_duration ?? calculateTotalDuration(subcycle.steps || [])
 
 export const convertSecondsToHMS = (totalSeconds: number | string): string => {
   const numSeconds = Number(totalSeconds)

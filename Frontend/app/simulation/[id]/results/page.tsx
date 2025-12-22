@@ -1,6 +1,6 @@
 // app/simulation/[id]/results/page.tsx
 import { Suspense } from "react";
-import { SimulationResultsContent } from "@/components/simulation/SimulationResultsContent";
+import { SimulationResultsContent } from "@/components/simulation/flow/SimulationResultsContent";
 
 export default function SimulationResults() {
   return (

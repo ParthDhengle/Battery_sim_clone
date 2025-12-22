@@ -1,11 +1,10 @@
-// Frontend/app/simulation/page.tsx
 "use client"
 import { useAppStore } from '@/lib/store'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { SimulationStepper } from '@/components/simulation/SimulationStepper'
+import { SimulationStepper } from '@/components/simulation/flow/SimulationStepper'
 import { useState } from 'react'
 export default function NewSimulation() {
   const addProject = useAppStore((state) => state.addProject)

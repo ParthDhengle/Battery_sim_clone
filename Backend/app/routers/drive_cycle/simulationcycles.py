@@ -1,4 +1,4 @@
-# FILE: Backend/app/routers/drive_cycle/simulationcycles.py
+# FILE: Backend/app/routers/drive_cycle/simulationcycles.py (UPDATED: Add GET /table endpoint)
 from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Any
 from app.config import db
@@ -7,7 +7,12 @@ import aiofiles
 import json
 from io import StringIO
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from app.utils.simulation_generator import generate_simulation_csv 
+from app.utils.simulation_generator import generate_simulation_csv
+from pathlib import Path
+from fastapi.responses import StreamingResponse  # ADD: For streaming CSV
+
+# Define constant here (shared with subcycles.py logic)
+UPLOAD_SUBCYCLES_DIR = os.path.join(os.getenv("UPLOAD_DIR", "app/uploads"), "subcycles")
 DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
@@ -228,3 +233,33 @@ async def generate_simulation_table(sim_id: str):
         "totalDriveCycles": total_drive_cycles,
         "fileSizeBytes": len(csv_content.encode('utf-8'))
     }
+
+# ADD: New endpoint for serving the generated table as text/CSV
+@router.get("/{sim_id}/table")
+async def get_simulation_cycle_table(sim_id: str):
+    """
+    Serve the generated simulation cycle CSV file as text.
+    Assumes file has been generated via /generate first.
+    """
+    sim = await db.simulation_cycles.find_one({"_id": sim_id, "deleted_at": None})
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulation cycle not found")
+    
+    simulation_table_path = sim.get("simulation_table_path")
+    if not simulation_table_path:
+        raise HTTPException(status_code=400, detail="No simulation table generated for this cycle. Please generate it first via POST /generate.")
+    
+    # Construct full file path (relative to app/)
+    file_path = f"app{simulation_table_path}"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Simulation table file not found on server")
+    
+    def iterfile():
+        with open(file_path, "r", encoding="utf-8") as f:
+            yield from f
+    
+    return StreamingResponse(
+        iterfile(), 
+        media_type="text/csv",
+        headers={"Content-Disposition": f"inline; filename={os.path.basename(file_path)}"}
+    )

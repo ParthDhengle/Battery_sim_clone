@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { SimulationDataChart } from "./simulation-data-chart"
 import { generatePDFReport } from './pdf-report-generator'
-
 interface SimulationDataPoint {
   time: number
   voltage?: number
@@ -17,7 +16,6 @@ interface SimulationDataPoint {
   qgen?: number
   [key: string]: any
 }
-
 interface SimulationDataResponse {
   time_range: string
   total_points: number
@@ -33,7 +31,6 @@ interface SimulationDataResponse {
   status?: string
   progress?: number
 }
-
 interface ResultsDashboardProps {
   results: {
     summary?: {
@@ -45,7 +42,6 @@ interface ResultsDashboardProps {
   }
   onPrevious?: () => void
 }
-
 interface ReportData {
   simulationId: string
   packInfo: {
@@ -96,7 +92,6 @@ interface ReportData {
     data?: SimulationDataPoint[]
   }
 }
-
 export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps) {
   const [simulationData, setSimulationData] = useState<SimulationDataResponse | null>(null)
   const [maxPoints, setMaxPoints] = useState("5000")
@@ -107,38 +102,37 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
   const [simulationStatus, setSimulationStatus] = useState<string>("unknown")
   const [progress, setProgress] = useState<number>(0)
   const [isSimulationComplete, setIsSimulationComplete] = useState(false)
-  const [isStopping, setIsStopping] = useState(false)
+  const [isPausing, setIsPausing] = useState(false)
   const [expectedTotalRows, setExpectedTotalRows] = useState<number>(0)
   const [refreshKey, setRefreshKey] = useState(0) // Key to trigger manual refresh
   const [showMessage, setShowMessage] = React.useState(false);
   const simulationId = results.simulation_id
-
   // Calculate summary from simulation data if not provided
   const summary = React.useMemo(() => {
     // Priority: 1. results.summary, 2. simulationData.summary, 3. calculated from data
     if (results.summary && !simulationData?.is_partial) {
       return results.summary
     }
-    
+   
     // Use live data from simulationData if available
     if (simulationData?.summary && Object.keys(simulationData.summary).length > 0) {
       console.log("📊 Using simulationData.summary:", simulationData.summary)
       return simulationData.summary
     }
-    
+   
     // Calculate from raw data as fallback
     if (simulationData && simulationData.data.length > 0) {
       const lastPoint = simulationData.data[simulationData.data.length - 1]
       const firstPoint = simulationData.data[0]
-      
+     
       // Calculate max temp from Qgen
       const maxQgen = Math.max(...simulationData.data.map(d => d.qgen ?? 0))
       const maxTemp = maxQgen * 0.01 + 26.85
-      
+     
       const initialSoc = firstPoint?.soc ?? 1.0
       const endSoc = lastPoint.soc ?? 0
       const capacityFade = Math.abs((initialSoc - endSoc) / initialSoc * 100)
-      
+     
       const calculated = {
         end_soc: endSoc,
         max_temp: maxTemp,
@@ -147,41 +141,37 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       console.log("🧮 Calculated summary from data:", calculated)
       return calculated
     }
-    
+   
     return {
       end_soc: 0,
       max_temp: 25.0,
       capacity_fade: 0
     }
   }, [results.summary, simulationData])
-
   // Check simulation status
   const checkStatus = useCallback(async () => {
     if (!simulationId || simulationId === "mock-simulation" || simulationId.trim() === "" || isSimulationComplete) {
       return
     }
-
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
       const response = await fetch(`${API_BASE}/simulations/${simulationId}`, {
         cache: "no-store"
       })
-
       if (response.ok) {
         const data = await response.json()
         setSimulationStatus(data.status)
-        
+       
         console.log("📡 Status response:", {
           status: data.status,
           progress: data.metadata?.progress,
           summary: data.metadata?.summary,
           partial_summary: data.metadata?.partial_summary
         })
-
-        if (data.status === "completed" || data.status === "stopped") {
+        if (data.status === "completed" || data.status === "stopped" || data.status === "paused") {
           setIsSimulationComplete(true)
           setProgress(100)
-          console.log(`  Simulation ${data.status}!`)
+          console.log(` Simulation ${data.status}!`)
         } else if (data.status === "failed") {
           setError(data.error || "Simulation failed")
           setIsSimulationComplete(true)
@@ -191,22 +181,17 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       console.error("Error checking simulation status:", err)
     }
   }, [simulationId, isSimulationComplete])
-
   // Poll simulation status every 5 seconds
   useEffect(() => {
     if (!simulationId || simulationId === "mock-simulation" || simulationId.trim() === "" || isSimulationComplete) {
       return
     }
-
     // Initial check
     checkStatus()
-
     // Poll every 5 seconds
     const statusInterval = setInterval(checkStatus, 5000)
-
     return () => clearInterval(statusInterval)
   }, [simulationId, isSimulationComplete, checkStatus])
-
   // Fetch simulation data
   const fetchData = useCallback(async () => {
     if (!simulationId || simulationId === "mock-simulation" || simulationId.trim() === "") {
@@ -215,15 +200,12 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       setIsLoading(false)
       return
     }
-
     setIsLoading(true)
     setError(null)
-
     try {
       const params = new URLSearchParams({
         max_points: maxPoints,
       })
-
       if (timeRange !== "full") {
         let timeRangeValue = ""
         if (timeRange === "1h") timeRangeValue = "0-3600"
@@ -231,28 +213,24 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         else if (timeRange === "1m") timeRangeValue = "0-2592000"
         if (timeRangeValue) params.append("time_range", timeRangeValue)
       }
-
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
       const response = await fetch(`${API_BASE}/simulations/${simulationId}/data?${params}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         cache: "no-store"
       })
-
       if (response.status === 202) {
         // Data not ready yet, but simulation is running
         console.log("[v0] Data not ready, simulation in progress...")
         return
       }
-
       if (!response.ok) {
         const errorText = await response.text()
         console.error("[v0] API error response:", errorText)
         throw new Error(`Failed to fetch data: ${response.statusText}`)
       }
-
       const data: SimulationDataResponse = await response.json()
-      
+     
       console.log("📥 Received data:", {
         total_points: data.total_points,
         sampled_points: data.sampled_points,
@@ -261,7 +239,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         status: data.status,
         progress: data.progress
       })
-      
+     
       // Fill missing fields with defaults
       data.data = data.data.map(d => ({
         ...d,
@@ -269,17 +247,16 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         temp: d.temp ?? 25.0,
         qgen: d.qgen ?? 0.0,
       }))
-
       setSimulationData(data)
       setSimulationStatus(data.status || "unknown")
-      
+     
       // Calculate progress based on total_points vs expected
       if (expectedTotalRows === 0 && data.total_points > 0) {
         // First time, try to estimate expected total
         // Assuming simulation hasn't completed, this is partial data
         setExpectedTotalRows(data.total_points * 10) // Conservative estimate
       }
-      
+     
       if (data.status === "completed") {
         setProgress(100)
         setExpectedTotalRows(data.total_points)
@@ -292,7 +269,6 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
         const incrementalProgress = Math.min(95, (data.total_points / 100000) * 100)
         setProgress(incrementalProgress)
       }
-
     } catch (err) {
       let errorMsg = err instanceof Error ? err.message : "Failed to load simulation data"
       if (errorMsg.includes("Cell not found")) {
@@ -304,48 +280,41 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       setIsLoading(false)
     }
   }, [simulationId, maxPoints, timeRange, expectedTotalRows])
-
   // Fetch data periodically while running
   useEffect(() => {
     // Initial fetch
     fetchData()
-
     // Only continue fetching if simulation is still running
     if (!isSimulationComplete) {
       const dataInterval = setInterval(fetchData, 5000) // Fetch data every 5 seconds
       return () => clearInterval(dataInterval)
     }
   }, [simulationId, maxPoints, timeRange, isSimulationComplete, fetchData, refreshKey])
-
   // Manual refresh handler
   const handleRefresh = useCallback(async () => {
     console.log("🔄 Manual refresh triggered")
     setIsLoading(true)
-    
+   
     // Check status first
     await checkStatus()
-    
+   
     // Then fetch latest data
     await fetchData()
-    
+   
     setRefreshKey(prev => prev + 1)
   }, [checkStatus, fetchData])
-
   const handleExport = async () => {
     setShowMessage(true);
-
   setTimeout(() => {
     setShowMessage(false);
   }, 10000);
-
     if (!simulationId) {
       setError("No simulation ID available")
       return
     }
-
     try {
       setError(null)
-      
+     
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
       const response = await fetch(`${API_BASE}/simulations/${simulationId}/export`, {
         method: "GET",
@@ -353,39 +322,37 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
           "Accept": "text/csv",
         },
       })
-
       if (!response.ok) {
         const errorText = await response.text()
         throw new Error(`Failed to export data: ${response.statusText} - ${errorText}`)
       }
-
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.style.display = "none"
       a.href = url
-      
+     
       const contentDisposition = response.headers.get("Content-Disposition")
       let filename = `simulation-${simulationId}.csv`
-      
+     
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
         if (filenameMatch) {
           filename = filenameMatch[1]
         }
       }
-      
+     
       a.download = filename
       document.body.appendChild(a)
       a.click()
-      
+     
       setTimeout(() => {
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
       }, 100)
-      
-      console.log("  Export successful:", filename)
-      
+     
+      console.log(" Export successful:", filename)
+     
     } catch (err) {
       console.error("❌ Export failed:", err)
       const errorMsg = err instanceof Error ? err.message : "Failed to export data"
@@ -397,29 +364,23 @@ const handleReport = async () => {
     setError("No simulation data available");
     return;
   }
-
   try {
     setError(null);
-
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
     // 1. Get simulation (has pack_id, initial_conditions, drive_cycle_name)
     const simRes = await fetch(`${API_BASE}/simulations/${simulationId}`, { cache: "no-store" });
     if (!simRes.ok) throw new Error("Failed to fetch simulation");
     const sim = await simRes.json();
-
     // 2. Get pack
     const packId = sim.pack_id;
     if (!packId) throw new Error("Pack ID not found in simulation");
     const packRes = await fetch(`${API_BASE}/packs/${packId}`, { cache: "no-store" });
     if (!packRes.ok) throw new Error("Failed to fetch pack");
     const pack = await packRes.json();
-
     // 3. Get cell
     const cellRes = await fetch(`${API_BASE}/cells/${pack.cell_id}`, { cache: "no-store" });
     if (!cellRes.ok) throw new Error("Failed to fetch cell");
     const cell = await cellRes.json();
-
     // === CORRECTLY extract initial conditions ===
     const rawInit = sim.initial_conditions || {};
     const defaultConditions = {
@@ -428,7 +389,6 @@ const handleReport = async () => {
       soh: rawInit.soh || 1.0,
       dcir: rawInit.dcir_aging_factor || 1.0,
     };
-
     const varyingConditions = (rawInit.varying_conditions || []).map((v: any) => ({
       cellIds: v.cell_ids || [],
       temp: v.temperature || defaultConditions.temperature,
@@ -436,7 +396,6 @@ const handleReport = async () => {
       soh: v.soh || 1.0,
       dcir: v.dcir_aging_factor || 1.0,
     }));
-
     // Build report data
     const reportData: ReportData = {
       simulationId,
@@ -488,49 +447,44 @@ const handleReport = async () => {
         data: simulationData.data,
       },
     };
-
     await generatePDFReport(reportData);
-
   } catch (err: any) {
     console.error("PDF Generation Error:", err);
     setError(err.message || "Failed to generate PDF report");
   }
 };
 
-  const handleStopSimulation = async () => {
-    if (!simulationId || isStopping) return
-    
-    setIsStopping(true)
-    try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const response = await fetch(`${API_BASE}/simulations/${simulationId}/stop`, {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to stop simulation")
-      }
-
-      const data = await response.json()
-      console.log("🛑 Simulation stopped:", data)
-      
-      setSimulationStatus("stopped")
-      setIsSimulationComplete(true)
-      
-      // Trigger immediate data refresh without reloading page
-      await handleRefresh()
-    } catch (err) {
-      console.error("❌ Error stopping simulation:", err)
-      setError(err instanceof Error ? err.message : "Failed to stop simulation")
-    } finally {
-      setIsStopping(false)
-    }
+// UPDATED: handlePause
+const handlePause = async () => {
+  setIsPausing(true)
+  try {
+    await pauseSimulation(simulationId)
+    setSimulationStatus("paused")
+  } catch (err) {
+    setError("Failed to pause")
+  } finally {
+    setIsPausing(false)
   }
+}
+
+// UPDATED: Download Continuation ZIP
+const handleDownloadContinuation = async () => {
+  try {
+    const blob = await downloadContinuation(simulationId)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `continuation-${simulationId}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    setError("Failed to download ZIP")
+  }
+}
 
   const toggleMetric = useCallback((metric: string) => {
     setSelectedMetrics((prev) => (prev.includes(metric) ? prev.filter((m) => m !== metric) : [...prev, metric]))
   }, [])
-
   return (
     <div className="space-y-6">
       {/* Progress Indicator */}
@@ -556,7 +510,21 @@ const handleReport = async () => {
           </CardContent>
         </Card>
       )}
-
+      {/* Paused Indicator */}
+      {simulationStatus === "paused" && (
+        <Card className="border-yellow-500/50 bg-yellow-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              ⏸️ Simulation Paused
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Simulation is paused. Use Resume to continue or download continuation ZIP.
+            </p>
+          </CardContent>
+        </Card>
+      )}
       {/* Stopped Indicator */}
       {simulationStatus === "stopped" && (
         <Card className="border-orange-500/50 bg-orange-500/5">
@@ -572,7 +540,6 @@ const handleReport = async () => {
           </CardContent>
         </Card>
       )}
-
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -609,7 +576,6 @@ const handleReport = async () => {
           </CardContent>
         </Card>
       </div>
-
       {/* Data Metadata */}
       {simulationData && (
         <Card className="bg-muted/40">
@@ -635,14 +601,12 @@ const handleReport = async () => {
           </CardContent>
         </Card>
       )}
-
       {/* Error State */}
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
       {/* Data Chart */}
       {isLoading && !simulationData ? (
         <div className="flex flex-col items-center justify-center gap-4 py-12 bg-muted/20 rounded-lg">
@@ -652,7 +616,7 @@ const handleReport = async () => {
         </div>
       ) : simulationData && simulationData.data.length > 0 ? (
         <div className="space-y-6">
-          <SimulationDataChart 
+          <SimulationDataChart
             data={simulationData.data}
             maxPoints={maxPoints}
             timeRange={timeRange}
@@ -669,7 +633,6 @@ const handleReport = async () => {
           </CardContent>
         </Card>
       )}
-
       {/* Controls */}
       <Card>
         <CardHeader>
@@ -677,48 +640,68 @@ const handleReport = async () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-2">
-            <Button 
-              onClick={handleExport} 
-              variant="outline" 
+            <Button
+              onClick={handleExport}
+              variant="outline"
               className="gap-2 flex-1 sm:flex-none bg-transparent"
-              disabled={!isSimulationComplete && simulationStatus !== "stopped"}
+              disabled={!isSimulationComplete && simulationStatus !== "stopped" && simulationStatus !== "paused"}
             >
               📥 Export CSV
             </Button>
-            <Button 
-              onClick={handleReport} 
-              variant="outline" 
+            <Button
+              onClick={handleReport}
+              variant="outline"
               className="gap-2 flex-1 sm:flex-none bg-transparent"
-              disabled={!isSimulationComplete && simulationStatus !== "stopped"}
+              disabled={!isSimulationComplete && simulationStatus !== "stopped" && simulationStatus !== "paused"}
             >
               📋 Download Report
             </Button>
-            <Button 
-              onClick={handleRefresh} 
-              variant="outline" 
+            {/* UPDATED: ZIP Download */}
+            <Button
+              onClick={handleDownloadContinuation}
+              variant="outline"
+              className="gap-2 flex-1 sm:flex-none"
+              disabled={simulationStatus !== "paused"}
+            >
+              💾 Download Continuation ZIP
+            </Button>
+            <Button
+              onClick={handleRefresh}
+              variant="outline"
               className="gap-2 flex-1 sm:flex-none"
               disabled={isLoading}
             >
               {isLoading ? "⏳ Refreshing..." : "🔄 Refresh"}
             </Button>
+            {/* UPDATED: Pause instead of Stop */}
             {!isSimulationComplete && (simulationStatus === "running" || simulationStatus === "pending") && (
-              <Button 
-                onClick={handleStopSimulation}
-                variant="destructive"
+              <Button
+                onClick={handlePause}
+                variant="secondary"
                 className="gap-2 flex-1 sm:flex-none ml-auto"
-                disabled={isStopping}
+                disabled={isPausing}
               >
-                {isStopping ? "⏳ Stopping..." : "🛑 Stop Simulation"}
+                {isPausing ? "⏳ Pausing..." : "⏸️ Pause Simulation"}
               </Button>
             )}
-            {onPrevious && (isSimulationComplete || simulationStatus === "stopped") && (
+            {/* NEW: Resume for Paused */}
+            {simulationStatus === "paused" && (
+              <Button
+                onClick={() => {/* Auto Resume */ fetch(`${API_BASE}/simulations/${simulationId}/resume`, {method: "POST"}).then(handleRefresh)}}
+                variant="default"
+                className="gap-2 flex-1 sm:flex-none ml-auto"
+              >
+                ▶️ Resume
+              </Button>
+            )}
+            {onPrevious && (isSimulationComplete || simulationStatus === "stopped" || simulationStatus === "paused") && (
               <Button onClick={onPrevious} variant="outline" className="flex-1 sm:flex-none ml-auto bg-transparent">
                 ← Back
               </Button>
             )}
           </div>
         {showMessage && (
-          <p 
+          <p
             onClick={handleExport}
             className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition"
             role="button"

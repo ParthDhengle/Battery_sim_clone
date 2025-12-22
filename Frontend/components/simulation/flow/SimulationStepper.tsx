@@ -5,15 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { SimulationSetup } from "@/components/simulation/simulation-setup"
-import { ResultsDashboard } from "@/components/simulation/results-dashboard"
+import { SimulationSetup } from "@/components/simulation/configuration/simulation-setup"
+import { ResultsDashboard } from "@/components/simulation/results/results-dashboard"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { getPacks, getPack } from "@/lib/api/packs"
 import { runSimulation } from "@/lib/api/simulations"
-import { PackSelector } from "@/components/simulation/pack-selector"
-import { DriveCycleSelector } from "@/components/simulation/drive-cycle-selector"
-import { DriveCyclePreview } from "@/components/simulation/drive-cycle-preview"
+import { PackSelector } from "@/components/simulation/selections/pack-selector"
+import { DriveCycleSelector } from "@/components/simulation/selections/drive-cycle-selector"
+import { DriveCyclePreview } from "@/components/simulation/selections/drive-cycle-preview"
 import { getPacksFromStorage } from "@/lib/api/get-packs-storage"
 
 interface SimulationStepperProps {
@@ -50,14 +50,15 @@ function StepIndicator({ step, totalSteps }: { step: number; totalSteps: number 
 function ConfigurationSummary({
   packId,
   cycleId,
+  cycleLabel,
   simulationConfig,
 }: {
   packId?: string
   cycleId?: string
+  cycleLabel?: string
   simulationConfig?: Record<string, any>
 }) {
   const [packs, setPacks] = useState<PackOption[]>([])
-  const [cycles, setCycles] = useState<DriveOption[]>([])
 
   useEffect(() => {
     // FIX: Use same function as PackSelector
@@ -65,7 +66,6 @@ function ConfigurationSummary({
   }, [])
 
   const pack = packs.find((p) => p.value === packId)
-  const cycleLabel = cycleId?.endsWith(".csv") ? cycleId : null
 
   if (!pack && !cycleLabel && !simulationConfig) return null
 
@@ -108,22 +108,13 @@ async function getDriveCycleCsv(cycleId: string): Promise<string> {
   if (cycleId.endsWith('.csv')) {
     return sessionStorage.getItem(`csv:${cycleId}`) || ''
   } else {
-    const key = `drivecycle:${cycleId}`
-    if (typeof window !== 'undefined' && window.storage && window.storage.get) {
-      const dc = await window.storage.get(key)
-      if (!dc) return ''
-      const cycle = JSON.parse(dc.value)
-      let rows = ''
-      if (Array.isArray(cycle.data)) {
-        rows = cycle.data.map((item: any) => {
-          const t = Array.isArray(item) ? item[0] : item.Time
-          const c = Array.isArray(item) ? item[1] : item.Current
-          return `${t},${c}`
-        }).join('\n')
-      }
-      return 'Time,Current\n' + rows
+    try {
+      const { getSimulationCycleTable } = await import("@/lib/api/drive-cycle")
+      return await getSimulationCycleTable(cycleId)
+    } catch (err) {
+      console.error('Error fetching drive cycle table:', err)
+      return ''
     }
-    return ''
   }
 }
 
@@ -140,15 +131,43 @@ async function getDriveCycleData(cycleId: string): Promise<{ time: number[]; cur
     const time: number[] = []
     const current: number[] = []
 
-    dataLines.forEach(line => {
-      const [tStr, cStr] = line.split(',')
-      const t = Number.parseFloat(tStr)
-      const c = Number.parseFloat(cStr)
-      if (!isNaN(t) && !isNaN(c)) {
-        time.push(t)
-        current.push(c)
-      }
-    })
+    if (cycleId.endsWith('.csv')) {
+      // Simple CSV: Time,Current
+      dataLines.forEach(line => {
+        const [tStr, cStr] = line.split(',')
+        const t = Number.parseFloat(tStr)
+        const c = Number.parseFloat(cStr)
+        if (!isNaN(t) && !isNaN(c)) {
+          time.push(t)
+          current.push(c)
+        }
+      })
+    } else {
+      // DB full table: extract stepwise
+      const header = lines[0].split(',').map(h => h.trim().toLowerCase())
+      const durationIdx = header.findIndex(h => h.includes('step duration'))
+      const valueIdx = header.findIndex(h => h.includes('value'))
+      const typeIdx = header.findIndex(h => h.includes('value type'))
+
+      if (durationIdx === -1 || valueIdx === -1) return null
+
+      let cumTime = 0
+      dataLines.forEach(line => {
+        const values = line.split(',').map(v => v.trim())
+        if (typeIdx !== -1 && values[typeIdx] !== 'current') return
+
+        const duration = Number.parseFloat(values[durationIdx] || '0')
+        const val = Number.parseFloat(values[valueIdx] || '0')
+
+        if (!isNaN(duration) && duration > 0 && !isNaN(val)) {
+          time.push(cumTime)
+          current.push(val)
+          cumTime += duration
+          time.push(cumTime)
+          current.push(val)
+        }
+      })
+    }
 
     if (time.length < 2) return null
 
@@ -177,6 +196,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
   const [packId, setPackId] = useState("")
   const [packData, setPackData] = useState<any>(null)
   const [cycleId, setCycleId] = useState("")
+  const [cycleLabel, setCycleLabel] = useState("")
   const [simulationConfig, setSimulationConfig] = useState<Record<string, any> | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
@@ -212,8 +232,8 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
       modelConfig: simulationConfig,
       driveCycleCsv,
       driveCycleSource: cycleId.endsWith(".csv")
-        ? { type: "upload", filename: cycleId }
-        : { type: "database", id: cycleId, name: "Predefined Cycle" }, // You can improve label
+        ? { type: "upload", filename: cycleId, name: cycleLabel }
+        : { type: "database", id: cycleId, name: cycleLabel },
     }
     console.log("Pack : ")
     console.log(packConfig)
@@ -244,12 +264,18 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
     setActiveTab("selection")
     setPackId("")
     setCycleId("")
+    setCycleLabel("")
     setSimulationConfig(undefined)
     setError(null)
     setSimulationResults(null)
     setSimulationError(null)
     setSimulationId(null)
     setIsStarting(false)
+  }
+
+  const handleCycleChange = (value: string, label?: string) => {
+    setCycleId(value)
+    setCycleLabel(label || value)
   }
 
   return (
@@ -298,7 +324,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                 <div className="flex justify-center ">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-3xl">
                     <PackSelector value={packId} onValueChange={setPackId} />
-                    <DriveCycleSelector value={cycleId} onValueChange={setCycleId} />
+                    <DriveCycleSelector value={cycleId} onValueChange={handleCycleChange} />
                   </div>
                 </div>
                 {cycleId && <DriveCyclePreview cycleId={cycleId} />}
@@ -317,7 +343,7 @@ export function SimulationStepper({ projectId, name, simType }: SimulationSteppe
                   onConfigChange={setSimulationConfig}  
                   packData={packData} 
                 />
-                <ConfigurationSummary packId={packId} cycleId={cycleId} simulationConfig={simulationConfig} />
+                <ConfigurationSummary packId={packId} cycleId={cycleId} cycleLabel={cycleLabel} simulationConfig={simulationConfig} />
                 <div className="flex justify-between pt-4 gap-3">
                   <Button variant="outline" onClick={() => setActiveTab("selection")}>
                     Back

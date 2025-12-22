@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ResultsDashboard } from "@/components/simulation/results-dashboard";
+import { ResultsDashboard } from "@/components/simulation/results/results-dashboard";
 
 export function SimulationResultsContent() {
   const params = useParams();

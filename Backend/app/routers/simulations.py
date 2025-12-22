@@ -173,6 +173,8 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
     model_config = request.get("modelConfig", {})
     sim_name = request.get("name", "Untitled Simulation")
     sim_type = request.get("type", "Generic")
+    drive_cycle_csv = request.get("driveCycleCsv", "")
+    drive_cycle_source = request.get("driveCycleSource", {})
     if not pack_config:
         raise HTTPException(status_code=400, detail="Missing 'packConfig' in request body")
     # === Initial conditions: safe defaults + optional override ===
@@ -189,43 +191,70 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         InitialConditions(**initial_conditions)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid initial_conditions: {str(e)}")
-    # === Hardcoded drive cycle (for current testing) ===
-    dc_path = "app/uploads/simulation_cycle/TESTING_SIMULATION_CYCLE_88_20251217_143422_2345.csv"
-    if not os.path.exists(dc_path):
-        raise HTTPException(status_code=500, detail=f"Drive cycle file not found: {dc_path}")
-    try:
+    # === Handle drive cycle ===
+    source_type = drive_cycle_source.get("type", "upload")
+    if source_type == "upload":
+        if not drive_cycle_csv.strip():
+            raise HTTPException(status_code=400, detail="Missing driveCycleCsv for upload")
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        filename = f"user_upload_{timestamp}.csv"
+        dc_dir = "app/uploads/simulation_cycle"
+        os.makedirs(dc_dir, exist_ok=True)
+        dc_path = os.path.join(dc_dir, filename)
+        with open(dc_path, "w") as f:
+            f.write(drive_cycle_csv)
+        # Build mock full table from simple Time,Current
+        simple_df = pd.read_csv(dc_path)
+        if 'Time' not in simple_df.columns or 'Current' not in simple_df.columns:
+            raise ValueError("Uploaded CSV missing Time or Current columns")
+        time = simple_df['Time'].values
+        I_module = simple_df['Current'].values
+        # Build mock table
+        drive_df = pd.DataFrame({
+            'Global Step Index': range(1, len(time)+1),
+            'Day_of_year': 1,
+            'DriveCycle_ID': 'Uploaded DC',
+            'Value Type': 'current',
+            'Value': I_module,
+            'Unit': 'A',
+            'Step Type': 'fixed',
+            'Step Duration (s)': np.diff(time, prepend=time[0]),
+            'Timestep (s)': np.ones(len(time)) * (time[1]-time[0]) if len(time)>1 else [1.0],
+            'Subcycle_ID': 'uploaded',
+            'Subcycle Step Index': range(1, len(time)+1),
+            'Label': ['Uploaded Step']*len(time),
+            'Ambient Temp (°C)': 20.0,
+            'Location': '',
+            'drive cycle trigger': '',
+            'step Trigger(s)': ''
+        })
+        drive_cycle_id = None
+        drive_cycle_name = drive_cycle_source.get("name", "Uploaded CSV")
+        drive_cycle_file = f"uploads/simulation_cycle/{filename}"
+    elif source_type == "database":
+        cycle_id = drive_cycle_source.get("id")
+        if not cycle_id:
+            raise HTTPException(status_code=400, detail="Missing id for database drive cycle")
+        # FIX: Query by string _id (custom string, not ObjectId) and include deleted_at filter
+        cycle = await db.simulation_cycles.find_one({"_id": cycle_id, "deleted_at": None})
+        if not cycle:
+            raise HTTPException(status_code=404, detail="Drive cycle not found")
+        simulation_table_path = cycle.get("simulation_table_path")
+        if not simulation_table_path:
+            raise HTTPException(status_code=400, detail="No simulation table generated for this cycle")
+        dc_path = f"app{simulation_table_path}"
+        if not os.path.exists(dc_path):
+            raise HTTPException(status_code=404, detail="Drive cycle file not found")
         drive_df = pd.read_csv(dc_path)
         required = ["Global Step Index", "Day_of_year", "DriveCycle_ID", "Value Type", "Value", "Unit", "Step Type", "Step Duration (s)", "Timestep (s)"]
         missing = [c for c in required if c not in drive_df.columns]
         if missing:
-            print(f"Warning: Hardcoded CSV missing {missing}; attempting fallback extraction.")
-            if 'Time' in drive_df.columns and 'Current' in drive_df.columns:
-                # Fallback to old-style
-                time = drive_df['Time'].values
-                I_module = drive_df['Current'].values
-                # Build mock table
-                drive_df = pd.DataFrame({
-                    'Global Step Index': range(1, len(time)+1),
-                    'Day_of_year': 1,
-                    'DriveCycle_ID': 'Fallback DC',
-                    'Value Type': 'current',
-                    'Value': I_module,
-                    'Unit': 'A',
-                    'Step Type': 'fixed',
-                    'Step Duration (s)': np.diff(time, prepend=time[0]),
-                    'Timestep (s)': np.ones(len(time)) * (time[1]-time[0]) if len(time)>1 else [1.0],
-                    'Subcycle_ID': 'fallback',
-                    'Subcycle Step Index': range(1, len(time)+1),
-                    'Label': ['Fallback Step']*len(time),
-                    'Ambient Temp (°C)': 20.0,
-                    'Location': '',
-                    'drive cycle trigger': '',
-                    'step Trigger(s)': ''
-                })
-            else:
-                raise ValueError(f"Hardcoded CSV invalid: missing {missing} and no Time/Current.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read drive cycle: {str(e)}")
+            raise ValueError(f"DB CSV missing required columns: {missing}")
+        drive_cycle_id = cycle_id
+        drive_cycle_name = cycle.get("name", "Unknown Cycle")
+        drive_cycle_file = simulation_table_path
+    else:
+        raise HTTPException(status_code=400, detail="Invalid driveCycleSource type")
    
     # NEW: Prepend idle step (I=0A) to avoid instant high-current cutoff
     idle_row = pd.DataFrame([{
@@ -248,8 +277,9 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         "updated_at": datetime.utcnow(),
         "pack_id": pack_id,
         "pack_name": pack_name,
-        "drive_cycle_name": "TESTING_SIMULATION_CYCLE_88_20251217_143422_2345",
-        "drive_cycle_file": "TESTING_SIMULATION_CYCLE_88_20251217_143422_2345.csv",
+        "drive_cycle_id": drive_cycle_id,
+        "drive_cycle_name": drive_cycle_name,
+        "drive_cycle_file": drive_cycle_file,
         "initial_conditions": initial_conditions,
         "metadata": {
             "name": sim_name,
