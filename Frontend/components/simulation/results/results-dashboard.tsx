@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { SimulationDataChart } from "./simulation-data-chart"
 import { generatePDFReport } from './pdf-report-generator'
-import { pauseSimulation, downloadContinuation, resumeSimulation } from "@/lib/api/simulations"
+import { pauseSimulation, downloadContinuation, resumeSimulation, pollUntilStatus } from "@/lib/api/simulations"
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 interface SimulationDataPoint {
   time: number
   voltage?: number
@@ -19,6 +20,7 @@ interface SimulationDataPoint {
   qgen?: number
   [key: string]: any
 }
+
 interface SimulationDataResponse {
   time_range: string
   total_points: number
@@ -34,6 +36,7 @@ interface SimulationDataResponse {
   status?: string
   progress?: number
 }
+
 interface ResultsDashboardProps {
   results: {
     summary?: {
@@ -45,6 +48,7 @@ interface ResultsDashboardProps {
   }
   onPrevious?: () => void
 }
+
 interface ReportData {
   simulationId: string
   packInfo: {
@@ -95,6 +99,7 @@ interface ReportData {
     data?: SimulationDataPoint[]
   }
 }
+
 export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps) {
   const [simulationData, setSimulationData] = useState<SimulationDataResponse | null>(null)
   const [maxPoints, setMaxPoints] = useState("5000")
@@ -110,19 +115,20 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
   const [refreshKey, setRefreshKey] = useState(0) // Key to trigger manual refresh
   const [showMessage, setShowMessage] = React.useState(false);
   const simulationId = results.simulation_id
+
   // Calculate summary from simulation data if not provided
   const summary = React.useMemo(() => {
     // Priority: 1. results.summary, 2. simulationData.summary, 3. calculated from data
     if (results.summary && !simulationData?.is_partial) {
       return results.summary
     }
-  
+
     // Use live data from simulationData if available
     if (simulationData?.summary && Object.keys(simulationData.summary).length > 0) {
       console.log("📊 Using simulationData.summary:", simulationData.summary)
       return simulationData.summary
     }
-  
+
     // Calculate from raw data as fallback
     if (simulationData && simulationData.data.length > 0) {
       const lastPoint = simulationData.data[simulationData.data.length - 1]
@@ -144,13 +150,14 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       console.log("🧮 Calculated summary from data:", calculated)
       return calculated
     }
-  
+
     return {
       end_soc: 0,
       max_temp: 25.0,
       capacity_fade: 0
     }
   }, [results.summary, simulationData])
+
   // Check simulation status
   const checkStatus = useCallback(async () => {
     if (!simulationId || simulationId === "mock-simulation" || simulationId.trim() === "" || isSimulationComplete) {
@@ -183,6 +190,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       console.error("Error checking simulation status:", err)
     }
   }, [simulationId, isSimulationComplete])
+
   // Poll simulation status every 5 seconds
   useEffect(() => {
     if (!simulationId || simulationId === "mock-simulation" || simulationId.trim() === "" || isSimulationComplete) {
@@ -194,6 +202,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
     const statusInterval = setInterval(checkStatus, 5000)
     return () => clearInterval(statusInterval)
   }, [simulationId, isSimulationComplete, checkStatus])
+
   // Fetch simulation data
   const fetchData = useCallback(async () => {
     if (!simulationId || simulationId === "mock-simulation" || simulationId.trim() === "") {
@@ -281,6 +290,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       setIsLoading(false)
     }
   }, [simulationId, maxPoints, timeRange, expectedTotalRows])
+
   // Fetch data periodically while running
   useEffect(() => {
     // Initial fetch
@@ -291,6 +301,7 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       return () => clearInterval(dataInterval)
     }
   }, [simulationId, maxPoints, timeRange, isSimulationComplete, fetchData, refreshKey])
+
   // Manual refresh handler
   const handleRefresh = useCallback(async () => {
     console.log("🔄 Manual refresh triggered")
@@ -304,11 +315,12 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
   
     setRefreshKey(prev => prev + 1)
   }, [checkStatus, fetchData])
+
   const handleExport = async () => {
     setShowMessage(true);
-  setTimeout(() => {
-    setShowMessage(false);
-  }, 10000);
+    setTimeout(() => {
+      setShowMessage(false);
+    }, 10000);
     if (!simulationId) {
       setError("No simulation ID available")
       return
@@ -359,128 +371,151 @@ export function ResultsDashboard({ results, onPrevious }: ResultsDashboardProps)
       setError(errorMsg)
     }
   }
-const handleReport = async () => {
-  if (!simulationData || !simulationId) {
-    setError("No simulation data available");
-    return;
-  }
-  try {
-    setError(null);
-    // 1. Get simulation (has pack_id, initial_conditions, drive_cycle_name)
-    const simRes = await fetch(`${API_BASE}/simulations/${simulationId}`, { cache: "no-store" });
-    if (!simRes.ok) throw new Error("Failed to fetch simulation");
-    const sim = await simRes.json();
-    // 2. Get pack
-    const packId = sim.pack_id;
-    if (!packId) throw new Error("Pack ID not found in simulation");
-    const packRes = await fetch(`${API_BASE}/packs/${packId}`, { cache: "no-store" });
-    if (!packRes.ok) throw new Error("Failed to fetch pack");
-    const pack = await packRes.json();
-    // 3. Get cell
-    const cellRes = await fetch(`${API_BASE}/cells/${pack.cell_id}`, { cache: "no-store" });
-    if (!cellRes.ok) throw new Error("Failed to fetch cell");
-    const cell = await cellRes.json();
-    // === CORRECTLY extract initial conditions ===
-    const rawInit = sim.initial_conditions || {};
-    const defaultConditions = {
-      temperature: rawInit.temperature || 300,
-      soc: (rawInit.soc || 1.0) * 100, // stored as 0–1 → convert to %
-      soh: rawInit.soh || 1.0,
-      dcir: rawInit.dcir_aging_factor || 1.0,
-    };
-    const varyingConditions = (rawInit.varying_conditions || []).map((v: any) => ({
-      cellIds: v.cell_ids || [],
-      temp: v.temperature || defaultConditions.temperature,
-      soc: (v.soc || 1.0) * 100,
-      soh: v.soh || 1.0,
-      dcir: v.dcir_aging_factor || 1.0,
-    }));
-    // Build report data
-    const reportData: ReportData = {
-      simulationId,
-      packInfo: {
-        cellDetails: {
-          formFactor: cell.formFactor || "cylindrical",
-          dimensions: {
-            radius: cell.radius || 0,
-            height: cell.height || 0,
-            length: cell.length || 0,
-            width: cell.width || 0,
+
+  const handleReport = async () => {
+    if (!simulationData || !simulationId) {
+      setError("No simulation data available");
+      return;
+    }
+    try {
+      setError(null);
+      // 1. Get simulation (has pack_id, initial_conditions, drive_cycle_name)
+      const simRes = await fetch(`${API_BASE}/simulations/${simulationId}`, { cache: "no-store" });
+      if (!simRes.ok) throw new Error("Failed to fetch simulation");
+      const sim = await simRes.json();
+      // 2. Get pack
+      const packId = sim.pack_id;
+      if (!packId) throw new Error("Pack ID not found in simulation");
+      const packRes = await fetch(`${API_BASE}/packs/${packId}`, { cache: "no-store" });
+      if (!packRes.ok) throw new Error("Failed to fetch pack");
+      const pack = await packRes.json();
+      // 3. Get cell
+      const cellRes = await fetch(`${API_BASE}/cells/${pack.cell_id}`, { cache: "no-store" });
+      if (!cellRes.ok) throw new Error("Failed to fetch cell");
+      const cell = await cellRes.json();
+      // === CORRECTLY extract initial conditions ===
+      const rawInit = sim.initial_conditions || {};
+      const defaultConditions = {
+        temperature: rawInit.temperature || 300,
+        soc: (rawInit.soc || 1.0) * 100, // stored as 0–1 → convert to %
+        soh: rawInit.soh || 1.0,
+        dcir: rawInit.dcir_aging_factor || 1.0,
+      };
+      const varyingConditions = (rawInit.varying_conditions || []).map((v: any) => ({
+        cellIds: v.cell_ids || [],
+        temp: v.temperature || defaultConditions.temperature,
+        soc: (v.soc || 1.0) * 100,
+        soh: v.soh || 1.0,
+        dcir: v.dcir_aging_factor || 1.0,
+      }));
+      // Build report data
+      const reportData: ReportData = {
+        simulationId,
+        packInfo: {
+          cellDetails: {
+            formFactor: cell.formFactor || "cylindrical",
+            dimensions: {
+              radius: cell.radius || 0,
+              height: cell.height || 0,
+              length: cell.length || 0,
+              width: cell.width || 0,
+            },
+            capacity: cell.capacity || 0,
+            voltage: { max: cell.upper_voltage || 4.2, min: cell.lower_voltage || 2.5 },
+            mass: cell.m_cell || 0,
           },
-          capacity: cell.capacity || 0,
-          voltage: { max: cell.upper_voltage || 4.2, min: cell.lower_voltage || 2.5 },
-          mass: cell.m_cell || 0,
+          packDetails: {
+            electrical: {
+              nSeries: pack.r_s || 0,
+              nParallel: pack.r_p || 0,
+              nTotal: (pack.r_s || 0) * (pack.r_p || 0),
+              packNominalVoltage: (pack.r_s || 0) * (cell.nominal_voltage || 3.7),
+              packCapacity: (pack.r_p || 0) * (cell.capacity || 0),
+              packEnergyWh: (pack.r_s || 0) * (cell.nominal_voltage || 3.7) * (pack.r_p || 0) * (cell.capacity || 0),
+            },
+            mechanical: {
+              totalPackWeight: (pack.r_s || 0) * (pack.r_p || 0) * (cell.m_cell || 0),
+              totalPackVolume: 0.001,
+              energyDensityGravimetric: 0,
+              energyDensityVolumetric: 0,
+            },
+            commercial: {
+              totalPackCost: (pack.r_s || 0) * (pack.r_p || 0) * (pack.cost_per_cell || 0),
+            },
+          },
         },
-        packDetails: {
-          electrical: {
-            nSeries: pack.r_s || 0,
-            nParallel: pack.r_p || 0,
-            nTotal: (pack.r_s || 0) * (pack.r_p || 0),
-            packNominalVoltage: (pack.r_s || 0) * (cell.nominal_voltage || 3.7),
-            packCapacity: (pack.r_p || 0) * (cell.capacity || 0),
-            packEnergyWh: (pack.r_s || 0) * (cell.nominal_voltage || 3.7) * (pack.r_p || 0) * (cell.capacity || 0),
-          },
-          mechanical: {
-            totalPackWeight: (pack.r_s || 0) * (pack.r_p || 0) * (cell.m_cell || 0),
-            totalPackVolume: 0.001,
-            energyDensityGravimetric: 0,
-            energyDensityVolumetric: 0,
-          },
-          commercial: {
-            totalPackCost: (pack.r_s || 0) * (pack.r_p || 0) * (pack.cost_per_cell || 0),
-          },
+        driveCycleInfo: {
+          name: sim.drive_cycle_name || sim.drive_cycle_file || "Custom Drive Cycle",
+          duration: simulationData.data[simulationData.data.length - 1]?.time || 0,
+          frequency: 1,
         },
-      },
-      driveCycleInfo: {
-        name: sim.drive_cycle_name || sim.drive_cycle_file || "Custom Drive Cycle",
-        duration: simulationData.data[simulationData.data.length - 1]?.time || 0,
-        frequency: 1,
-      },
-      initialConditions: {
-        default: defaultConditions,
-        varying: varyingConditions.length > 0 ? varyingConditions : undefined,
-      },
-      simulationResults: {
-        summary,
-        total_points: simulationData.total_points,
-        data: simulationData.data,
-      },
-    };
-    await generatePDFReport(reportData);
-  } catch (err: any) {
-    console.error("PDF Generation Error:", err);
-    setError(err.message || "Failed to generate PDF report");
+        initialConditions: {
+          default: defaultConditions,
+          varying: varyingConditions.length > 0 ? varyingConditions : undefined,
+        },
+        simulationResults: {
+          summary,
+          total_points: simulationData.total_points,
+          data: simulationData.data,
+        },
+      };
+      await generatePDFReport(reportData);
+    } catch (err: any) {
+      console.error("PDF Generation Error:", err);
+      setError(err.message || "Failed to generate PDF report");
+    }
+  };
+
+  // UPDATED: handlePause
+  const handlePause = async () => {
+    if (!simulationId) return;
+    setIsPausing(true);
+    try {
+      await pauseSimulation(simulationId);
+      // Poll until paused
+      await pollUntilStatus(simulationId, "paused");
+      setSimulationStatus("paused");
+      setProgress(0);  // Reset or keep partial
+    } catch (err) {
+      setError("Failed to pause: " + (err as Error).message);
+    } finally {
+      setIsPausing(false);
+    }
+  };
+
+  // UPDATED: handleResume
+  const handleResume = async () => {
+    if (!simulationId) return;
+    try {
+      await resumeSimulation(simulationId);  // Auto, no ZIP
+      // Poll until running
+      await pollUntilStatus(simulationId, "running");
+      setSimulationStatus("running");
+      setIsSimulationComplete(false);
+    } catch (err) {
+      setError("Failed to resume: " + (err as Error).message);
+    }
+  };
+
+  // UPDATED: Download Continuation ZIP
+  const handleDownloadContinuation = async () => {
+    try {
+      const blob = await downloadContinuation(simulationId!)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `continuation-${simulationId}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError("Failed to download ZIP")
+    }
   }
-};
-// UPDATED: handlePause
-const handlePause = async () => {
-  setIsPausing(true)
-  try {
-    await pauseSimulation(simulationId!)
-    setSimulationStatus("paused")
-  } catch (err) {
-    setError("Failed to pause")
-  } finally {
-    setIsPausing(false)
-  }
-}
-// UPDATED: Download Continuation ZIP
-const handleDownloadContinuation = async () => {
-  try {
-    const blob = await downloadContinuation(simulationId!)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `continuation-${simulationId}.zip`
-    a.click()
-    URL.revokeObjectURL(url)
-  } catch (err) {
-    setError("Failed to download ZIP")
-  }
-}
+
   const toggleMetric = useCallback((metric: string) => {
     setSelectedMetrics((prev) => (prev.includes(metric) ? prev.filter((m) => m !== metric) : [...prev, metric]))
   }, [])
+
   return (
     <div className="space-y-6">
       {/* Progress Indicator */}
@@ -640,9 +675,10 @@ const handleDownloadContinuation = async () => {
               onClick={handleExport}
               variant="outline"
               className="gap-2 flex-1 sm:flex-none bg-transparent"
-              disabled={!isSimulationComplete && simulationStatus !== "stopped" && simulationStatus !== "paused"}
+              disabled={simulationStatus === "running" || !simulationData}
+              title={simulationStatus === "paused" ? "Partial data only" : undefined}
             >
-              📥 Export CSV
+              📥 Export CSV {simulationStatus === "paused" && "(Partial)"}
             </Button>
             <Button
               onClick={handleReport}
@@ -683,7 +719,7 @@ const handleDownloadContinuation = async () => {
             {/* NEW: Resume for Paused */}
             {simulationStatus === "paused" && (
               <Button
-                onClick={() => {/* Auto Resume */ fetch(`${API_BASE}/simulations/${simulationId}/resume`, {method: "POST"}).then(handleRefresh)}}
+                onClick={handleResume}
                 variant="default"
                 className="gap-2 flex-1 sm:flex-none ml-auto"
               >

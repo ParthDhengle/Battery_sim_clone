@@ -1,4 +1,4 @@
-# FILE: Backend/app/routers/simulation.py
+# FILE: Backend/app/routers/simulations.py
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 import os
 import pandas as pd
@@ -14,7 +14,8 @@ import concurrent.futures
 from app.models.simulation import InitialConditions, SimulationStatus
 from fastapi.responses import StreamingResponse
 from typing import Optional
-from io import StringIO  # NEW: For parsing CSV string
+from io import StringIO
+from app.utils.zip_utils import load_continuation_zip  # Updated import
 
 router = APIRouter(tags=["simulations"])
 
@@ -121,18 +122,30 @@ def compute_partial_summary(df: pd.DataFrame) -> dict:
     except Exception:
         return {"end_soc": 1.0, "max_temp": 25.0, "capacity_fade": 0.0}
 
-async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_config: dict, sim_id: str, sim_name: str, sim_type: str, initial_conditions: dict, continuation_zip_data: Optional[dict] = None):
-    # NOTE: To make pausable, the aes.run_electrical_solver should periodically check db.status == 'pausing' 
-    # If yes, save current state to CSV, update status to 'paused', and return early
+async def run_sim_background(
+    pack_config: dict, 
+    drive_df: pd.DataFrame,  # Full DF
+    model_config: dict, 
+    sim_id: str, 
+    sim_name: str, 
+    sim_type: str, 
+    initial_conditions: dict, 
+    drive_cycle_id: str,  # NEW: Added for pause ZIP
+    continuation_zip_data: Optional[dict] = None,
+    full_drive_df: Optional[pd.DataFrame] = None,  # NEW: For pause
+    original_start_row: int = 0  # NEW: For pause global row
+):
     try:
         pack_config = await inject_cell_config(pack_config)
         csv_path = os.path.join("simulations", f"{sim_id}.csv")
-        zip_path = None
         last_row = 0
         existing_df = pd.DataFrame()
         continuation_history = None
+        full_df_for_pause = drive_df if full_drive_df is None else full_drive_df
+        orig_start_row_for_pause = original_start_row
+        pack_id = str(pack_config.get("_id") or pack_config.get("id", "unknown"))
+        
         if continuation_zip_data:
-            from .continuation import load_continuation_zip
             metadata, csv_file, last_row, existing_df = load_continuation_zip(continuation_zip_data["zip_path"])
             if metadata:
                 N_cells = len(pack_config.get("layers", [{}])[0].get("n_rows", 1) * len(pack_config.get("layers", [{}])[0].get("n_cols", 1)))
@@ -147,32 +160,41 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
                         'energy_throughput': last_timestep_rows['energy_throughput'].tolist() if 'energy_throughput' in existing_df.columns else [0.0] * N_cells,
                         't_global': float(existing_df['time_global_s'].max()),
                     }
-                zip_path = continuation_zip_data["zip_path"]
-                print(f"Resuming from ZIP {zip_path}, row {last_row}, existing rows {len(existing_df)}")
+                print(f"Resuming from ZIP {continuation_zip_data['zip_path']}, global row {last_row}, existing rows {len(existing_df)}")
                 initial_conditions["continuation_history"] = continuation_history
+                full_df_for_pause = drive_df
+                orig_start_row_for_pause = last_row
             else:
                 print("Warning: Continuation ZIP invalid; starting fresh")
+        
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         if not os.path.exists(csv_path):
             Path(csv_path).touch()
+        
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
             {"$set": {"status": "running", "file_csv": csv_path, "updated_at": datetime.utcnow()}}
         )
+        
         normalized_pack = _normalize_pack_for_core(pack_config, initial_conditions)
         remaining_df = drive_df.iloc[last_row:]
+        
         setup = adp.create_setup_from_configs(normalized_pack, remaining_df, model_config)
+        
         loop = asyncio.get_running_loop()
         with concurrent.futures.ProcessPoolExecutor() as executor:
             await loop.run_in_executor(
                 executor,
                 aes.run_electrical_solver,
-                setup, remaining_df, sim_id, csv_path, initial_conditions.get("continuation_history")
+                setup, remaining_df, sim_id, csv_path, initial_conditions.get("continuation_history"),
+                full_df_for_pause, orig_start_row_for_pause, pack_id, drive_cycle_id
             )
+        
         new_df = pd.read_csv(csv_path)
         if not existing_df.empty:
             full_df = pd.concat([existing_df, new_df], ignore_index=True)
             full_df.to_csv(csv_path, index=False)
+        
         summary = compute_partial_summary(pd.read_csv(csv_path))
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
@@ -186,8 +208,8 @@ async def run_sim_background(pack_config: dict, drive_df: pd.DataFrame, model_co
                 "updated_at": datetime.utcnow()
             }}
         )
-        if zip_path and os.path.exists(zip_path):
-            os.remove(zip_path)
+        if continuation_zip_data and os.path.exists(continuation_zip_data["zip_path"]):
+            os.remove(continuation_zip_data["zip_path"])  # Cleanup manual ZIP
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -255,7 +277,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         "drive_cycle_name": drive_cycle_name,
         "drive_cycle_file": drive_cycle_file,
         "initial_conditions": initial_conditions,
-        "drive_cycle_csv": driveCycleCsv,  # ADDED: Store the CSV string for resume
+        "drive_cycle_csv": driveCycleCsv,
         "metadata": {
             "name": sim_name,
             "type": sim_type,
@@ -281,29 +303,118 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         sim_name=sim_name,
         sim_type=sim_type,
         initial_conditions=initial_conditions,
-        continuation_zip_data=continuation_zip_data
+        drive_cycle_id=drive_cycle_id,  # NEW: Pass drive_cycle_id
+        continuation_zip_data=continuation_zip_data,
+        full_drive_df=drive_df,
+        original_start_row=0 if not continuation_zip_data else continuation_zip_data.get("last_row", 0)
     )
     return {"simulation_id": sim_id, "status": "started" if not continuation_zip_data else "resumed"}
 
+
 @router.post("/{sim_id}/stop")
-async def stop_simulation(sim_id: str):
+async def stop_simulation(sim_id: str, background_tasks: BackgroundTasks):
+    """Stop a running simulation using file-based signaling."""
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
+    
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
+    
     if sim.get("status") not in ["running", "pending"]:
-        raise HTTPException(status_code=400, detail="Simulation not running")
-    # NOTE: Sets to 'stopping'; assume solver checks and stops
+        raise HTTPException(status_code=400, detail="Simulation is not running")
+    
+    # Create stop signal file
+    stop_signal_file = f"simulations/{sim_id}.stop"
+    os.makedirs(os.path.dirname(stop_signal_file), exist_ok=True)
+    Path(stop_signal_file).touch()
+    
+    print(f"🛑 Stop signal created: {stop_signal_file}")
+    
+    # Update DB status
     await db.simulations.update_one(
         {"_id": ObjectId(sim_id)},
-        {"$set": {"status": "stopping", "updated_at": datetime.utcnow()}}
+        {"$set": {
+            "status": "stopping",
+            "updated_at": datetime.utcnow(),
+            "metadata.stop_requested_at": datetime.utcnow()
+        }}
     )
-    return {"simulation_id": sim_id, "status": "stopped"}
+    
+    # Background task to wait for solver completion and finalize
+    background_tasks.add_task(finalize_stopped_simulation, sim_id)
+    
+    return {
+        "simulation_id": sim_id,
+        "status": "stopping",
+        "message": "Stop signal sent. Solver will save data and terminate shortly."
+    }
+
+
+async def finalize_stopped_simulation(sim_id: str):
+    """
+    Background task: Wait for solver to finish, then update status to 'stopped'.
+    Called after creating stop signal.
+    """
+    max_wait = 60  # Wait up to 60 seconds
+    waited = 0
+    
+    while waited < max_wait:
+        await asyncio.sleep(2)
+        waited += 2
+        
+        sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
+        if not sim:
+            return
+        
+        csv_path = sim.get("file_csv")
+        stop_signal_file = f"simulations/{sim_id}.stop"
+        
+        # Check if solver has removed stop signal (indicates completion)
+        if not os.path.exists(stop_signal_file):
+            print(f"✓ Stop signal removed by solver for {sim_id}")
+            
+            # Compute partial summary
+            partial_summary = {}
+            if csv_path and os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+                try:
+                    df = pd.read_csv(csv_path)
+                    partial_summary = compute_partial_summary(df)
+                except Exception as e:
+                    print(f"⚠️ Could not compute partial summary: {e}")
+            
+            # Update final status
+            await db.simulations.update_one(
+                {"_id": ObjectId(sim_id)},
+                {"$set": {
+                    "status": "stopped",
+                    "metadata.partial_summary": partial_summary,
+                    "metadata.stopped_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+            
+            print(f"🏁 Simulation {sim_id} finalized as 'stopped'")
+            return
+    
+    # Timeout - force update status
+    print(f"⏱️ Timeout waiting for solver to stop {sim_id}")
+    await db.simulations.update_one(
+        {"_id": ObjectId(sim_id)},
+        {"$set": {
+            "status": "stopped",
+            "updated_at": datetime.utcnow()
+        }}
+    )
 
 @router.get("/all")
 async def list_simulations():
-    sims = await db.simulations.find().sort("created_at", -1).to_list(None)
+    # FIXED: Use aggregation pipeline to enable allowDiskUse=True for large sorts
+    pipeline = [
+        {"$sort": {"created_at": -1}},
+        {"$limit": 100},
+    ]
+    sims = await db.simulations.aggregate(pipeline, allowDiskUse=True).to_list(100)
     return [{
         "_id": str(s["_id"]),
         "name": s.get("metadata", {}).get("name", "Untitled"),
@@ -373,7 +484,8 @@ async def get_simulation_data(
                 "soc": round(float(row['SOC']), 4),
                 "current": round(float(row['I_module']), 2),
                 "temperature": 25.0 + round(float(row.get('Qgen_cumulative', 0)) * 0.01, 2),
-                "power": round(float(row['V_module'] * row['I_module']) / 1000, 2)
+                "power": round(float(row['V_module'] * row['I_module']) / 1000, 2),
+                "qgen": round(float(row.get('Qgen_cumulative', 0)), 2)
             })
         summary = sim.get("metadata", {}).get("summary", {})
         is_partial = sim.get("status") != "completed"

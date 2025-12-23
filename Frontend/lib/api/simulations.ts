@@ -71,3 +71,14 @@ export async function downloadContinuation(simulationId: string): Promise<Blob> 
   if (!res.ok) throw new Error(await res.text())
   return res.blob()
 }
+
+export async function pollUntilStatus(simulationId: string, targetStatus: string, maxAttempts = 60): Promise<void> {
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    const status = await getSimulationStatus(simulationId);
+    if (status.status === targetStatus) return;
+    await new Promise(resolve => setTimeout(resolve, 2000));  // Poll every 2s
+    attempts++;
+  }
+  throw new Error(`Did not reach ${targetStatus} after ${maxAttempts} attempts`);
+}
