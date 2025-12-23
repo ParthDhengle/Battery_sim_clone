@@ -2,7 +2,7 @@
 "use client";
 import { useParams } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
-import { SimulationRunner } from "@/components/simulation/simulation-runner";
+import { SimulationRunner } from "@/components/simulation/flow/simulation-runner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 

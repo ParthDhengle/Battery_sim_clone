@@ -68,8 +68,8 @@ async def shutdown_event():
 # Include routers AFTER middleware
 app.include_router(cells.router)
 app.include_router(packs.router)
-app.include_router(simulations.router)
-app.include_router(subcycles.router)
+# In Backend/app/main.py
+app.include_router(simulations.router, prefix="/simulations")
 app.include_router(manager.router) # Simulation cycles manager
 app.include_router(simulationcycles.router) # Simulation generation
 @app.get("/")
