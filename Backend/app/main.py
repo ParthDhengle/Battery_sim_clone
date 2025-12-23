@@ -1,7 +1,7 @@
 # FILE: Backend/app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import cells, packs, simulations
+from app.routers import cells, packs, simulations, continuation
 from app.routers.drive_cycle import subcycles, manager, simulationcycles # Import drive-cycle routers
 from app.config import client, db
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -18,12 +18,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  
+    allow_headers=["*"], 
     expose_headers=["*"],
     max_age=3600,
 )
@@ -72,6 +70,8 @@ app.include_router(packs.router)
 app.include_router(simulations.router, prefix="/simulations")
 app.include_router(manager.router) # Simulation cycles manager
 app.include_router(simulationcycles.router) # Simulation generation
+app.include_router(simulations.router, prefix="/simulations")
+app.include_router(continuation.router, prefix="/simulations")
 @app.get("/")
 async def root():
     return {
