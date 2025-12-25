@@ -86,10 +86,11 @@ def evaluate_triggers(
     n_series = len(parallel_groups)
     n_p_avg = len(I_cells) / n_series if n_series > 0 else 1
     for trig in triggers:
-        if trig['value'] is None:  # Skip if no threshold (doc examples)
+        trig_type = trig['type']
+        # For time_elapsed, always evaluate (even if value=None)
+        if trig_type != 'time_elapsed' and trig['value'] is None:  # Skip if no threshold (doc examples)
             print(f"Warning: Skipping trigger '{trig['type']}' (missing value)")
             continue
-        trig_type = trig['type']
         # Compute metric (conservative for safety)
         if 'V_cell' in trig_type:
             metric = np.max(sim_V_term) if 'high' in trig_type else np.min(sim_V_term)
@@ -113,14 +114,20 @@ def evaluate_triggers(
             metric = abs(I_pack) / (capacity_Ah * n_p_avg)
         elif 'P_pack' in trig_type:
             metric = v_module * I_pack
+        elif trig_type == 'time_elapsed':
+            metric = per_day_time + dt  # Check crossover this dt
+            trig['value'] = trig.get('value', 86400.0)  # Default to end-of-day
         else:
             continue  # Unknown (logged in parse)
 
         # Fire if violated
         is_fired = ('high' in trig_type and metric > trig['value']) or \
-                   ('low' in trig_type and metric < trig['value'])
+                   ('low' in trig_type and metric < trig['value']) or \
+                   (trig_type == 'time_elapsed' and metric >= trig['value'])
         if is_fired:
-            action_level = trig.get('action_override', 'dc' if trig['source'] == 'dc' else 'step')
+            action_level = trig.get('action_override', 
+                                   'day' if trig_type == 'time_elapsed' else 
+                                   'dc' if trig['source'] == 'dc' else 'step')
             fired.append({**trig, 'action_level': action_level, 'metric': metric, 'name': trig_type})
 
     return fired

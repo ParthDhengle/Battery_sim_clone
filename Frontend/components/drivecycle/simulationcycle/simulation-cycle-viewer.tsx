@@ -256,9 +256,9 @@ export default function SimulationCycleViewer({
                         <TableCell>{step.ambientTemp ?? "-"}</TableCell>
                         <TableCell>{step.location || "-"}</TableCell>
                         <TableCell className="text-xs">
-                          {step.triggers?.length > 0
+                          {step.triggers_str ? step.triggers_str : (step.triggers?.length > 0
                             ? step.triggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
-                            : "-"}
+                            : "-")}
                         </TableCell>
                         <TableCell className="truncate max-w-40">{step.label || "-"}</TableCell>
                       </TableRow>
@@ -333,14 +333,14 @@ function generateSimulationCycleCSV(steps: any[], simId: string) {
     step.timestep ?? "",
     step.ambientTemp ?? "",
     step.location || "",
-    step.triggers?.length > 0
+    step.triggers_str || (step.triggers?.length > 0
       ? step.triggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
-      : "",
+      : ""),
     (step.label || "").replace(/"/g, '""')
   ].map(val => `"${String(val).trim()}"`).join(","))
   return [header, ...rows].join("\n")
 }
-// generateSimulationCycle - updated to include subcycleName
+// generateSimulationCycle - updated to include subcycleName and auto-append idle step
 function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], subcycles: any[]) {
   if (calendarAssignment.length === 0 || drivecycles.length === 0) return []
   const defaultRule = calendarAssignment.find(rule => rule.id === 'DEFAULT_RULE')
@@ -369,6 +369,7 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
     const drivecycle = drivecycles.find((dc: any) => dc.id === drivecycleId)
     if (!drivecycle && drivecycleId !== "DC_IDLE") continue
     const steps: any[] = []
+    let totalDur = 0
     if (drivecycle && drivecycle.composition) {
       for (const comp of drivecycle.composition) {
         const subcycle = subcycles.find((sc: any) => sc.id === comp.subcycleId)
@@ -376,11 +377,12 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
         const subcycleTriggers = comp.triggers || []
         for (let rep = 0; rep < comp.repetitions; rep++) {
           for (const step of subcycle.steps) {
+            const stepDur = step.duration || 0
             steps.push({
               valueType: step.valueType,
               value: step.value,
               unit: step.unit,
-              duration: step.duration,
+              duration: stepDur,
               timestep: step.timestep || "",
               stepType: step.stepType || "",
               triggers: step.triggers || [],
@@ -392,11 +394,35 @@ function generateSimulationCycle(calendarAssignment: any[], drivecycles: any[], 
               subcycleTriggers: subcycleTriggers.length > 0
                 ? subcycleTriggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
                 : "",
+              triggers_str: step.triggers?.length > 0
+                ? step.triggers.map((t: any) => `${t.type}:${t.value}`).join("; ")
+                : "",
             })
+            totalDur += stepDur
           }
         }
       }
     }
+    // NEW: Always append idle step at end of day to fill any remaining time (even if full, it will trigger immediately)
+    // For unassigned days (drivecycle=None), this will be the only step
+    const lastComp = drivecycle?.composition?.[drivecycle.composition.length - 1] || { ambientTemp: 25.0, location: "" }
+    const idleStep = {
+      valueType: "current",
+      value: 0,
+      unit: "A",
+      duration: 0,  // trigger_only requires 0
+      timestep: 1.0,  // Default timestep
+      stepType: "trigger_only",
+      triggers: [{ type: "time_elapsed", value: null }],  // No specific value; defaults to 86400s in solver
+      label: "Default Idle cycle",
+      subcycleId: "idle",
+      subcycleName: "Default Idle",
+      ambientTemp: lastComp.ambientTemp,
+      location: lastComp.location,
+      subcycleTriggers: "",
+      triggers_str: "[time_elapsed] -",  // As per spec for CSV/display
+    }
+    steps.push(idleStep)
     simulationCycle.push({
       dayOfYear,
       drivecycleId,

@@ -50,6 +50,7 @@ async def generate_simulation_cycle(
         dc_def = drive_cycle_map.get(target_dc_id)
       
         day_steps = []
+        total_dur = 0.0
         if dc_def:
              for row in dc_def.get("composition", []):
                 sc_id = row["subcycleId"]
@@ -82,6 +83,26 @@ async def generate_simulation_cycle(
                                 if row.get("triggers") else ""
                             )
                         })
+                        total_dur += step["duration"]
+        # NEW: Always append idle step at end of day to fill any remaining time (even if full, it will trigger immediately)
+        # For unassigned days (dc_def=None), this will be the only step
+        idle_step = {
+            "valueType": "current",
+            "value": 0,
+            "unit": "A",
+            "duration": 0,  # trigger_only requires 0
+            "timestep": 1.0,  # Default timestep
+            "stepType": "trigger_only",
+            "triggers": [{"type": "time_elapsed", "value": None}],  # No specific value; defaults to 86400s in solver
+            "triggers_str": "[time_elapsed] -",  # As per spec for CSV
+            "label": "Default Idle cycle",
+            "subcycleId": "idle",
+            "subcycleName": "Default Idle",
+            "ambientTemp": 25.0 if not dc_def else row["ambientTemp"],  # Fallback if no DC
+            "location": "" if not dc_def else row["location"],
+            "subcycleTriggers": ""
+        }
+        day_steps.append(idle_step)
         simulation_cycle.append({
             "dayOfYear": day_of_year,
             "drivecycleId": target_dc_id,
