@@ -290,7 +290,7 @@ export default function Simulations() {
                       >
                         ▶️ Auto Continue
                       </Button>
-                      <Button
+                      {/* <Button
                         variant="ghost"
                         size="sm"
                         className="w-full"
@@ -300,7 +300,7 @@ export default function Simulations() {
                         }}
                       >
                         Manual Continue (ZIP)
-                      </Button>
+                      </Button> */}
                     </>
                   )}
                 </div>

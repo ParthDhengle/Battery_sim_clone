@@ -8,10 +8,7 @@ def compute_module_current_from_step(
     parallel_groups: list, R_s: float, R_p: float,
     cell_voltage_upper: float, cell_voltage_lower: float
 ) -> float:
-    """
-    100% Accurate & Optimized: Full ECM solve for V/P with caching + brentq.
-    + = discharge. Handles hysteresis, limits, imbalances exactly.
-    """
+    
     N_cells = len(cells)
     if n_series == 0 or N_cells == 0:
         return 0.0
@@ -22,6 +19,7 @@ def compute_module_current_from_step(
         if unit.lower() != 'a':
             raise ValueError("Current requires 'A'")
         return float(value)  # Pack-level
+    
     elif value_type.lower() == 'c_rate':
         if unit.lower() not in ['1/hr', 'c', '1/h']:
             raise ValueError("C-rate requires '1/hr', 'C', or '1/h'")
@@ -102,10 +100,12 @@ def compute_module_current_from_step(
         if unit.lower() != 'v':
             raise ValueError("Voltage requires 'V'")
         f_err = lambda I: compute_v_module(I) - value
+    
     elif value_type.lower() == 'power':
         if unit.lower() != 'w':
             raise ValueError("Power requires 'W'")
         f_err = lambda I: compute_v_module(I) * I - value
+    
     else:
         raise ValueError(f"Unsupported: {value_type}")
 

@@ -70,7 +70,6 @@ app.include_router(packs.router)
 app.include_router(simulations.router, prefix="/simulations")
 app.include_router(manager.router) # Simulation cycles manager
 app.include_router(simulationcycles.router) # Simulation generation
-app.include_router(simulations.router, prefix="/simulations")
 app.include_router(continuation.router, prefix="/simulations")
 @app.get("/")
 async def root():
