@@ -10,9 +10,10 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.utils.simulation_generator import generate_simulation_csv
 from pathlib import Path
 from fastapi.responses import StreamingResponse  # ADD: For streaming CSV
+from app.config import SIM_CYCLE_DIR
 
 # Define constant here (shared with subcycles.py logic)
-UPLOAD_SUBCYCLES_DIR = os.path.join(os.getenv("UPLOAD_DIR", "app/uploads"), "subcycles")
+UPLOAD_SUBCYCLES_DIR = os.path.join(os.getenv("UPLOAD_DIR", "storage"), "subcycles")
 DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
@@ -189,7 +190,7 @@ def generate_simulation_cycle_csv(simulation_cycle: List[Dict[str, Any]]) -> str
 
 
 async def save_csv_async(sim_id: str, csv_data: str) -> str:
-    upload_dir = os.getenv("UPLOAD_DIR", "app/uploads/simulation_cycle")
+    upload_dir = SIM_CYCLE_DIR
     os.makedirs(upload_dir, exist_ok=True)
     file_path = f"{upload_dir}/{sim_id}.csv"
     async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
@@ -207,7 +208,7 @@ router = APIRouter(
 async def generate_simulation_table(sim_id: str):
     """
     Generates full simulation cycle CSV using exact frontend logic
-    and saves it to app/upload/simulation_cycle/{sim_id}.csv
+    and saves it to storage/simulation_cycle/{sim_id}.csv
     """
     sim = await db.simulation_cycles.find_one({"_id": sim_id, "deleted_at": None})
     if not sim:
@@ -250,7 +251,7 @@ async def get_simulation_cycle_table(sim_id: str):
         raise HTTPException(status_code=400, detail="No simulation table generated for this cycle. Please generate it first via POST /generate.")
     
     # Construct full file path (relative to app/)
-    file_path = f"app{simulation_table_path}"
+    file_path = f"{SIM_CYCLE_DIR}{simulation_table_path.lstrip('/simulation_cycle')}"    
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Simulation table file not found on server")
     

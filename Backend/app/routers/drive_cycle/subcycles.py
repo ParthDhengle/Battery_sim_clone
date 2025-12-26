@@ -11,7 +11,9 @@ import aiofiles
 from app.utils.soft_delete import soft_delete_item
 from pydantic import BaseModel, Field
 from pathlib import Path
-UPLOAD_SUBCYCLES_DIR = os.path.join(os.getenv("UPLOAD_DIR", "app/uploads"), "subcycles")
+from app.config import SUBCYCLES_DIR
+
+UPLOAD_SUBCYCLES_DIR = SUBCYCLES_DIR
 LARGE_THRESHOLD = int(os.getenv("LARGE_SUBCYCLE_THRESHOLD", "1000"))
 
 class LightSubcycle(BaseModel):
@@ -44,7 +46,7 @@ async def save_steps_to_file(steps: list, file_id: str) -> str:
 async def load_steps_from_file(filename_or_path: str) -> List[Dict]:
     """Load steps from JSON file by filename or full relative path (backward compat)."""
     # Backward compatibility: if it's a full path like "/uploads/subcycles/file.json", extract filename
-    if filename_or_path.startswith("/uploads/subcycles/"):
+    if filename_or_path.startswith("/storage/subcycles/"):
         filename = Path(filename_or_path).name
     else:
         filename = filename_or_path

@@ -8,13 +8,13 @@ import os
 import shutil
 from pathlib import Path
 import math
+from app.config import RC_PARAMS_DIR
 
 router = APIRouter(prefix="/cells", tags=["cells"])
 
 # Configure upload directory
-UPLOAD_DIR = Path("app/uploads/rc-parameters")
+UPLOAD_DIR = Path(RC_PARAMS_DIR)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
 
 def serialize_cell(item: dict) -> dict:
     """Convert MongoDB document to API response format"""
@@ -135,6 +135,7 @@ async def create_cell(
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             safe_filename = f"{timestamp}_{rc_parameter_file.filename}"
             file_path = UPLOAD_DIR / safe_filename
+            rc_file_path = f"/uploads/rc-parameters/{safe_filename}"
             
             print(f"💾 Saving file to: {file_path}")
             
@@ -151,8 +152,6 @@ async def create_cell(
                 print(f"❌ File save error: {file_err}")
                 raise HTTPException(500, detail=f"Failed to save file: {str(file_err)}")
             
-            # Store relative path for API access
-            rc_file_path = f"/uploads/rc-parameters/{safe_filename}"
             print(f"🔗 File path stored as: {rc_file_path}")
 
         # Build cell data
@@ -322,7 +321,7 @@ async def delete_cell(id: str):
         
         # Delete associated RC parameter file if exists
         if cell.get("rc_parameter_file_path"):
-            file_path = Path("app" + cell["rc_parameter_file_path"])
+            file_path = Path(RC_PARAMS_DIR / Path(cell["rc_parameter_file_path"]).name)
             if file_path.exists():
                 os.remove(file_path)
                 print(f"🗑️ Deleted RC parameter file: {file_path}")

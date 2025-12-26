@@ -1,20 +1,19 @@
-# FILE: Backend/app/routers/continuation.py
 from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
 import os
 import pandas as pd
 from datetime import datetime
 from bson import ObjectId
-from app.config import db
+from app.config import db, SIMULATIONS_DIR, CONTINUATIONS_DIR, DRIVE_CYCLES_DIR
 from app.models.simulation import SimulationStatus
 from fastapi.responses import FileResponse
 from typing import Optional
-from app.routers.simulations import run_sim_background, compute_partial_summary # Import for partial summary if needed
-from app.utils.zip_utils import save_continuation_zip, load_continuation_zip
-from io import StringIO
+from app.routers.simulations import run_sim_background, compute_partial_summary
+from app.utils.zip_utils import load_continuation_zip
 import asyncio
 from pathlib import Path
+
 router = APIRouter(tags=["continuations"])
-os.makedirs("continuations", exist_ok=True)
+
 @router.post("/{sim_id}/pause")
 async def pause_simulation(sim_id: str, background_tasks: BackgroundTasks):
     if not ObjectId.is_valid(sim_id):
@@ -25,11 +24,8 @@ async def pause_simulation(sim_id: str, background_tasks: BackgroundTasks):
     if sim.get("status") not in [SimulationStatus.RUNNING, SimulationStatus.PENDING]:
         raise HTTPException(status_code=400, detail="Simulation not pausable")
   
-    # Create pause signal file
-    pause_signal_file = f"simulations/{sim_id}.pause"
-    os.makedirs(os.path.dirname(pause_signal_file), exist_ok=True)
+    pause_signal_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.pause")
     Path(pause_signal_file).touch()
-  
     print(f"⏸️ Pause signal created: {pause_signal_file}")
   
     await db.simulations.update_one(
@@ -37,7 +33,6 @@ async def pause_simulation(sim_id: str, background_tasks: BackgroundTasks):
         {"$set": {"status": "pausing", "updated_at": datetime.utcnow(), "metadata.pause_requested_at": datetime.utcnow()}}
     )
   
-    # Background task to wait for solver and finalize pause
     background_tasks.add_task(finalize_paused_simulation, sim_id)
   
     return {
@@ -45,14 +40,12 @@ async def pause_simulation(sim_id: str, background_tasks: BackgroundTasks):
         "status": "pausing",
         "message": "Pause signal sent. Solver will save state and pause shortly."
     }
+
 async def finalize_paused_simulation(sim_id: str):
-    """
-    Background task: Wait for solver to pause (signal removed + ZIP created), then update status to 'paused'.
-    """
-    max_wait = 60 # Wait up to 60 seconds
+    max_wait = 60
     waited = 0
-    pause_file = f"simulations/{sim_id}.pause"
-    zip_path = f"simulations/{sim_id}_pause.zip"
+    pause_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.pause")
+    zip_path = os.path.join(SIMULATIONS_DIR, f"{sim_id}_pause.zip")
   
     while waited < max_wait:
         await asyncio.sleep(2)
@@ -65,9 +58,7 @@ async def finalize_paused_simulation(sim_id: str):
                     metadata, _, last_row, existing_df = load_continuation_zip(zip_path)
                     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
                     if metadata and metadata.get("pack_id") == sim.get("pack_id") and metadata.get("dc_id") == sim.get("drive_cycle_id"):
-                        # Compute partial summary from existing_df
                         partial_summary = compute_partial_summary(existing_df)
-                      
                         await db.simulations.update_one(
                             {"_id": ObjectId(sim_id)},
                             {"$set": {
@@ -89,19 +80,18 @@ async def finalize_paused_simulation(sim_id: str):
                     print(f"⚠️ Could not load pause ZIP: {e}")
                     if os.path.exists(zip_path):
                         os.remove(zip_path)
-            # Fallback: treat as error if no valid ZIP
             await db.simulations.update_one(
                 {"_id": ObjectId(sim_id)},
                 {"$set": {"status": "error", "error": "Pause failed: no valid ZIP created", "updated_at": datetime.utcnow()}}
             )
             return
   
-    # Timeout
     print(f"⏱️ Timeout waiting for pause {sim_id}")
     await db.simulations.update_one(
         {"_id": ObjectId(sim_id)},
-        {"$set": {"status": "paused", "updated_at": datetime.utcnow()}} # Force paused, but may lack ZIP
+        {"$set": {"status": "paused", "updated_at": datetime.utcnow()}}
     )
+
 @router.post("/{sim_id}/resume")
 async def resume_simulation(
     sim_id: str,
@@ -113,22 +103,20 @@ async def resume_simulation(
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
   
     if not sim or sim.get("status") not in [SimulationStatus.PAUSED, "stopped"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot resume simulation with status: {sim.get('status')}"
-        )
+        raise HTTPException(status_code=400, detail=f"Cannot resume simulation with status: {sim.get('status')}")
   
-    # FIXED: Load drive cycle CSV from DB string (original without idle)
-    driveCycleCsv = sim.get("drive_cycle_csv")
-    if not driveCycleCsv:
-        raise HTTPException(status_code=500, detail="Missing drive_cycle_csv in simulation document")
+    drive_cycle_file = sim.get("drive_cycle_file")
+    if not drive_cycle_file:
+        raise HTTPException(status_code=500, detail="Missing drive_cycle_file in simulation document")
+    local_drive_path = os.path.join(DRIVE_CYCLES_DIR, drive_cycle_file)
+    if not os.path.exists(local_drive_path):
+        raise HTTPException(status_code=404, detail="Drive cycle file not found in local storage")
     try:
-        drive_df_original = pd.read_csv(StringIO(driveCycleCsv))
-        print(f"Loaded original drive cycle CSV from DB: {len(drive_df_original)} rows")
+        drive_df_original = pd.read_csv(local_drive_path)
+        print(f"Loaded original drive cycle CSV from local storage: {len(drive_df_original)} rows")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read drive_cycle_csv: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to read drive cycle file: {str(e)}")
   
-    # Prepend idle row to create full DF (as in /run)
     idle_row = pd.DataFrame([{
         'Global Step Index': 0, 'Day_of_year': 1, 'DriveCycle_ID': 'idle_init',
         'Value Type': 'current', 'Value': 0.0, 'Unit': 'A',
@@ -139,7 +127,6 @@ async def resume_simulation(
     }])
     drive_df_full = pd.concat([idle_row, drive_df_original], ignore_index=True)
   
-    # Load continuation ZIP (stored on disk)
     stored_zip_path = sim.get("continuation_zip")
     if not stored_zip_path or not os.path.exists(stored_zip_path):
         raise HTTPException(status_code=404, detail="No continuation ZIP found")
@@ -150,10 +137,9 @@ async def resume_simulation(
   
     zip_data = {"zip_path": stored_zip_path, "last_row": last_row}
   
-    # Manual ZIP override (optional)
     manual_zip_path = None
     if zip_file:
-        manual_zip_path = os.path.join("continuations", f"{sim_id}_manual.zip")
+        manual_zip_path = os.path.join(CONTINUATIONS_DIR, f"{sim_id}_manual.zip")
         with open(manual_zip_path, "wb") as f:
             content = await zip_file.read()
             f.write(content)
@@ -166,28 +152,26 @@ async def resume_simulation(
         zip_data["last_row"] = manual_last_row
         print(f"Manual ZIP override: resuming from row {manual_last_row}")
   
-    # Slice remaining DF from full (last_row is index in full DF with idle)
     remaining_df = drive_df_full.iloc[last_row:]
     print(f"Resuming from global row {last_row}, remaining shape: {len(remaining_df)}")
   
-    # Fetch pack config
     pack_doc = await db.packs.find_one({"_id": ObjectId(sim["pack_id"])})
     if not pack_doc:
         raise HTTPException(status_code=404, detail="Pack not found")
     pack_config = pack_doc
-    # Launch simulation
+  
     background_tasks.add_task(
         run_sim_background,
         pack_config=pack_config,
-        drive_df=remaining_df,  # Pass remaining for processing
-        model_config={}, # or load from somewhere if needed
+        drive_df=remaining_df,
+        model_config={},
         sim_id=sim_id,
         sim_name=sim["metadata"].get("name", "Resumed Simulation"),
         sim_type=sim["metadata"].get("type", "Generic"),
         initial_conditions=sim["initial_conditions"],
         drive_cycle_id=sim["drive_cycle_id"],
         continuation_zip_data=zip_data,
-        full_drive_df=drive_df_full,  # Pass full for pause metadata
+        full_drive_df=drive_df_full,
         original_start_row=last_row
     )
   
@@ -197,9 +181,9 @@ async def resume_simulation(
     )
   
     return {"simulation_id": sim_id, "status": "resumed"}
+
 @router.get("/{sim_id}/download-continuation")
 async def download_continuation(sim_id: str):
-    """Download continuation ZIP from paused OR stopped simulation"""
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})

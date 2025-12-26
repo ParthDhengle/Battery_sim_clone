@@ -1,12 +1,10 @@
-# FILE: Backend/app/routers/simulations.py
-# Add validation in run_sim_background for continuation state
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
 from bson import ObjectId
-from app.config import db
+from app.config import db, SIMULATIONS_DIR, DRIVE_CYCLES_DIR
 from CoreLogic import NEW_data_processor as adp
 from CoreLogic import NEW_electrical_solver as aes
 from pathlib import Path
@@ -16,9 +14,9 @@ from app.models.simulation import InitialConditions, SimulationStatus
 from fastapi.responses import StreamingResponse
 from typing import Optional
 from io import StringIO
-from app.utils.zip_utils import load_continuation_zip # Updated import
+from app.utils.zip_utils import load_continuation_zip
 router = APIRouter(tags=["simulations"])
-os.makedirs("simulations", exist_ok=True)
+
 async def inject_cell_config(pack_config: dict) -> dict:
     cell_id = pack_config.get("cell_id")
     if not cell_id:
@@ -45,11 +43,13 @@ async def inject_cell_config(pack_config: dict) -> dict:
     }
     from CoreLogic.battery_params import load_cell_rc_data
     rc_path = pack_config["cell"]["rc_parameter_file_path"]
-    if rc_path and os.path.exists("app" + rc_path):
-        pack_config["cell"]["rc_data"] = load_cell_rc_data("app" + rc_path, pack_config["cell"]["rc_pair_type"])
+    if rc_path and os.path.exists(rc_path):  # Updated: no "app" prefix
+        pack_config["cell"]["rc_data"] = load_cell_rc_data(rc_path, pack_config["cell"]["rc_pair_type"])
     else:
         raise ValueError(f"RC file not found: {rc_path}")
     return pack_config
+
+
 def _normalize_pack_for_core(pack: dict, initial_conditions: dict = None) -> dict:
     if not isinstance(pack, dict):
         return pack
@@ -139,7 +139,7 @@ async def run_sim_background(
 ):
     try:
         pack_config = await inject_cell_config(pack_config)
-        csv_path = os.path.join("simulations", f"{sim_id}.csv")
+        csv_path = os.path.join(SIMULATIONS_DIR, f"{sim_id}.csv")
         last_row = 0
         existing_df = pd.DataFrame()
         continuation_history = None
@@ -266,11 +266,17 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
     drive_cycle_id = drive_cycle_source.get("id", "unknown") if drive_cycle_source.get("type") == "database" else drive_cycle_source.get("filename", "unknown.csv")
     drive_cycle_file = f"{drive_cycle_name}.csv" if drive_cycle_source.get("type") == "database" else drive_cycle_source.get("filename", "unknown.csv")
     try:
-        drive_df = pd.read_csv(StringIO(driveCycleCsv))
+        drive_df_original = pd.read_csv(StringIO(driveCycleCsv))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid driveCycleCsv format: {str(e)}")
+    
+    # Save original drive cycle to local storage (without idle row)
+    local_drive_path = os.path.join(DRIVE_CYCLES_DIR, drive_cycle_file)
+    drive_df_original.to_csv(local_drive_path, index=False)
+    print(f"Saved drive cycle to local storage: {local_drive_path}")
+    
     required = ["Global Step Index", "Day_of_year", "DriveCycle_ID", "Value Type", "Value", "Unit", "Step Type", "Step Duration (s)", "Timestep (s)"]
-    missing = [c for c in required if c not in drive_df.columns]
+    missing = [c for c in required if c not in drive_df_original.columns]
     if missing:
         raise HTTPException(status_code=400, detail=f"driveCycleCsv missing required columns: {missing}")
     idle_row = pd.DataFrame([{
@@ -281,7 +287,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         'Label': 'Idle Init', 'Ambient Temp (°C)': 20.0, 'Location': '',
         'drive cycle trigger': '', 'step Trigger(s)': ''
     }])
-    drive_df = pd.concat([idle_row, drive_df], ignore_index=True)
+    drive_df = pd.concat([idle_row, drive_df_original], ignore_index=True)
     print(f"Prepended idle step; new DF shape: {drive_df.shape}")
     pack_id = str(pack_config.get("_id") or pack_config.get("id", "unknown"))
     pack_name = pack_config.get("name", "Unknown Pack")
@@ -295,7 +301,6 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         "drive_cycle_name": drive_cycle_name,
         "drive_cycle_file": drive_cycle_file,
         "initial_conditions": initial_conditions,
-        "drive_cycle_csv": driveCycleCsv, # Store original (without idle)
         "metadata": {
             "name": sim_name,
             "type": sim_type,
@@ -341,9 +346,7 @@ async def stop_simulation(sim_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Simulation is not running")
   
     # Create stop signal file
-    stop_signal_file = f"simulations/{sim_id}.stop"
-    os.makedirs(os.path.dirname(stop_signal_file), exist_ok=True)
-    Path(stop_signal_file).touch()
+    stop_signal_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.stop")
   
     print(f"🛑 Stop signal created: {stop_signal_file}")
   
@@ -382,7 +385,7 @@ async def finalize_stopped_simulation(sim_id: str):
             return
       
         csv_path = sim.get("file_csv")
-        stop_signal_file = f"simulations/{sim_id}.stop"
+        stop_signal_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.stop")
       
         # Check if solver has removed stop signal (indicates completion)
         if not os.path.exists(stop_signal_file):
@@ -461,7 +464,7 @@ async def get_simulation_data(
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
-    csv_path = sim.get("file_csv") or os.path.join("simulations", f"{sim_id}.csv")
+    csv_path = sim.get("file_csv") or os.path.join(SIMULATIONS_DIR, f"{sim_id}.csv")    
     if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
         raise HTTPException(status_code=202, detail="Data not ready yet")
     try:
@@ -525,7 +528,7 @@ async def export_simulation_data(sim_id: str):
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
-    csv_path = sim.get("file_csv") or os.path.join("simulations", f"{sim_id}.csv")
+    csv_path = sim.get("file_csv") or os.path.join(SIMULATIONS_DIR, f"{sim_id}.csv")
     if not os.path.exists(csv_path):
         raise HTTPException(status_code=404, detail="CSV not found")
     def iterfile():
