@@ -442,8 +442,10 @@ def parse_row_data(row: pd.Series, dc_trigger_col: Optional[str], step_trigger_c
     current_dc = row.get("DriveCycle_ID", "")
     current_subcycle = str(row.get("Subcycle_ID", "")) or ""
     
+    step_triggers = []
     if step_type == "fixed":
         step_triggers = parse_trigger_list_from_row(row, column=step_trigger_col)
+    
     dc_triggers = parse_trigger_list_from_row(row, column=dc_trigger_col)
     
     has_triggers = len(step_triggers + dc_triggers) > 0

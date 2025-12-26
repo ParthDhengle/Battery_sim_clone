@@ -1,33 +1,26 @@
+# FILE: Backend/app/routers/cells.py
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import List, Optional, Literal
 from bson import ObjectId
-from app.config import db
+from app.config import db, storage_manager, RC_PARAMS_DIR
 from app.models.cell import Cell,CellUpdate, CellCreate, CellDimensions
 from datetime import datetime
-import os
-import shutil
-from pathlib import Path
 import math
-from app.config import RC_PARAMS_DIR
-
+import io
+import pandas as pd  # For potential validation, but not used here
 router = APIRouter(prefix="/cells", tags=["cells"])
-
-# Configure upload directory
-UPLOAD_DIR = Path(RC_PARAMS_DIR)
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 def serialize_cell(item: dict) -> dict:
     """Convert MongoDB document to API response format"""
     if "_id" in item:
         item["id"] = str(item["_id"])
         del item["_id"]
-    
+  
     # Ensure dims is properly formatted
     if "dims" in item and not isinstance(item["dims"], dict):
         item["dims"] = dict(item["dims"])
-    
+  
     return item
-
 
 @router.get("/", response_model=List[Cell])
 async def get_cells():
@@ -42,18 +35,17 @@ async def get_cells():
         print(f"❌ Error fetching cells: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-
 @router.get("/{id}", response_model=Cell)
 async def get_cell(id: str):
     """Get a single cell by ID"""
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=400, detail="Invalid ID format")
-    
+  
     try:
         item = await db.cells.find_one({"_id": ObjectId(id), "deleted_at": None})
         if not item:
             raise HTTPException(status_code=404, detail="Cell not found")
-        
+      
         return serialize_cell(item)
     except HTTPException:
         raise
@@ -92,7 +84,7 @@ async def create_cell(
     print(f"Form Factor: {formFactor}")
     print(f"RC File: {rc_parameter_file.filename if rc_parameter_file else 'None'}")
     print("=" * 80)
-    
+  
     try:
         # Build dimensions based on form factor
         dims = {"height": height}
@@ -105,55 +97,51 @@ async def create_cell(
                 raise HTTPException(400, detail="Length and width required for prismatic/pouch cells")
             dims["length"] = length
             dims["width"] = width
-        
+      
         # Calculate and store cell volume in m³
         if formFactor in ["cylindrical", "coin"]:
             radius_m = radius / 1000
             height_m = height / 1000
             volume_m3 = math.pi * radius_m ** 2 * height_m
-        else:  # prismatic or pouch
+        else: # prismatic or pouch
             length_m = length / 1000
             width_m = width / 1000
             height_m = height / 1000
             volume_m3 = length_m * width_m * height_m
-
-
         # Handle RC parameter file upload
         rc_file_path = None
         if rc_parameter_file and rc_parameter_file.filename:
             print(f"📎 Processing RC file: {rc_parameter_file.filename}")
-            
+          
             # Validate file extension
             file_ext = rc_parameter_file.filename.lower().split(".")[-1]
             print(f"📎 File extension: {file_ext}")
-            
+          
             if file_ext not in ["csv", "json", "mat"]:
                 print(f"❌ Invalid file extension: {file_ext}")
                 raise HTTPException(400, detail="Only CSV, JSON, or MAT files allowed for RC parameters")
-            
+          
             # Generate unique filename with timestamp
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             safe_filename = f"{timestamp}_{rc_parameter_file.filename}"
-            file_path = UPLOAD_DIR / safe_filename
-            rc_file_path = f"/uploads/rc-parameters/{safe_filename}"
-            
-            print(f"💾 Saving file to: {file_path}")
-            
+            rel_path = f"{RC_PARAMS_DIR}/{safe_filename}"
+            rc_file_path = rel_path
+          
+            print(f"💾 Saving file to: {rel_path}")
+          
             # Save file
             try:
                 content = await rc_parameter_file.read()
                 print(f"📦 File size: {len(content)} bytes")
-                
-                with open(file_path, "wb") as buffer:
-                    buffer.write(content)
-                
-                print(f"  File saved successfully")
+              
+                await storage_manager.save_file(rel_path, content, is_text=False)
+              
+                print(f" File saved successfully")
             except Exception as file_err:
                 print(f"❌ File save error: {file_err}")
                 raise HTTPException(500, detail=f"Failed to save file: {str(file_err)}")
-            
+          
             print(f"🔗 File path stored as: {rc_file_path}")
-
         # Build cell data
         data = {
             "name": name,
@@ -180,18 +168,16 @@ async def create_cell(
             "updated_at": datetime.utcnow(),
             "deleted_at": None,
         }
-
         # Insert into database
         print(f"💾 Inserting into database...")
         result = await db.cells.insert_one(data)
-        print(f"  Inserted with ID: {result.inserted_id}")
-        
+        print(f" Inserted with ID: {result.inserted_id}")
+      
         created = await db.cells.find_one({"_id": result.inserted_id})
-        print(f"  Cell created successfully")
+        print(f" Cell created successfully")
         print("=" * 80)
-        
+      
         return serialize_cell(created)
-
     except HTTPException:
         raise
     except Exception as e:
@@ -209,42 +195,39 @@ async def upload_rc_file(
     """Upload or update RC parameter file for an existing cell"""
     if not ObjectId.is_valid(cell_id):
         raise HTTPException(status_code=400, detail="Invalid cell ID format")
-    
+  
     # Validate file type
     allowed_extensions = ["csv", "json", "mat"]
-    file_ext = os.path.splitext(file.filename)[1].lower()[1:]  # Remove dot
+    file_ext = file.filename.lower().split(".")[-1]
     if file_ext not in allowed_extensions:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
         )
-    
+  
     try:
         # Check if cell exists
         cell = await db.cells.find_one({"_id": ObjectId(cell_id), "deleted_at": None})
         if not cell:
             raise HTTPException(status_code=404, detail="Cell not found")
-        
+      
         # Delete old RC parameter file if exists
         if cell.get("rc_parameter_file_path"):
-            old_file_path = Path("app" + cell["rc_parameter_file_path"])
-            if old_file_path.exists():
-                os.remove(old_file_path)
-                print(f"🗑️ Deleted old RC file: {old_file_path}")
-        
+            await storage_manager.delete_file(cell["rc_parameter_file_path"])
+            print(f"🗑️ Deleted old RC file: {cell['rc_parameter_file_path']}")
+      
         # Generate unique filename
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         safe_filename = f"{cell_id}_{timestamp}_{file.filename}"
-        file_path = UPLOAD_DIR / safe_filename
-        
+        rel_path = f"{RC_PARAMS_DIR}/{safe_filename}"
+      
         # Save new file
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
+        content = await file.read()
+        await storage_manager.save_file(rel_path, content, is_text=False)
+      
         # Relative path for API access
-        rc_file_path = f"/uploads/rc-parameters/{safe_filename}"
-        
+        rc_file_path = rel_path
+      
         # Update cell in database
         result = await db.cells.update_one(
             {"_id": ObjectId(cell_id), "deleted_at": None},
@@ -256,82 +239,72 @@ async def upload_rc_file(
                 }
             }
         )
-        
+      
         return {
             "message": "RC parameter file uploaded successfully",
             "cell_id": cell_id,
             "rc_pair_type": rc_pair_type,
             "file_path": rc_file_path
         }
-        
+      
     except HTTPException:
         raise
     except Exception as e:
         print(f"❌ Error uploading RC file: {e}")
         # Clean up file if something went wrong
-        if 'file_path' in locals() and Path(file_path).exists():
-            os.remove(file_path)
+        if 'rel_path' in locals():
+            await storage_manager.delete_file(rel_path)
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
-
 @router.put("/{id}", response_model=Cell)
-async def update_cell(id: str, cell: CellUpdate):  # ← Use CellUpdate!
+async def update_cell(id: str, cell: CellUpdate): # ← Use CellUpdate!
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=400, detail="Invalid ID format")
-    
+  
     try:
         # Only include fields that were actually provided
-        update_data = cell.model_dump(exclude_unset=True)  # This is correct!
-
+        update_data = cell.model_dump(exclude_unset=True) # This is correct!
         if not update_data:
             raise HTTPException(status_code=400, detail="No data provided to update")
-
         update_data["updated_at"] = datetime.utcnow()
-
         result = await db.cells.update_one(
             {"_id": ObjectId(id), "deleted_at": None},
             {"$set": update_data}
         )
-
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Cell not found")
-
         updated_cell = await db.cells.find_one({"_id": ObjectId(id)})
         return serialize_cell(updated_cell)
-
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error updating cell {id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update cell: {str(e)}")
-    
-
+  
 @router.delete("/{id}", status_code=204)
 async def delete_cell(id: str):
     """Soft delete a cell and remove associated RC parameter file"""
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=400, detail="Invalid ID format")
-    
+  
     try:
         # Get cell data to delete associated file
         cell = await db.cells.find_one({"_id": ObjectId(id), "deleted_at": None})
-        
+      
         if not cell:
             raise HTTPException(status_code=404, detail="Cell not found")
-        
+      
         # Delete associated RC parameter file if exists
         if cell.get("rc_parameter_file_path"):
-            file_path = Path(RC_PARAMS_DIR / Path(cell["rc_parameter_file_path"]).name)
-            if file_path.exists():
-                os.remove(file_path)
-                print(f"🗑️ Deleted RC parameter file: {file_path}")
-        
+            await storage_manager.delete_file(cell["rc_parameter_file_path"])
+            print(f"🗑️ Deleted RC parameter file: {cell['rc_parameter_file_path']}")
+      
         # Soft delete the cell
         await db.cells.update_one(
             {"_id": ObjectId(id)},
             {"$set": {"deleted_at": datetime.utcnow()}}
         )
-        
+      
         return None
     except HTTPException:
         raise

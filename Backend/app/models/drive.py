@@ -1,21 +1,19 @@
-from pydantic import BaseModel, Field, field_validator, model_validator  # Added model_validator
+# FILE: Backend/app/models/drive.py
+from pydantic import BaseModel, Field, field_validator, model_validator # Added model_validator
 from typing import List, Optional
 from datetime import datetime
-from .subcycle import Trigger  # Reuse Trigger from subcycle.py
-
+from .subcycle import Trigger # Reuse Trigger from subcycle.py
 class CompositionRow(BaseModel):
     subcycleId: str = Field(..., description="Reference to sub-cycle ID")
     repetitions: int = Field(..., ge=1)
     ambientTemp: float = Field(..., ge=-50, le=100, description="Ambient temperature in °C")
     location: str = Field(default="", description="Optional location tag")
     triggers: List[Trigger] = Field(default=[], max_items=3)
-
 class DriveCycleMeta(BaseModel):
     id: str = Field(..., description="Unique drive cycle ID")
     name: str = Field(..., min_length=1, max_length=100)
     notes: Optional[str] = Field(default="", max_length=500)
     composition: List[CompositionRow] = Field(default=[])
-
 class CalendarRule(BaseModel):
     id: str = Field(..., description="Unique rule ID")
     drivecycleId: str = Field(..., description="Reference to drive cycle")
@@ -24,7 +22,6 @@ class CalendarRule(BaseModel):
     daysOfWeek: List[str] = Field(default=[], description="Mon-Sun")
     dates: List[int] = Field(default=[], description="Dates 1-31")
     notes: Optional[str] = Field(default="", max_length=300)
-
     @field_validator('months')
     @classmethod
     def validate_months(cls, v):
@@ -34,7 +31,6 @@ class CalendarRule(BaseModel):
             if not 1 <= m <= 12:
                 raise ValueError("Months must be between 1 and 12")
         return v
-
     @field_validator('daysOfWeek')
     @classmethod
     def validate_days(cls, v):
@@ -43,7 +39,6 @@ class CalendarRule(BaseModel):
             if d not in valid_days:
                 raise ValueError(f"Invalid day: {d}")
         return v
-
     @field_validator('dates')
     @classmethod
     def validate_dates(cls, v):
@@ -51,21 +46,18 @@ class CalendarRule(BaseModel):
             if not 1 <= d <= 31:
                 raise ValueError("Dates must be between 1 and 31")
         return v
-
     # V2: Cross-field check in model_validator (after all fields) for reliability
     @model_validator(mode='after')
     def validate_either_filter(self):
         if len(self.daysOfWeek) == 0 and len(self.dates) == 0:
             raise ValueError("Either daysOfWeek or dates must be provided")
         return self
-
 class SimulationBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Name of the simulation")
     subcycleIds: List[str] = Field(default=[], description="List of sub-cycle IDs used")
     driveCycles: List[DriveCycleMeta] = Field(default=[], description="List of drive cycles")
     calendarAssignments: List[CalendarRule] = Field(default=[], description="Calendar rules")
-    simulationTablePath: Optional[str] = Field(default=None, description="Path to generated CSV file")
-
+    simulationTablePath: Optional[str] = Field(default=None, description="Relative path to generated CSV file")
 class SimulationCreate(SimulationBase):
     @field_validator('driveCycles')
     @classmethod
@@ -73,12 +65,10 @@ class SimulationCreate(SimulationBase):
         if len(v) == 0:
             raise ValueError("At least one drive cycle is required")
         return v
-
 class Simulation(SimulationBase):
     id: str = Field(..., alias="_id")
     createdAt: datetime = Field(default_factory=datetime.utcnow)
     deleted_at: Optional[datetime] = None
-
     class Config:
         from_attributes = True
         populate_by_name = True

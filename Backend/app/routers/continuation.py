@@ -23,18 +23,18 @@ async def pause_simulation(sim_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=404, detail="Simulation not found")
     if sim.get("status") not in [SimulationStatus.RUNNING, SimulationStatus.PENDING]:
         raise HTTPException(status_code=400, detail="Simulation not pausable")
-  
+ 
     pause_signal_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.pause")
     Path(pause_signal_file).touch()
     print(f"⏸️ Pause signal created: {pause_signal_file}")
-  
+ 
     await db.simulations.update_one(
         {"_id": ObjectId(sim_id)},
         {"$set": {"status": "pausing", "updated_at": datetime.utcnow(), "metadata.pause_requested_at": datetime.utcnow()}}
     )
-  
+ 
     background_tasks.add_task(finalize_paused_simulation, sim_id)
-  
+ 
     return {
         "simulation_id": sim_id,
         "status": "pausing",
@@ -46,11 +46,11 @@ async def finalize_paused_simulation(sim_id: str):
     waited = 0
     pause_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.pause")
     zip_path = os.path.join(SIMULATIONS_DIR, f"{sim_id}_pause.zip")
-  
+ 
     while waited < max_wait:
         await asyncio.sleep(2)
         waited += 2
-      
+     
         if not os.path.exists(pause_file):
             print(f"✓ Pause signal removed by solver for {sim_id}")
             if os.path.exists(zip_path):
@@ -85,7 +85,7 @@ async def finalize_paused_simulation(sim_id: str):
                 {"$set": {"status": "error", "error": "Pause failed: no valid ZIP created", "updated_at": datetime.utcnow()}}
             )
             return
-  
+ 
     print(f"⏱️ Timeout waiting for pause {sim_id}")
     await db.simulations.update_one(
         {"_id": ObjectId(sim_id)},
@@ -101,10 +101,10 @@ async def resume_simulation(
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
-  
+ 
     if not sim or sim.get("status") not in [SimulationStatus.PAUSED, "stopped"]:
         raise HTTPException(status_code=400, detail=f"Cannot resume simulation with status: {sim.get('status')}")
-  
+ 
     drive_cycle_file = sim.get("drive_cycle_file")
     if not drive_cycle_file:
         raise HTTPException(status_code=500, detail="Missing drive_cycle_file in simulation document")
@@ -116,7 +116,7 @@ async def resume_simulation(
         print(f"Loaded original drive cycle CSV from local storage: {len(drive_df_original)} rows")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read drive cycle file: {str(e)}")
-  
+ 
     idle_row = pd.DataFrame([{
         'Global Step Index': 0, 'Day_of_year': 1, 'DriveCycle_ID': 'idle_init',
         'Value Type': 'current', 'Value': 0.0, 'Unit': 'A',
@@ -126,17 +126,17 @@ async def resume_simulation(
         'drive cycle trigger': '', 'step Trigger(s)': ''
     }])
     drive_df_full = pd.concat([idle_row, drive_df_original], ignore_index=True)
-  
+ 
     stored_zip_path = sim.get("continuation_zip")
     if not stored_zip_path or not os.path.exists(stored_zip_path):
         raise HTTPException(status_code=404, detail="No continuation ZIP found")
-  
+ 
     metadata, _, last_row, existing_df = load_continuation_zip(stored_zip_path)
     if not metadata or metadata["pack_id"] != sim["pack_id"] or metadata["dc_id"] != sim["drive_cycle_id"]:
         raise HTTPException(status_code=400, detail="Stored ZIP metadata mismatch")
-  
+ 
     zip_data = {"zip_path": stored_zip_path, "last_row": last_row}
-  
+ 
     manual_zip_path = None
     if zip_file:
         manual_zip_path = os.path.join(CONTINUATIONS_DIR, f"{sim_id}_manual.zip")
@@ -151,15 +151,15 @@ async def resume_simulation(
         zip_data["zip_path"] = manual_zip_path
         zip_data["last_row"] = manual_last_row
         print(f"Manual ZIP override: resuming from row {manual_last_row}")
-  
+ 
     remaining_df = drive_df_full.iloc[last_row:]
     print(f"Resuming from global row {last_row}, remaining shape: {len(remaining_df)}")
-  
+ 
     pack_doc = await db.packs.find_one({"_id": ObjectId(sim["pack_id"])})
     if not pack_doc:
         raise HTTPException(status_code=404, detail="Pack not found")
     pack_config = pack_doc
-  
+ 
     background_tasks.add_task(
         run_sim_background,
         pack_config=pack_config,
@@ -174,12 +174,12 @@ async def resume_simulation(
         full_drive_df=drive_df_full,
         original_start_row=last_row
     )
-  
+ 
     await db.simulations.update_one(
         {"_id": ObjectId(sim_id)},
         {"$set": {"status": SimulationStatus.RUNNING, "updated_at": datetime.utcnow()}}
     )
-  
+ 
     return {"simulation_id": sim_id, "status": "resumed"}
 
 @router.get("/{sim_id}/download-continuation")

@@ -1,19 +1,16 @@
-# FILE: Backend/app/routers/drive_cycle/subcycles.py
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import List, Optional, Dict
-from app.config import db
+from app.config import db, storage_manager
 from app.models.subcycle import Subcycle, SubcycleCreate, Step
 from datetime import datetime
 import random
-import os
 import json
-import aiofiles
 from app.utils.soft_delete import soft_delete_item
 from pydantic import BaseModel, Field
 from pathlib import Path
-from app.config import SUBCYCLES_DIR
+import os
 
-UPLOAD_SUBCYCLES_DIR = SUBCYCLES_DIR
+UPLOAD_SUBCYCLES_DIR = "subcycles"
 LARGE_THRESHOLD = int(os.getenv("LARGE_SUBCYCLE_THRESHOLD", "1000"))
 
 class LightSubcycle(BaseModel):
@@ -23,7 +20,6 @@ class LightSubcycle(BaseModel):
     source: str
     num_steps: Optional[int] = None
     total_duration: Optional[float] = None
-
     class Config:
         from_attributes = True
         populate_by_name = True
@@ -35,30 +31,52 @@ def generate_subcycle_id(sim_name: Optional[str], sub_name: str, timestamp: str)
 
 async def save_steps_to_file(steps: list, file_id: str) -> str:
     """Save steps as JSON file and return filename."""
-    os.makedirs(UPLOAD_SUBCYCLES_DIR, exist_ok=True)
     filename = f"{file_id}.json"
-    abs_path = os.path.join(UPLOAD_SUBCYCLES_DIR, filename)
-    steps_data = [s.model_dump() for s in steps]  # Convert to dicts
-    async with aiofiles.open(abs_path, "w", encoding="utf-8") as f:
-        await f.write(json.dumps(steps_data, default=str, indent=2))
+    rel_path = f"{UPLOAD_SUBCYCLES_DIR}/{filename}"
+    steps_data = [s.model_dump() for s in steps] # Convert to dicts
+    content = json.dumps(steps_data, default=str, indent=2)
+    await storage_manager.save_file(rel_path, content, is_text=True)
     return filename
 
 async def load_steps_from_file(filename_or_path: str) -> List[Dict]:
     """Load steps from JSON file by filename or full relative path (backward compat)."""
-    # Backward compatibility: if it's a full path like "/uploads/subcycles/file.json", extract filename
-    if filename_or_path.startswith("/storage/subcycles/"):
-        filename = Path(filename_or_path).name
-    else:
-        filename = filename_or_path
-    abs_path = os.path.join(UPLOAD_SUBCYCLES_DIR, filename)
-    if not os.path.exists(abs_path):
-        raise HTTPException(status_code=404, detail=f"Subcycle file not found: {abs_path}")
-    async with aiofiles.open(abs_path, "r", encoding="utf-8") as f:
-        content = await f.read()
-    steps_data = json.loads(content)
-    # Validate each step and convert back to dict for consistency
-    validated_steps = [Step.model_validate(s).model_dump() for s in steps_data]
-    return validated_steps
+    try:
+        # Backward compatibility: if it's a full path like "/uploads/subcycles/file.json", extract filename
+        if filename_or_path.startswith("/uploads/subcycles/"):
+            rel_path = filename_or_path.lstrip('/uploads/')
+        else:
+            rel_path = f"{UPLOAD_SUBCYCLES_DIR}/{filename_or_path}"
+        
+        if not await storage_manager.exists(rel_path):
+            raise HTTPException(status_code=404, detail=f"Subcycle file not found: {rel_path}")
+        
+        content_bytes = await storage_manager.load_file(rel_path)  # ← FIXED: Add await (assuming async)
+        if isinstance(content_bytes, bytes):
+            content = content_bytes.decode('utf-8')
+        else:
+            content = content_bytes  # If already str
+        
+        if not content.strip():
+            return []  # Empty file
+        
+        steps_data = json.loads(content)
+        
+        if not isinstance(steps_data, list):
+            raise ValueError("Steps file must contain a JSON array")
+        
+        # Validate each step and convert back to dict for consistency
+        validated_steps = []
+        for s in steps_data:
+            validated = Step.model_validate(s)
+            validated_steps.append(validated.model_dump())
+        
+        return validated_steps
+    
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Invalid JSON in steps file: {str(e)}")
+    except Exception as e:
+        print(f"Error loading steps file {filename_or_path}: {type(e).__name__}: {e}")  # Enhanced logging
+        raise HTTPException(status_code=500, detail=f"Failed to load subcycle steps: {str(e)}")
 
 def compute_summary(steps: list) -> tuple:
     """Compute num_steps and total_duration."""
@@ -70,8 +88,8 @@ def normalize_subcycle_id(id_str: str) -> tuple[str, str]:
     """Normalize ID: return (clean_id, filename) for old/new formats."""
     if id_str.startswith("/uploads/subcycles/"):
         # Old format: full path
-        clean_id = Path(id_str).stem  # Remove .json and path
-        filename = Path(id_str).name  # With .json
+        clean_id = Path(id_str).stem # Remove .json and path
+        filename = Path(id_str).name # With .json
     else:
         # New format: clean ID
         clean_id = id_str
@@ -120,11 +138,11 @@ async def get_subcycle(id: str):
     subcycle["_id"] = clean_id
     # Load steps if large import file
     if subcycle.get("source") == "import_file":
-        steps_file = subcycle.get("steps_file") or f"{clean_id}.json"  # Fallback for old data
+        steps_file = subcycle.get("steps_file") or f"{clean_id}.json" # Fallback for old data
         if steps_file:
             try:
                 steps = await load_steps_from_file(steps_file)
-                subcycle["steps"] = steps  # List of dicts for validation
+                subcycle["steps"] = steps # List of dicts for validation
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Failed to load subcycle steps: {str(e)}")
         else:
@@ -155,10 +173,10 @@ async def create_subcycle(subcycle: SubcycleCreate, sim_name: Optional[str] = No
         # Save to file
         file_id = f"IMPORT_{sub_name.replace(' ', '_').upper()}_{timestamp}_{random.randint(1000, 9999):04d}"
         steps_file = await save_steps_to_file(subcycle.steps, file_id)
-        new_subcycle["_id"] = file_id  # Clean ID
-        new_subcycle["steps_file"] = steps_file  # Filename
+        new_subcycle["_id"] = file_id # Clean ID
+        new_subcycle["steps_file"] = steps_file # Filename
         new_subcycle["source"] = "import_file"
-        new_subcycle["steps"] = []  # Empty in DB
+        new_subcycle["steps"] = [] # Empty in DB
     else:
         # Normal DB save
         custom_id = generate_subcycle_id(sim_name, sub_name, timestamp)
@@ -178,14 +196,14 @@ async def update_subcycle(id: str, subcycle: SubcycleCreate):
     # Check for name uniqueness (excluding self)
     if subcycle.name != existing["name"]:
         name_existing = await db.subcycles.find_one({"name": subcycle.name, "deleted_at": None})
-        if name_existing and name_existing["_id"] not in [id, clean_id]:
+        if name_existing and str(name_existing["_id"]) not in [id, clean_id]:
             raise HTTPException(status_code=400, detail="Subcycle with this name already exists")
     # For large imports, updates are metadata-only (no steps change)
     if existing.get("source") == "import_file":
         updated = {
             "name": subcycle.name,
             "description": subcycle.description or "",
-            "source": existing["source"],  # Keep import_file
+            "source": existing["source"], # Keep import_file
             "updatedAt": datetime.utcnow()
         }
     else:
@@ -197,7 +215,7 @@ async def update_subcycle(id: str, subcycle: SubcycleCreate):
         return_document=True
     )
     if result:
-        result["_id"] = clean_id  # Normalize response ID
+        result["_id"] = clean_id # Normalize response ID
     return Subcycle.model_validate(result)
 
 @router.delete("/{id}", status_code=204)
@@ -207,16 +225,15 @@ async def delete_subcycle(id: str):
     """
     clean_id, filename = normalize_subcycle_id(id)
     try:
-        result = await soft_delete_item("subcycles", {"$in": [id, clean_id]}, "subcycle")  # Soft delete by ID variants
+        result = await soft_delete_item("subcycles", {"$in": [id, clean_id]}, "subcycle") # Soft delete by ID variants
         if not result:
             raise HTTPException(status_code=404, detail="Subcycle not found")
         # Optional: Delete file if import_file
-        subcycle = await db.subcycles.find_one({"_id": {"$in": [id, clean_id]}})  # Even if deleted
+        subcycle = await db.subcycles.find_one({"_id": {"$in": [id, clean_id]}}) # Even if deleted
         if subcycle and subcycle.get("source") == "import_file":
             steps_file = subcycle.get("steps_file") or filename
-            abs_path = os.path.join(UPLOAD_SUBCYCLES_DIR, steps_file)
-            if os.path.exists(abs_path):
-                os.remove(abs_path)
+            rel_path = f"{UPLOAD_SUBCYCLES_DIR}/{steps_file}"
+            await storage_manager.delete_file(rel_path)
         return None
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))

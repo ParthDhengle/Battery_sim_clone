@@ -1,11 +1,13 @@
+# FILE: Backend/app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import cells, packs, simulations, continuation
 from app.routers.drive_cycle import subcycles, manager, simulationcycles
-from app.config import client, db, STORAGE_ROOT
+from app.config import client, db, storage_manager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta
 from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI(
     title="Battery Simulation API",
@@ -24,8 +26,9 @@ app.add_middleware(
     max_age=3600,
 )
 
-# Mount entire storage for /uploads (serves all subdirs like /rc-parameters/, /drive_cycles/)
-app.mount("/uploads", StaticFiles(directory=STORAGE_ROOT), name="uploads")
+# Mount static files only for local storage
+if storage_manager.storage_type == "local":
+    app.mount("/uploads", StaticFiles(directory=storage_manager.root), name="uploads")
 
 # Scheduler for cleanup
 scheduler = AsyncIOScheduler()
@@ -62,6 +65,7 @@ app.include_router(packs.router)
 app.include_router(simulations.router, prefix="/simulations")
 app.include_router(manager.router)
 app.include_router(simulationcycles.router)
+app.include_router(subcycles.router)  # ← ADDED: This registers /subcycles endpoints (including /light)
 app.include_router(continuation.router, prefix="/simulations")
 
 @app.get("/")
@@ -70,6 +74,7 @@ async def root():
         "message": "Battery Simulation API",
         "version": "1.0.0",
         "status": "online",
+        "storage_type": storage_manager.storage_type,
         "endpoints": {
             "cells": "/cells",
             "packs": "/packs",
@@ -84,6 +89,6 @@ async def root():
 async def health_check():
     try:
         await db.command("ping")
-        return {"status": "healthy", "database": "connected"}
+        return {"status": "healthy", "database": "connected", "storage": storage_manager.storage_type}
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}

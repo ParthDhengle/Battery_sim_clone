@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Zap, Plus, TrendingDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getAllSimulations, resumeSimulation } from "@/lib/api/simulations" // import your utility function
 interface Simulation {
   _id: string
@@ -74,10 +75,6 @@ export default function Simulations() {
     }
   }
   // UPDATED: Manual continue with ZIP
-  const handleManualContinue = (simId: string) => {
-    setManualSimId(simId)
-    setShowManualContinue(true)
-  }
   const submitManualContinue = async () => {
     if (!selectedContZip || !manualSimId) return
     try {
@@ -85,6 +82,7 @@ export default function Simulations() {
       router.push(`/simulation/${manualSimId}/results`)
       setShowManualContinue(false)
       setSelectedContZip(null)
+      setManualSimId("")
     } catch (err) {
       setError("Failed to resume with ZIP")
     }
@@ -119,6 +117,7 @@ export default function Simulations() {
         return "○"
     }
   }
+  const pausedSims = simulations.filter(sim => sim.status === "paused")
   return (
     <div className="space-y-8 p-6">
       {/* Header */}
@@ -131,7 +130,7 @@ export default function Simulations() {
           <p className="text-muted-foreground">View and manage your battery simulations</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => {/* Global manual selector TODO */}}>
+          <Button variant="outline" onClick={() => setShowManualContinue(true)}>
             Continue Simulation
           </Button>
           <Link href="/simulation">
@@ -153,7 +152,19 @@ export default function Simulations() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
             <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Upload Continuation ZIP</h3>
+              <h3 className="text-lg font-semibold mb-4">Manual Continue Simulation</h3>
+              <Select onValueChange={setManualSimId} value={manualSimId}>
+                <SelectTrigger className="mb-4">
+                  <SelectValue placeholder="Select paused simulation" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pausedSims.map(sim => (
+                    <SelectItem key={sim._id} value={sim._id}>
+                      {sim.name} ({sim._id})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <input
                 type="file"
                 onChange={(e) => setSelectedContZip(e.target.files?.[0] || null)}
@@ -161,10 +172,10 @@ export default function Simulations() {
                 className="w-full p-2 border rounded mb-4"
               />
               <div className="flex gap-2">
-                <Button onClick={submitManualContinue} disabled={!selectedContZip} className="flex-1">
+                <Button onClick={submitManualContinue} disabled={!selectedContZip || !manualSimId} className="flex-1">
                   Continue
                 </Button>
-                <Button variant="outline" onClick={() => { setShowManualContinue(false); setSelectedContZip(null) }} className="flex-1">
+                <Button variant="outline" onClick={() => { setShowManualContinue(false); setSelectedContZip(null); setManualSimId("") }} className="flex-1">
                   Cancel
                 </Button>
               </div>
@@ -196,7 +207,6 @@ export default function Simulations() {
             <Card
               key={sim._id}
               className="hover:shadow-lg transition-shadow cursor-pointer hover:border-primary/50"
-              onClick={() => handleViewResults(sim._id)}
             >
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
@@ -288,19 +298,18 @@ export default function Simulations() {
                           handleAutoContinue(sim._id)
                         }}
                       >
-                        ▶️ Auto Continue
+                        ▶️ Resume
                       </Button>
-                      {/* <Button
+                      <Button
                         variant="ghost"
-                        size="sm"
                         className="w-full"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleManualContinue(sim._id)
+                          handleViewResults(sim._id)
                         }}
                       >
-                        Manual Continue (ZIP)
-                      </Button> */}
+                        View Partial Results
+                      </Button>
                     </>
                   )}
                 </div>

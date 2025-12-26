@@ -1,17 +1,21 @@
+# FILE: Backend/app/routers/simulations.py
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
 from bson import ObjectId
-from app.config import db, SIMULATIONS_DIR, DRIVE_CYCLES_DIR
+import io
+import os
+from app.config import db, storage_manager, SIMULATIONS_DIR, DRIVE_CYCLES_DIR
 from CoreLogic import NEW_data_processor as adp
 from CoreLogic import NEW_electrical_solver as aes
-from pathlib import Path
 import asyncio
 import concurrent.futures
 from app.models.simulation import InitialConditions, SimulationStatus
 from fastapi.responses import StreamingResponse
+import io
+from pathlib import Path
+import tempfile 
 from typing import Optional
 from io import StringIO
 from app.utils.zip_utils import load_continuation_zip
@@ -43,12 +47,22 @@ async def inject_cell_config(pack_config: dict) -> dict:
     }
     from CoreLogic.battery_params import load_cell_rc_data
     rc_path = pack_config["cell"]["rc_parameter_file_path"]
-    if rc_path and os.path.exists(rc_path):  # Updated: no "app" prefix
-        pack_config["cell"]["rc_data"] = load_cell_rc_data(rc_path, pack_config["cell"]["rc_pair_type"])
+    if rc_path and await storage_manager.exists(rc_path):
+        # Load file content
+        rc_bytes = await storage_manager.load_file(rc_path)
+        # For load_cell_rc_data, assume it takes file path, but since cloud, save temp local or modify
+        # For simplicity, assume load_cell_rc_data can take bytes or path; here use temp file for local compat
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(rc_path).suffix) as tmp:
+            tmp.write(rc_bytes)
+            tmp_path = tmp.name
+        try:
+            pack_config["cell"]["rc_data"] = load_cell_rc_data(tmp_path, pack_config["cell"]["rc_pair_type"])
+        finally:
+            os.unlink(tmp_path)
     else:
         raise ValueError(f"RC file not found: {rc_path}")
     return pack_config
-
 
 def _normalize_pack_for_core(pack: dict, initial_conditions: dict = None) -> dict:
     if not isinstance(pack, dict):
@@ -105,6 +119,7 @@ def _normalize_pack_for_core(pack: dict, initial_conditions: dict = None) -> dic
             "varying_conditions": varying_conditions_normalized,
         },
     }
+
 def compute_partial_summary(df: pd.DataFrame) -> dict:
     """FIXED: Use mean SOC at min/max time for pack-level summary."""
     if df.empty:
@@ -124,6 +139,7 @@ def compute_partial_summary(df: pd.DataFrame) -> dict:
         return {"end_soc": round(end_soc, 4), "max_temp": max_temp, "capacity_fade": capacity_fade}
     except Exception:
         return {"end_soc": 1.0, "max_temp": 25.0, "capacity_fade": 0.0}
+
 async def run_sim_background(
     pack_config: dict,
     drive_df: pd.DataFrame, # Remaining DF (sliced)
@@ -139,34 +155,34 @@ async def run_sim_background(
 ):
     try:
         pack_config = await inject_cell_config(pack_config)
-        csv_path = os.path.join(SIMULATIONS_DIR, f"{sim_id}.csv")
+        csv_rel_path = f"{SIMULATIONS_DIR}/{sim_id}.csv"
         last_row = 0
         existing_df = pd.DataFrame()
         continuation_history = None
         full_df_for_pause = drive_df if full_drive_df is None else full_drive_df
         orig_start_row_for_pause = original_start_row
         pack_id = str(pack_config.get("_id") or pack_config.get("id", "unknown"))
-      
+    
         total_n_cells = sum(l.get("n_rows", 0) * l.get("n_cols", 0) for l in pack_config.get("layers", []))
-      
+    
         if continuation_zip_data:
-            metadata, csv_file, last_row, existing_df = load_continuation_zip(continuation_zip_data["zip_path"])
+            metadata, csv_str, last_row, existing_df = await load_continuation_zip(continuation_zip_data["zip_path"])
             if metadata:
                 # NEW: Validate continuation data
                 if not existing_df.empty:
                     last_time = existing_df['time_global_s'].max()
                     if 't_global' in metadata and metadata['t_global'] != last_time:
                         raise ValueError(f"t_global mismatch: metadata {metadata['t_global']} vs CSV {last_time}")
-                    
+                  
                     last_rows = existing_df[existing_df['time_global_s'] == last_time]
                     if len(last_rows) != total_n_cells:
                         raise ValueError(f"Incomplete last timestep: {len(last_rows)} rows vs {total_n_cells} cells")
-                    
+                  
                     required_cols = ['SOC', 'V_RC1', 'V_RC2', 'Vterm', 'Qgen_cumulative']
                     missing_cols = [col for col in required_cols if col not in last_rows.columns]
                     if missing_cols:
                         raise ValueError(f"Missing columns in continuation CSV: {missing_cols}")
-                
+              
                 if not existing_df.empty and len(existing_df) >= total_n_cells:
                     last_timestep_rows = existing_df.tail(total_n_cells)
                     continuation_history = {
@@ -180,7 +196,9 @@ async def run_sim_background(
                     }
                 # FIXED: Restore partial CSV before solver (prevents overwrite)
                 if not existing_df.empty:
-                    existing_df.to_csv(csv_path, index=False)
+                    csv_buffer = io.StringIO()
+                    existing_df.to_csv(csv_buffer, index=False)
+                    await storage_manager.save_file(csv_rel_path, csv_buffer.getvalue(), is_text=True)
                     print(f"Restored partial CSV on resume: {len(existing_df)} rows")
                 print(f"Resuming from ZIP {continuation_zip_data['zip_path']}, global row {last_row}, existing rows {len(existing_df)}")
                 initial_conditions["continuation_history"] = continuation_history
@@ -188,31 +206,83 @@ async def run_sim_background(
                 orig_start_row_for_pause = last_row
             else:
                 print("Warning: Continuation ZIP invalid; starting fresh")
-      
-        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-        if not os.path.exists(csv_path):
-            Path(csv_path).touch()
-      
+    
+        # Touch equivalent (create empty file)
+        await storage_manager.save_file(csv_rel_path, b"", is_text=False)
+    
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
-            {"$set": {"status": "running", "file_csv": csv_path, "updated_at": datetime.utcnow()}}
+            {"$set": {"status": "running", "file_csv": csv_rel_path, "updated_at": datetime.utcnow()}}
         )
-      
+    
         normalized_pack = _normalize_pack_for_core(pack_config, initial_conditions)
-      
         setup = adp.create_setup_from_configs(normalized_pack, drive_df, model_config)
-      
+        
         loop = asyncio.get_running_loop()
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            await loop.run_in_executor(
-                executor,
-                aes.run_electrical_solver,
-                setup, drive_df, sim_id, csv_path, initial_conditions.get("continuation_history"),
-                full_df_for_pause, orig_start_row_for_pause, pack_id, drive_cycle_id
-            )
-      
+        
+        # ✅ NEW: Determine CSV path based on storage type
+        if storage_manager.storage_type == "local":
+            # For local storage: solver writes directly to storage directory
+            csv_full_path = str(storage_manager.root / csv_rel_path)
+            print(f"📁 Local storage: solver writing directly to {csv_full_path}")
+            
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                await loop.run_in_executor(
+                    executor,
+                    aes.run_electrical_solver,
+                    setup, drive_df, sim_id, csv_full_path, initial_conditions.get("continuation_history"),
+                    full_df_for_pause, orig_start_row_for_pause, pack_id, drive_cycle_id
+                )
+        else:
+            # For cloud storage: solver writes to temp, we sync periodically
+            temp_csv_path = os.path.join(tempfile.gettempdir(), f"{sim_id}.csv")
+            print(f"☁️ Cloud storage: solver writing to temp, syncing to {csv_rel_path}")
+            
+            sync_running = True
+            
+            async def sync_task():
+                """Background task to sync temp file to cloud storage every 5 seconds"""
+                while sync_running:
+                    await asyncio.sleep(5)
+                    if os.path.exists(temp_csv_path) and os.path.getsize(temp_csv_path) > 0:
+                        try:
+                            with open(temp_csv_path, 'r') as f:
+                                content = f.read()
+                            await storage_manager.save_file(csv_rel_path, content, is_text=True)
+                            print(f"🔄 Synced {os.path.getsize(temp_csv_path)} bytes to cloud")
+                        except Exception as e:
+                            print(f"⚠️ Sync error: {e}")
+            
+            task = asyncio.create_task(sync_task())
+            
+            try:
+                with concurrent.futures.ProcessPoolExecutor() as executor:
+                    await loop.run_in_executor(
+                        executor,
+                        aes.run_electrical_solver,
+                        setup, drive_df, sim_id, temp_csv_path, initial_conditions.get("continuation_history"),
+                        full_df_for_pause, orig_start_row_for_pause, pack_id, drive_cycle_id
+                    )
+            finally:
+                # Stop sync task
+                sync_running = False
+                try:
+                    task.cancel()
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                
+                # Final sync
+                if os.path.exists(temp_csv_path):
+                    with open(temp_csv_path, 'r') as f:
+                        content = f.read()
+                    await storage_manager.save_file(csv_rel_path, content, is_text=True)
+                    print(f"✅ Final sync: {len(content)} bytes to cloud")
+                    os.unlink(temp_csv_path)
+    
         # FIXED: Reload full CSV (handles append)
-        full_csv_df = pd.read_csv(csv_path)
+        csv_bytes = await storage_manager.load_file(csv_rel_path)
+        full_csv_df = pd.read_csv(io.StringIO(csv_bytes.decode('utf-8')))
         summary = compute_partial_summary(full_csv_df)
         await db.simulations.update_one(
             {"_id": ObjectId(sim_id)},
@@ -227,8 +297,8 @@ async def run_sim_background(
             }}
         )
         # Cleanup manual ZIP if used
-        if continuation_zip_data and os.path.exists(continuation_zip_data["zip_path"]):
-            os.remove(continuation_zip_data["zip_path"])
+        if continuation_zip_data and await storage_manager.exists(continuation_zip_data["zip_path"]):
+            await storage_manager.delete_file(continuation_zip_data["zip_path"])
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -236,6 +306,8 @@ async def run_sim_background(
             {"_id": ObjectId(sim_id)},
             {"$set": {"status": "failed", "error": str(e), "updated_at": datetime.utcnow()}}
         )
+
+
 @router.post("/run", status_code=202)
 async def run_simulation(request: dict, background_tasks: BackgroundTasks):
     pack_config = request.get("packConfig")
@@ -269,12 +341,14 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         drive_df_original = pd.read_csv(StringIO(driveCycleCsv))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid driveCycleCsv format: {str(e)}")
-    
-    # Save original drive cycle to local storage (without idle row)
-    local_drive_path = os.path.join(DRIVE_CYCLES_DIR, drive_cycle_file)
-    drive_df_original.to_csv(local_drive_path, index=False)
-    print(f"Saved drive cycle to local storage: {local_drive_path}")
-    
+  
+    # Save original drive cycle to storage (without idle row)
+    local_drive_rel = f"{DRIVE_CYCLES_DIR}/{drive_cycle_file}"
+    drive_buffer = io.StringIO()
+    drive_df_original.to_csv(drive_buffer, index=False)
+    await storage_manager.save_file(local_drive_rel, drive_buffer.getvalue(), is_text=True)
+    print(f"Saved drive cycle to storage: {local_drive_rel}")
+  
     required = ["Global Step Index", "Day_of_year", "DriveCycle_ID", "Value Type", "Value", "Unit", "Step Type", "Step Duration (s)", "Timestep (s)"]
     missing = [c for c in required if c not in drive_df_original.columns]
     if missing:
@@ -332,24 +406,21 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         original_start_row=0 if not continuation_zip_data else continuation_zip_data.get("last_row", 0)
     )
     return {"simulation_id": sim_id, "status": "started" if not continuation_zip_data else "resumed"}
+
 @router.post("/{sim_id}/stop")
 async def stop_simulation(sim_id: str, background_tasks: BackgroundTasks):
     """Stop a running simulation using file-based signaling."""
     if not ObjectId.is_valid(sim_id):
         raise HTTPException(status_code=400, detail="Invalid simulation ID")
-  
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
-  
     if sim.get("status") not in ["running", "pending"]:
         raise HTTPException(status_code=400, detail="Simulation is not running")
-  
     # Create stop signal file
-    stop_signal_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.stop")
-  
-    print(f"🛑 Stop signal created: {stop_signal_file}")
-  
+    stop_signal_rel = f"{SIMULATIONS_DIR}/{sim_id}.stop"
+    await storage_manager.save_file(stop_signal_rel, b"", is_text=False)
+    print(f"🛑 Stop signal created: {stop_signal_rel}")
     # Update DB status
     await db.simulations.update_one(
         {"_id": ObjectId(sim_id)},
@@ -359,15 +430,14 @@ async def stop_simulation(sim_id: str, background_tasks: BackgroundTasks):
             "metadata.stop_requested_at": datetime.utcnow()
         }}
     )
-  
     # Background task to wait for solver completion and finalize
     background_tasks.add_task(finalize_stopped_simulation, sim_id)
-  
     return {
         "simulation_id": sim_id,
         "status": "stopping",
         "message": "Stop signal sent. Solver will save data and terminate shortly."
     }
+
 async def finalize_stopped_simulation(sim_id: str):
     """
     Background task: Wait for solver to finish, then update status to 'stopped'.
@@ -375,31 +445,31 @@ async def finalize_stopped_simulation(sim_id: str):
     """
     max_wait = 60 # Wait up to 60 seconds
     waited = 0
-  
     while waited < max_wait:
         await asyncio.sleep(2)
         waited += 2
-      
+    
         sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
         if not sim:
             return
-      
-        csv_path = sim.get("file_csv")
-        stop_signal_file = os.path.join(SIMULATIONS_DIR, f"{sim_id}.stop")
-      
+    
+        csv_rel_path = sim.get("file_csv")
+        stop_signal_rel = f"{SIMULATIONS_DIR}/{sim_id}.stop"
+    
         # Check if solver has removed stop signal (indicates completion)
-        if not os.path.exists(stop_signal_file):
+        if not await storage_manager.exists(stop_signal_rel):
             print(f"✓ Stop signal removed by solver for {sim_id}")
-          
+        
             # Compute partial summary
             partial_summary = {}
-            if csv_path and os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+            if csv_rel_path and await storage_manager.exists(csv_rel_path):
                 try:
-                    df = pd.read_csv(csv_path)
+                    csv_bytes = await storage_manager.load_file(csv_rel_path)
+                    df = pd.read_csv(io.StringIO(csv_bytes.decode('utf-8')))
                     partial_summary = compute_partial_summary(df)
                 except Exception as e:
                     print(f"⚠️ Could not compute partial summary: {e}")
-          
+        
             # Update final status
             await db.simulations.update_one(
                 {"_id": ObjectId(sim_id)},
@@ -410,10 +480,9 @@ async def finalize_stopped_simulation(sim_id: str):
                     "updated_at": datetime.utcnow()
                 }}
             )
-          
+        
             print(f"🏁 Simulation {sim_id} finalized as 'stopped'")
             return
-  
     # Timeout - force update status
     print(f"⏱️ Timeout waiting for solver to stop {sim_id}")
     await db.simulations.update_one(
@@ -423,6 +492,7 @@ async def finalize_stopped_simulation(sim_id: str):
             "updated_at": datetime.utcnow()
         }}
     )
+
 @router.get("/all")
 async def list_simulations():
     # FIXED: Use aggregation pipeline to enable allowDiskUse=True for large sorts
@@ -442,6 +512,7 @@ async def list_simulations():
         "summary": s.get("metadata", {}).get("summary"),
         "progress": s.get("metadata", {}).get("progress", 0.0),
     } for s in sims]
+
 @router.get("/{sim_id}")
 async def get_simulation_status(sim_id: str):
     if not ObjectId.is_valid(sim_id):
@@ -452,6 +523,8 @@ async def get_simulation_status(sim_id: str):
     sim["simulation_id"] = str(sim["_id"])
     del sim["_id"]
     return sim
+
+
 @router.get("/{sim_id}/data")
 async def get_simulation_data(
     sim_id: str,
@@ -464,13 +537,28 @@ async def get_simulation_data(
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
-    csv_path = sim.get("file_csv") or os.path.join(SIMULATIONS_DIR, f"{sim_id}.csv")    
-    if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
+    csv_rel_path = sim.get("file_csv") or f"{SIMULATIONS_DIR}/{sim_id}.csv"
+    if not await storage_manager.exists(csv_rel_path):
         raise HTTPException(status_code=202, detail="Data not ready yet")
+    
     try:
-        df = pd.read_csv(csv_path)
+        csv_bytes = await storage_manager.load_file(csv_rel_path)
+        
+        # ✅ FIX: Handle empty CSV
+        csv_content = csv_bytes.decode('utf-8').strip()
+        if not csv_content or len(csv_content) < 10:  # Less than 10 chars = effectively empty
+            raise HTTPException(status_code=202, detail="Data not ready yet - simulation starting")
+        
+        df = pd.read_csv(io.StringIO(csv_content))
+        
+        # ✅ FIX: Handle CSV with only headers (no data rows)
+        if df.empty or len(df) == 0:
+            raise HTTPException(status_code=202, detail="Data not ready yet - no timesteps recorded")
+        
         if 'cell_id' not in df.columns:
             raise HTTPException(status_code=500, detail="CSV missing cell_id column")
+        
+        # Rest of the function remains the same...
         available_cells = sorted(df['cell_id'].unique())
         if cell_id not in available_cells:
             cell_id = available_cells[0]
@@ -517,10 +605,16 @@ async def get_simulation_data(
             "status": sim.get("status", "unknown"),
             "progress": sim.get("metadata", {}).get("progress", 100.0)
         }
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print("Error in /data:", traceback.format_exc())
+        # ✅ FIX: If pandas throws EmptyDataError, return 202 instead of 500
+        if "EmptyDataError" in str(type(e).__name__):
+            raise HTTPException(status_code=202, detail="Data not ready yet - file being written")
         raise HTTPException(status_code=500, detail=f"Error processing data: {str(e)}")
+
 @router.get("/{sim_id}/export")
 async def export_simulation_data(sim_id: str):
     if not ObjectId.is_valid(sim_id):
@@ -528,10 +622,20 @@ async def export_simulation_data(sim_id: str):
     sim = await db.simulations.find_one({"_id": ObjectId(sim_id)})
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
-    csv_path = sim.get("file_csv") or os.path.join(SIMULATIONS_DIR, f"{sim_id}.csv")
-    if not os.path.exists(csv_path):
+    csv_rel_path = sim.get("file_csv") or f"{SIMULATIONS_DIR}/{sim_id}.csv"
+    if not await storage_manager.exists(csv_rel_path):
         raise HTTPException(status_code=404, detail="CSV not found")
-    def iterfile():
-        with open(csv_path, "rb") as f:
-            yield from f
+    
+    # FIXED: Load file content first, then create generator
+    if storage_manager.storage_type == "local":
+        def iterfile():
+            full_path = storage_manager.root / csv_rel_path
+            with open(full_path, "rb") as f:
+                yield from f
+    else:
+        # For cloud storage, load entire file first
+        content = await storage_manager.load_file(csv_rel_path)
+        def iterfile():
+            yield content
+    
     return StreamingResponse(iterfile(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={sim_id}.csv"})

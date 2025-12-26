@@ -2,28 +2,36 @@
 import zipfile
 import json
 import pandas as pd
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Tuple, Optional, Dict, Any
+from app.config import storage_manager
 
-def save_continuation_zip(csv_path: str, metadata: Dict[str, Any], zip_path: str):
+async def save_continuation_zip(csv_content: str, metadata: Dict[str, Any], rel_zip_path: str):
     """
-    Save continuation ZIP (not currently used in core flow, but available for manual saves).
+    Save continuation ZIP to storage (relative path).
+    csv_content: CSV as string (not path).
     """
     try:
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.write(csv_path, "simulation_data.csv")
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("simulation_data.csv", csv_content)
             zf.writestr("metadata.json", json.dumps(metadata, indent=2))
-        print(f"Continuation ZIP saved: {zip_path}")
+        zip_bytes = zip_buffer.getvalue()
+        await storage_manager.save_file(rel_zip_path, zip_bytes, is_text=False)
+        print(f"Continuation ZIP saved: {rel_zip_path}")
     except Exception as e:
         raise ValueError(f"Failed to save ZIP: {e}")
 
-def load_continuation_zip(zip_path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str], int, pd.DataFrame]:
+async def load_continuation_zip(rel_zip_path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str], int, pd.DataFrame]:
     """
-    Load metadata, CSV content (as str), last_row, and existing_df from ZIP.
+    Load metadata, CSV content (as str), last_row, and existing_df from ZIP in storage.
+    rel_zip_path: Relative path in storage.
     Returns: (metadata, csv_str, last_row, existing_df)
     """
     try:
-        with zipfile.ZipFile(zip_path, 'r') as zf:
+        zip_bytes = await storage_manager.load_file(rel_zip_path)
+        zip_buffer = BytesIO(zip_bytes)
+        with zipfile.ZipFile(zip_buffer, 'r') as zf:
             namelist = zf.namelist()
             if "metadata.json" not in namelist or "simulation_data.csv" not in namelist:
                 return None, None, 0, pd.DataFrame()
@@ -41,5 +49,5 @@ def load_continuation_zip(zip_path: str) -> Tuple[Optional[Dict[str, Any]], Opti
 
             return metadata, csv_str, last_row, existing_df
     except Exception as e:
-        print(f"Error loading ZIP {zip_path}: {e}")
+        print(f"Error loading ZIP {rel_zip_path}: {e}")
         return None, None, 0, pd.DataFrame()

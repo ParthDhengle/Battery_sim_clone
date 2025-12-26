@@ -110,70 +110,92 @@ export default function SubcycleLibrary({ subcycles, onSubcyclesChange, simId, s
   }
 
   const handleSave = async (steps: Step[], source: "manual" | "import") => {
-    // Pre-validate name uniqueness (frontend-side, using light list)
-    const trimmedName = name.trim()
+    const trimmedName = name.trim();
     if (!trimmedName) {
-      setNameError("Name is required")
-      return
+      setNameError("Name is required");
+      return;
     }
     if (steps.length === 0) {
-      setNameError("At least one step is required")
-      return
+      setNameError("At least one step is required");
+      return;
     }
-    const isDuplicate = globalLightSubcycles.some(sc => sc.name.toLowerCase() === trimmedName.toLowerCase() && (!editingSubcycle || sc.id !== editingSubcycle.id))
+
+    // Frontend duplicate check
+    const isDuplicate = globalLightSubcycles.some(
+      sc => sc.name.toLowerCase() === trimmedName.toLowerCase() && 
+            (!editingSubcycle || sc.id !== editingSubcycle.id)
+    );
+
     if (isDuplicate) {
-      setNameError("A subcycle with this name already exists. Please choose a unique name.")
-      return
+      setNameError("A subcycle with this name already exists. Please choose a unique name.");
+      return;
     }
+
     const payload = {
       name: trimmedName,
       description: description.trim(),
       source,
-      steps: steps.map(s => ({ ...s, value: Number(s.value) })) // Ensure numbers for backend
-    }
+      steps: steps.map(s => ({ ...s, value: Number(s.value) })),
+    };
+
     try {
-      setSaving(true)
-      setError(null)
-      setNameError("")
-      let savedSubcycle: Subcycle
+      setSaving(true);
+      setError(null);
+      setNameError("");
+
+      let savedSubcycle: Subcycle;
+
       if (editingSubcycle) {
-        savedSubcycle = await updateSubcycle(editingSubcycle.id, payload) // Types match now
-        // Update light list with new metadata
+        savedSubcycle = await updateSubcycle(editingSubcycle.id, payload);
         setGlobalLightSubcycles(prev =>
-          prev.map(sc => sc.id === editingSubcycle.id ? { ...sc, name: savedSubcycle.name, description: savedSubcycle.description } : sc)
-        )
-        onSubcyclesChange(subcycles.map(s => s.id === savedSubcycle.id ? savedSubcycle : s))
+          prev.map(sc =>
+            sc.id === editingSubcycle.id
+              ? { ...sc, name: savedSubcycle.name, description: savedSubcycle.description }
+              : sc
+          )
+        );
+        onSubcyclesChange(
+          subcycles.map(s => (s.id === savedSubcycle.id ? savedSubcycle : s))
+        );
       } else {
-        // Updated logic: Always fetch after create to ensure full, consistent data and valid ID
-        const createdSubcycle = await createSubcycle(payload, simName) // Pass simName
-        if (!createdSubcycle || !createdSubcycle.id || typeof createdSubcycle.id !== 'string') {
-          throw new Error("Failed to create subcycle: invalid or missing ID in server response")
-        }
-        savedSubcycle = await getSubcycle(createdSubcycle.id)
-        // Add light version to global list
-        setGlobalLightSubcycles(prev => [...prev, { id: savedSubcycle.id, name: savedSubcycle.name, description: savedSubcycle.description, source: savedSubcycle.source, num_steps: savedSubcycle.num_steps, total_duration: savedSubcycle.total_duration }])
+        const created = await createSubcycle(payload, simName);
+        if (!created?.id) throw new Error("Failed to create subcycle: invalid response");
+        
+        savedSubcycle = await getSubcycle(created.id);
+        
+        setGlobalLightSubcycles(prev => [
+          ...prev,
+          {
+            id: savedSubcycle.id,
+            name: savedSubcycle.name,
+            description: savedSubcycle.description,
+            source: savedSubcycle.source,
+            num_steps: savedSubcycle.num_steps,
+            total_duration: savedSubcycle.total_duration,
+          },
+        ]);
+
         if (simId) {
-          const currentIds = subcycles.map(s => s.id).filter(id => typeof id === 'string') // Safety filter
-          const newIds = [...currentIds, savedSubcycle.id]
-          await updateSimulationSubcycles(simId, newIds)
-          onSubcyclesChange([...subcycles, savedSubcycle])
+          const currentIds = subcycles.map(s => s.id);
+          const newIds = [...currentIds, savedSubcycle.id];
+          await updateSimulationSubcycles(simId, newIds);
+          onSubcyclesChange([...subcycles, savedSubcycle]);
         }
       }
-      cancelEditor()
+
+      cancelEditor();
     } catch (err: any) {
-      const message = err?.message || String(err)
-      // Specific handling for common errors
+      const message = err?.message || String(err);
       if (message.includes("already exists")) {
-        setNameError("A subcycle with this name already exists. Please choose a unique name.")
+        setNameError("A subcycle with this name already exists. Please choose a unique name.");
       } else {
-        setNameError("Failed to save: " + message)
-        setError("Failed to save subcycle: " + message)
+        setError("Failed to save subcycle: " + message);
       }
-      console.error("Save error details:", err)
+      console.error("Save error:", err);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleViewTable = async (id: string) => {
     try {
