@@ -1,4 +1,5 @@
 # FILE: Backend/app/routers/simulations.py
+# Add validation in run_sim_background for continuation state
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 import os
 import pandas as pd
@@ -18,7 +19,6 @@ from io import StringIO
 from app.utils.zip_utils import load_continuation_zip # Updated import
 router = APIRouter(tags=["simulations"])
 os.makedirs("simulations", exist_ok=True)
-
 async def inject_cell_config(pack_config: dict) -> dict:
     cell_id = pack_config.get("cell_id")
     if not cell_id:
@@ -152,6 +152,21 @@ async def run_sim_background(
         if continuation_zip_data:
             metadata, csv_file, last_row, existing_df = load_continuation_zip(continuation_zip_data["zip_path"])
             if metadata:
+                # NEW: Validate continuation data
+                if not existing_df.empty:
+                    last_time = existing_df['time_global_s'].max()
+                    if 't_global' in metadata and metadata['t_global'] != last_time:
+                        raise ValueError(f"t_global mismatch: metadata {metadata['t_global']} vs CSV {last_time}")
+                    
+                    last_rows = existing_df[existing_df['time_global_s'] == last_time]
+                    if len(last_rows) != total_n_cells:
+                        raise ValueError(f"Incomplete last timestep: {len(last_rows)} rows vs {total_n_cells} cells")
+                    
+                    required_cols = ['SOC', 'V_RC1', 'V_RC2', 'Vterm', 'Qgen_cumulative']
+                    missing_cols = [col for col in required_cols if col not in last_rows.columns]
+                    if missing_cols:
+                        raise ValueError(f"Missing columns in continuation CSV: {missing_cols}")
+                
                 if not existing_df.empty and len(existing_df) >= total_n_cells:
                     last_timestep_rows = existing_df.tail(total_n_cells)
                     continuation_history = {
@@ -280,7 +295,7 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         "drive_cycle_name": drive_cycle_name,
         "drive_cycle_file": drive_cycle_file,
         "initial_conditions": initial_conditions,
-        "drive_cycle_csv": driveCycleCsv,  # Store original (without idle)
+        "drive_cycle_csv": driveCycleCsv, # Store original (without idle)
         "metadata": {
             "name": sim_name,
             "type": sim_type,
@@ -312,7 +327,6 @@ async def run_simulation(request: dict, background_tasks: BackgroundTasks):
         original_start_row=0 if not continuation_zip_data else continuation_zip_data.get("last_row", 0)
     )
     return {"simulation_id": sim_id, "status": "started" if not continuation_zip_data else "resumed"}
-
 @router.post("/{sim_id}/stop")
 async def stop_simulation(sim_id: str, background_tasks: BackgroundTasks):
     """Stop a running simulation using file-based signaling."""

@@ -442,7 +442,8 @@ def parse_row_data(row: pd.Series, dc_trigger_col: Optional[str], step_trigger_c
     current_dc = row.get("DriveCycle_ID", "")
     current_subcycle = str(row.get("Subcycle_ID", "")) or ""
     
-    step_triggers = parse_trigger_list_from_row(row, column=step_trigger_col)
+    if step_type == "fixed":
+        step_triggers = parse_trigger_list_from_row(row, column=step_trigger_col)
     dc_triggers = parse_trigger_list_from_row(row, column=dc_trigger_col)
     
     has_triggers = len(step_triggers + dc_triggers) > 0
@@ -911,8 +912,6 @@ def process_single_row(
             
             V_parallel, cell_updates = result
             v_groups.append(V_parallel)
-            print(f"✅ Solved group {group_id} with V_parallel={V_parallel:.3f}V \n cell updates : {cell_updates}")
-        
             
             # Update each cell in the group
             for update in cell_updates:
@@ -1067,32 +1066,32 @@ def process_single_row(
     
     return row_idx + 1, t_global, per_day_time, False, cutoff_hit
 
-def testing_DC_table():
-    data = {
-        'Global Step Index': [1, 2, 3, 4],
-        'Day_of_year': [1, 1, 1, 1],
-        'DriveCycle_ID': ['test_dc', 'test_dc', 'test_dc', 'test_dc'],
-        'drive cycle trigger': ['', '', '', ''],
-        'Subcycle_ID': ['test_sub1', 'test_sub1', 'test_sub1', 'test_sub1'],
-        'Subcycle Step Index': [1, 2, 3, 4],
-        'Value Type': ['current', 'current', 'current', 'power'],
-        'Value': [0.0, 10.0, -5.0, 100.0],
-        'Unit': ['A', 'A', 'A', 'W'],
-        'Step Type': ['fixed', 'fixed', 'fixed', 'fixed'],
-        'Step Duration (s)': [10.0, 60.0, 30.0, 20.0],
-        'Timestep (s)': [1.0, 1.0, 1.0, 1.0],
-        'Ambient Temp (°C)': [25.0, 25.0, 25.0, 25.0],
-        'Location': ['', '', '', ''],
-        'step Trigger(s)': ['', '', '', ''],
-        'Label': [
-            'Idle Initialization',
-            'Constant Discharge (10A)',
-            'Constant Charge (5A)',
-            'Power Load (100W)'
-        ]
-    }
-    dc_table = pd.DataFrame(data)
-    return dc_table
+# def testing_DC_table():
+#     data = {
+#         'Global Step Index': [1, 2, 3, 4],
+#         'Day_of_year': [1, 1, 1, 1],
+#         'DriveCycle_ID': ['test_dc', 'test_dc', 'test_dc', 'test_dc'],
+#         'drive cycle trigger': ['', '', '', ''],
+#         'Subcycle_ID': ['test_sub1', 'test_sub1', 'test_sub1', 'test_sub1'],
+#         'Subcycle Step Index': [1, 2, 3, 4],
+#         'Value Type': ['current', 'current', 'current', 'power'],
+#         'Value': [0.0, 10.0, -5.0, 100.0],
+#         'Unit': ['A', 'A', 'A', 'W'],
+#         'Step Type': ['fixed', 'fixed', 'fixed', 'fixed'],
+#         'Step Duration (s)': [10.0, 60.0, 30.0, 20.0],
+#         'Timestep (s)': [1.0, 1.0, 1.0, 1.0],
+#         'Ambient Temp (°C)': [25.0, 25.0, 25.0, 25.0],
+#         'Location': ['', '', '', ''],
+#         'step Trigger(s)': ['', '', '', ''],
+#         'Label': [
+#             'Idle Initialization',
+#             'Constant Discharge (10A)',
+#             'Constant Charge (5A)',
+#             'Power Load (100W)'
+#         ]
+#     }
+#     dc_table = pd.DataFrame(data)
+#     return dc_table
 
 def run_electrical_solver(
     setup: Dict,
@@ -1108,7 +1107,7 @@ def run_electrical_solver(
 ):
     """Run the electrical solver for the given setup and drive cycle table."""
     # Initialize simulation parameters
-    sim_params = initialize_simulation(setup, testing_DC_table(), filename, sim_id)
+    sim_params = initialize_simulation(setup, dc_table, filename, sim_id)
 
     # Extract parameters from the returned dictionary
     cells = sim_params['cells']

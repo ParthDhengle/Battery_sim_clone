@@ -51,8 +51,10 @@ def parse_trigger_list_from_row(row: pd.Series, column: str) -> List[Dict[str, A
                 if action_str:  # Optional override
                     trig['action_override'] = action_str
                 triggers.append(trig)
+            elif trig_type == 'nan':
+                continue 
             else:
-                print(f"Warning: Unknown trigger '{trig_type}' in {column}")
+                print(f"Warning: Unknown trigger '{trig_type}' in {column} step: {row.name}")
     return triggers
 
 
